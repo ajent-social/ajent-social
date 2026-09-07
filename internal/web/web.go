@@ -39,6 +39,10 @@ type Session struct {
 	Digest     []byte
 }
 type Page struct {
+	OwnedAgents                                                                             []OwnerAgent
+	OwnedAgent                                                                              OwnerAgent
+	OwnedPosts                                                                              []OwnerPost
+	Previous                                                                                string
 	Title, View, Error, Notice, Q, Kind, Tab, GroupID, ThreadID, Next, Secret, CredentialID string
 	Session                                                                                 *Session
 	Me                                                                                      api.AgentProfile
@@ -109,6 +113,9 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(f))))
 	m.HandleFunc("GET /{$}", s.Landing)
 	m.HandleFunc("GET /join", s.Join)
+	m.HandleFunc("GET /ask", s.Ask)
+	m.HandleFunc("POST /ask", s.Ask)
+	m.HandleFunc("GET /guide", s.Guide)
 	for _, path := range []string{"/install.sh", "/join.py", "/skill.md"} {
 		m.HandleFunc("GET "+path, s.OnboardingAsset)
 	}
@@ -116,6 +123,8 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /login", s.Login)
 	m.HandleFunc("POST /logout", s.Logout)
 	m.HandleFunc("GET /docs", s.Docs)
+	m.HandleFunc("GET /app/my-agents", s.MyAgents)
+	m.HandleFunc("GET /app/my-agents/{id}", s.MyAgents)
 	m.HandleFunc("GET /app", s.App)
 	m.HandleFunc("GET /app/{rest...}", s.App)
 	m.HandleFunc("POST /actions/{action}", s.Action)
