@@ -5,7 +5,7 @@ import { bootstrap } from '../userdata';
 import { execFileSync } from 'node:child_process';
 
 const resources: pulumi.runtime.MockResourceArgs[]=[];
-process.env.PULUMI_CONFIG=JSON.stringify({'aws:region':'us-west-2','ajent-infra:imageDigest':'sha256:'+'a'.repeat(64),'ajent-infra:caddyImage':'caddy@sha256:'+'b'.repeat(64),'ajent-infra:cloudflareZoneId':'test-zone','ajent-infra:rollingService':'true'});
+process.env.PULUMI_CONFIG=JSON.stringify({'aws:region':'us-west-2','ajent-infra:imageDigest':'sha256:'+'a'.repeat(64),'ajent-infra:caddyImage':'caddy@sha256:'+'b'.repeat(64),'ajent-infra:cloudflareZoneId':'test-zone','ajent-infra:rollingService':'true','ajent-infra:openrouterSecretArn':'arn:chat-test'});
 pulumi.runtime.setMocks({newResource(args){resources.push(args); return {id:args.name+'_id',state:{...args.inputs,arn:'arn:aws:test::123:'+args.name,address:'database.test',repositoryUrl:'123.dkr.ecr.us-west-2.amazonaws.com/ajent',publicIp:'192.0.2.1',result:'fake-secret-for-test',name:args.name,latestVersion:1,arnSuffix:args.name}};},call(args){if(args.token.includes('getAvailabilityZones'))return {names:['us-west-2a','us-west-2b']};if(args.token.includes('getParameter'))return {value:'ami-test'};return args.inputs;}},'ajent-infra','test',false);
 
 test('deployment keeps database private, secrets out of user data, and DNS unproxied',async()=>{
@@ -38,7 +38,7 @@ test('deployment keeps database private, secrets out of user data, and DNS unpro
 });
 
 test('bootstrap shell and every embedded Python program parse, without plaintext secrets',()=>{
-    const script=bootstrap({hostname:'dogfood.ajent.social',region:'us-west-2',dbHost:'db.example',dbArn:'arn:db',ownerArn:'arn:owner',image:'registry/app@sha256:'+'a'.repeat(64),caddyImage:'caddy@sha256:'+'b'.repeat(64),logGroup:'logs',stack:'dogfood',behindLoadBalancer:true});
+    const script=bootstrap({hostname:'dogfood.ajent.social',region:'us-west-2',dbHost:'db.example',dbArn:'arn:db',ownerArn:'arn:owner',image:'registry/app@sha256:'+'a'.repeat(64),caddyImage:'caddy@sha256:'+'b'.repeat(64),logGroup:'logs',stack:'dogfood',behindLoadBalancer:true,openrouterSecretArn:'arn:chat-test'});
     assert.ok(Buffer.byteLength(script)<16384,'EC2 user data limit');
     execFileSync('bash',['-n'],{input:script});
     const embedded=[...script.matchAll(/printf '%s' '([^']+)' \| base64 -d > (\S+)/g)];
@@ -48,5 +48,6 @@ test('bootstrap shell and every embedded Python program parse, without plaintext
         if(path.endsWith('.py'))execFileSync('python3',['-c','import ast,sys; ast.parse(sys.stdin.read())'],{input:body});
     }
     const refresh=Buffer.from(embedded.find(m=>m[2].endsWith('refresh.py'))![1],'base64').toString();
+    assert.match(refresh,/OPENROUTER_API_KEY/);assert.match(refresh,/openrouterSecretArn/);
     assert.match(refresh,/10\.87\.1\.0\/24,10\.87\.2\.0\/24/);assert.doesNotMatch(script,/enable --now ajent-app ajent-proxy/);assert.match(refresh,/sslmode=verify-full/);assert.match(refresh,/os.umask\(0o077\)/);
 });

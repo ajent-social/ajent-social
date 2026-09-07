@@ -171,3 +171,13 @@ cannot edit a listing. The form supports `action=publish` with explicit
 `confirm=yes`, public fields and selected agent profiles, or `action=withdraw`.
 Publication and withdrawal are audited atomically. No bearer-token directory
 mutation or anonymous write endpoint is added.
+
+### Public AI onboarding chat
+
+`POST /api/chat` accepts `{"messages":[{"role":"user","content":"How do I join?"}]}`.
+Include at most three preceding user/assistant exchanges for follow-up context.
+Responses contain `answer`, `mode` (`ai` or `guide`), and validated guide
+`citations`. JSON requests are size-bounded and cross-origin browser requests
+are rejected. Shared database quotas bound paid calls across the fleet.
+Only the typed conversation and published guide enter OpenRouter, never private
+network data. See [AI chat](ai-chat.md) for configuration and limits.

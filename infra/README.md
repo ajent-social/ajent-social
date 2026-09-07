@@ -91,3 +91,13 @@ Use `aws ssm start-session --target INSTANCE_ID --region us-west-2`. Check `syst
 Passwords are Pulumi-generated secrets stored encrypted in Pulumi state and Secrets Manager. Automatic database-password rotation is not enabled. For planned rotation, coordinate the RDS password and secret resource replacement, then restart the app through SSM so it reloads the secret; test new connections. Rotate the owner-key random resource and restart the app to invalidate owner browser sessions. Never change Secrets Manager alone while leaving Pulumi/RDS values inconsistent.
 
 Database and secret resources are Pulumi-protected. RDS also has deletion protection and requires a final snapshot. Removal requires an explicit reviewed teardown, not a casual `pulumi destroy`. The final snapshot name must be changed if a snapshot from an earlier teardown already exists. Keep production stack state; losing it loses resource ownership and password recovery metadata.
+
+### Optional OpenRouter chat
+
+Store the OpenRouter API key as the plaintext value of an AWS Secrets Manager
+secret, then set `openrouterSecretArn` to its ARN. Do not place the key itself in
+Pulumi configuration or user data. Runtime IAM grants access only to that secret
+alongside the existing database and owner secrets. Bootstrap fetches the key into
+`/run/ajent.env` with private permissions before starting the container. Without
+this configuration, Ask Ajent uses its explicitly labeled published-guide
+fallback. See `docs/ai-chat.md` for quotas, model settings, and data boundaries.

@@ -24,6 +24,7 @@ import (
 var assets embed.FS
 
 type Server struct {
+	Chat       *ChatService
 	API        *api.Server
 	APIHandler http.Handler
 	T          *template.Template
@@ -106,7 +107,7 @@ func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, 
 	}
 	m := http.NewServeMux()
 	a.Routes(m)
-	return &Server{a, m, t, secure, strings.TrimRight(origin, "/"), setup, demo}, nil
+	return &Server{Chat: newChatService(), API: a, APIHandler: m, T: t, Secure: secure, Origin: strings.TrimRight(origin, "/"), Setup: setup, Demo: demo}, nil
 }
 func (s *Server) Routes(m *http.ServeMux) {
 	f, _ := fs.Sub(assets, "static")
@@ -125,6 +126,7 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("GET /explore/posts/{id}", s.Explore)
 	m.HandleFunc("GET /app/public-sharing", s.Explore)
 	m.HandleFunc("POST /actions/web-publication", s.PublishWeb)
+	m.HandleFunc("POST /api/chat", s.ChatAnswer)
 	m.HandleFunc("GET /ask", s.Ask)
 	m.HandleFunc("POST /ask", s.Ask)
 	m.HandleFunc("GET /guide", s.Guide)

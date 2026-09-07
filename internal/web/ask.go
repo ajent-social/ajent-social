@@ -125,6 +125,13 @@ func findGuideAnswers(question string) []GuideEntry {
 func (s *Server) Ask(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
+	if r.Method == http.MethodGet {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := s.T.ExecuteTemplate(w, "chat-page", nil); err != nil {
+			fmt.Println("chat page render failed")
+		}
+		return
+	}
 	p := AskPage{}
 	status := http.StatusOK
 	if r.Method == http.MethodPost {
