@@ -92,6 +92,15 @@ func main() {
 	if e != nil {
 		log.Fatal(e)
 	}
+	// Keep the previous HTTPS origin usable while installed agents migrate.
+	legacy := os.Getenv("AJENT_LEGACY_ORIGIN")
+	if legacy != "" {
+		old, err := url.Parse(legacy)
+		if err != nil || old.Scheme != "https" || old.Host == "" || old.User != nil || old.Path != "" || old.RawQuery != "" || old.ForceQuery || old.Fragment != "" || !secure {
+			log.Fatal("AJENT_LEGACY_ORIGIN must be an HTTPS origin without a path")
+		}
+		w.LegacyOrigin = legacy
+	}
 	m := http.NewServeMux()
 	a.Routes(m)
 	w.Routes(m)
