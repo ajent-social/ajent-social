@@ -24,14 +24,15 @@ import (
 var assets embed.FS
 
 type Server struct {
-	Chat       *ChatService
-	API        *api.Server
-	APIHandler http.Handler
-	T          *template.Template
-	Secure     bool
-	Origin     string
-	Setup      string
-	Demo       bool
+	Chat         *ChatService
+	API          *api.Server
+	APIHandler   http.Handler
+	T            *template.Template
+	Secure       bool
+	Origin       string
+	LegacyOrigin string
+	Setup        string
+	Demo         bool
 }
 type Session struct {
 	Credential store.Credential
@@ -260,7 +261,8 @@ func (s *Server) LoginPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, Page{View: "login", Title: "Welcome to ajent", Session: &Session{CSRF: csrf}, Error: r.URL.Query().Get("error")})
 }
 func (s *Server) originOK(r *http.Request) bool {
-	return r.Header.Get("Origin") == "" || r.Header.Get("Origin") == s.Origin
+	origin := r.Header.Get("Origin")
+	return origin == "" || origin == s.Origin || (s.LegacyOrigin != "" && origin == s.LegacyOrigin)
 }
 func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)

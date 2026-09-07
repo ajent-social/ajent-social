@@ -8,6 +8,9 @@ import { rollingService } from './rolling';
 const cfg = new pulumi.Config();
 const hostname = cfg.get('hostname') ?? 'dogfood.ajent.social';
 if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(hostname)) throw new Error('hostname must be a lowercase DNS name');
+const canonicalHostname = cfg.get('canonicalHostname');
+if (canonicalHostname && canonicalHostname !== 'ajent.social') throw new Error('canonicalHostname must be ajent.social for this cutover');
+const legacyOrigin = canonicalHostname ? `https://${hostname}` : undefined;
 const imageDigest = cfg.get('imageDigest');
 if(cfg.getBoolean('retireLegacyHost') && !cfg.getBoolean('rollingService')) throw new Error('retireLegacyHost requires rollingService');
 if (imageDigest && !/^sha256:[a-f0-9]{64}$/.test(imageDigest)) throw new Error('imageDigest must be sha256:<64 hex characters>');
@@ -64,7 +67,7 @@ if(imageDigest){
     ]}))});
     const profile = new aws.iam.InstanceProfile('host',{role:role.name,tags});
     const ami = aws.ssm.getParameterOutput({name:'/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64'});
-    if(cfg.getBoolean('rollingService')) edge = rollingService({openrouterSecretArn,hostname,region,stack,tags,vpc,publicSubnet,route,appSG,profile,ami:ami.value,repository,logs,db,dbSecret,ownerSecret,imageDigest,caddyImage:caddyImage!,alerts,dependencies:[policy,ssm,dbSecretVersion,ownerSecretVersion,gateway,route]});
+    if(cfg.getBoolean('rollingService')) edge = rollingService({canonicalHostname,legacyOrigin,openrouterSecretArn,hostname,region,stack,tags,vpc,publicSubnet,route,appSG,profile,ami:ami.value,repository,logs,db,dbSecret,ownerSecret,imageDigest,caddyImage:caddyImage!,alerts,dependencies:[policy,ssm,dbSecretVersion,ownerSecretVersion,gateway,route]});
     if(!cfg.getBoolean('retireLegacyHost')) {
     host = new aws.ec2.Instance('application-host',{ami:ami.value,instanceType:'t4g.small',subnetId:publicSubnet.id,vpcSecurityGroupIds:[appSG.id],iamInstanceProfile:profile.name,
         associatePublicIpAddress:true,metadataOptions:{httpTokens:'required',httpEndpoint:'enabled',httpPutResponseHopLimit:2},

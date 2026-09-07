@@ -16,6 +16,7 @@ jobs:
       - run: npm run --prefix infra check
       - run: npm run --prefix infra test
       - run: node --test public-site/worker.test.mjs
+      - run: python3 -m unittest discover -s internal/web/onboarding -p '*_test.py'
       - run: npm audit --prefix infra
       - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh
   container:

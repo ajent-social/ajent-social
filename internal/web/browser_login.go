@@ -64,7 +64,7 @@ func (s *Server) BrowserLoginRedeem(w http.ResponseWriter, r *http.Request) {
 		CSRF  string `json:"csrf"`
 	}
 	cookie, e := r.Cookie("ajent_handoff_csrf")
-	if e != nil || r.Header.Get("Origin") != s.Origin || json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&p) != nil || len(p.Token) != 43 || !auth.ConstantEq([]byte(cookie.Value), []byte(p.CSRF)) {
+	if e != nil || (r.Header.Get("Origin") == "" || !s.originOK(r)) || json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&p) != nil || len(p.Token) != 43 || !auth.ConstantEq([]byte(cookie.Value), []byte(p.CSRF)) {
 		http.Error(w, "Reload the sign-in link.", 403)
 		return
 	}
