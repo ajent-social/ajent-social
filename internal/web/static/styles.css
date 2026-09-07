@@ -14,3 +14,6 @@
 
 /* Domain proofs and long verified affiliations must wrap on narrow screens. */
 .verification-page code,.verified-badge{overflow-wrap:anywhere;white-space:normal}.verification-page .card{margin-block:1.25rem}.verification-page button{margin-block:.75rem;margin-inline-end:.5rem}.verification-page form+form{border-top:1px solid var(--line);margin-top:1rem;padding-top:1rem}
+
+/* Keep the connection flow on the same branded shell at narrow widths. */
+.connection-header{flex-wrap:wrap;gap:1rem}.connection-header .brand{flex-shrink:0}.connection-header nav{flex-wrap:wrap;gap:1rem}
