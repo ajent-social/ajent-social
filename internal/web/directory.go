@@ -16,8 +16,8 @@ import (
 )
 
 type DirectoryAgent struct {
-	ID, Handle, Name, Purpose string
-	Selected                  bool
+	ID, Handle, Name, Purpose, VerifiedDomain string
+	Selected                                  bool
 }
 type DomainListing struct {
 	Namespace, Name, Description, Website string
@@ -78,14 +78,14 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Listing unavailable. Please reload.", 503)
 			return
 		}
-		rows, err := s.API.DB.Pool.Query(ctx, `SELECT a.id::text,a.handle,coalesce(d.name,''),coalesce(d.purpose,''),d.agent_id IS NOT NULL FROM agents a LEFT JOIN directory_agents d ON d.agent_id=a.id AND d.org_id=a.org_id WHERE a.org_id=$1 AND a.status='active' ORDER BY a.handle,a.id LIMIT 101`, p.Session.Credential.OrgID)
+		rows, err := s.API.DB.Pool.Query(ctx, `SELECT a.id::text,a.handle,coalesce(d.name,''),coalesce(d.purpose,''),d.agent_id IS NOT NULL,coalesce(verified_agent_domain(a.id),'') FROM agents a LEFT JOIN directory_agents d ON d.agent_id=a.id AND d.org_id=a.org_id WHERE a.org_id=$1 AND a.status='active' ORDER BY a.handle,a.id LIMIT 101`, p.Session.Credential.OrgID)
 		if err != nil {
 			http.Error(w, "Agent choices unavailable. Please reload.", 503)
 			return
 		}
 		for rows.Next() {
 			var a DirectoryAgent
-			if err = rows.Scan(&a.ID, &a.Handle, &a.Name, &a.Purpose, &a.Selected); err != nil {
+			if err = rows.Scan(&a.ID, &a.Handle, &a.Name, &a.Purpose, &a.Selected, &a.VerifiedDomain); err != nil {
 				break
 			}
 			p.Listing.Agents = append(p.Listing.Agents, a)
@@ -128,7 +128,7 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 	if p.Q != "" || p.Topic != "" || page > 1 {
 		w.Header().Set("X-Robots-Tag", "noindex")
 	}
-	rows, err := s.API.DB.Pool.Query(ctx, `SELECT o.namespace,d.name,d.description,d.website,d.topics FROM directory_listings d JOIN organizations o ON o.id=d.org_id WHERE d.published AND o.status='active' AND ($1='' OR o.namespace=$1) AND ($2='' OR strpos(lower(d.name||' '||d.description||' '||o.namespace||' '||array_to_string(d.topics,' ')),lower($2))>0) AND ($3='' OR $3=ANY(d.topics)) ORDER BY lower(d.name),o.namespace LIMIT 21 OFFSET $4`, namespace, p.Q, p.Topic, (page-1)*20)
+	rows, err := s.API.DB.Pool.Query(ctx, `SELECT o.namespace,d.name,d.description,d.website,d.topics FROM directory_listings d JOIN organizations o ON o.id=d.org_id WHERE d.published AND o.status='active' AND EXISTS(SELECT 1 FROM verified_domains vd WHERE vd.org_id=o.id AND vd.verified_until>now()) AND ($1='' OR o.namespace=$1) AND ($2='' OR strpos(lower(d.name||' '||d.description||' '||o.namespace||' '||array_to_string(d.topics,' ')),lower($2))>0) AND ($3='' OR $3=ANY(d.topics)) ORDER BY lower(d.name),o.namespace LIMIT 21 OFFSET $4`, namespace, p.Q, p.Topic, (page-1)*20)
 	if err != nil {
 		http.Error(w, "Directory unavailable. Please reload this page.", 503)
 		return
@@ -153,14 +153,14 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 		}
 		p.Listing = p.Listings[0]
 		p.Title = p.Listing.Name
-		rows, err = s.API.DB.Pool.Query(ctx, `SELECT a.id::text,a.handle,d.name,d.purpose FROM directory_agents d JOIN agents a ON a.id=d.agent_id AND a.org_id=d.org_id JOIN organizations o ON o.id=d.org_id JOIN directory_listings l ON l.org_id=o.id WHERE o.namespace=$1 AND a.status='active' AND o.status='active' AND l.published ORDER BY d.name,a.id LIMIT 100`, namespace)
+		rows, err = s.API.DB.Pool.Query(ctx, `SELECT a.id::text,a.handle,d.name,d.purpose,coalesce(verified_agent_domain(a.id),'') FROM directory_agents d JOIN agents a ON a.id=d.agent_id AND a.org_id=d.org_id JOIN organizations o ON o.id=d.org_id JOIN directory_listings l ON l.org_id=o.id WHERE o.namespace=$1 AND a.status='active' AND o.status='active' AND l.published AND verified_agent_domain(a.id) IS NOT NULL ORDER BY d.name,a.id LIMIT 100`, namespace)
 		if err != nil {
 			http.Error(w, "Listing unavailable. Please reload.", 503)
 			return
 		}
 		for rows.Next() {
 			var a DirectoryAgent
-			if err = rows.Scan(&a.ID, &a.Handle, &a.Name, &a.Purpose); err != nil {
+			if err = rows.Scan(&a.ID, &a.Handle, &a.Name, &a.Purpose, &a.VerifiedDomain); err != nil {
 				break
 			}
 			p.Listing.Agents = append(p.Listing.Agents, a)
@@ -297,9 +297,14 @@ func (s *Server) SaveDirectory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Organization unavailable.", 403)
 		return
 	}
+	var verified bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM verified_domains WHERE org_id=$1 AND verified_until>now())`, org).Scan(&verified); err != nil || !verified {
+		http.Error(w, "Verify a domain before publishing a directory listing. Visit /app/verification.", 403)
+		return
+	}
 	for _, a := range selected {
 		var id string
-		err = tx.QueryRow(ctx, `SELECT id::text FROM agents WHERE id=$1 AND org_id=$2 AND status='active' FOR SHARE`, a.ID, org).Scan(&id)
+		err = tx.QueryRow(ctx, `SELECT id::text FROM agents WHERE id=$1 AND org_id=$2 AND status='active' AND verified_agent_domain(id) IS NOT NULL FOR SHARE`, a.ID, org).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			bad("An agent is unavailable or belongs to another organization.")
 			return

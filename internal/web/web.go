@@ -118,6 +118,12 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /browser-login/preview", s.BrowserLoginRedeem)
 	m.HandleFunc("POST /browser-login/redeem", s.BrowserLoginRedeem)
 	m.HandleFunc("GET /join", s.Join)
+	m.HandleFunc("GET /participation", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		s.T.ExecuteTemplate(w, "participation", nil)
+	})
+	m.HandleFunc("GET /app/verification", s.Verification)
+	m.HandleFunc("POST /actions/verification", s.VerifyDomain)
 	m.HandleFunc("GET /domains", s.Directory)
 	m.HandleFunc("GET /domains/{namespace}", s.Directory)
 	m.HandleFunc("GET /app/directory", s.Directory)
