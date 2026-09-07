@@ -3,7 +3,7 @@
 .ask-header{gap:1rem;flex-wrap:wrap}
 .ask-intro{text-align:center;margin:2rem 0}
 .ask-intro h1{font-size:clamp(2.5rem,7vw,4.5rem);line-height:1.1;letter-spacing:-.04em;margin:1rem 0}
-.ask-intro h1 span{color:var(--orange)}
+.ask-intro h1 span{color:var(--orange-text)}
 .ask-intro>p:last-child{color:var(--muted);line-height:1.7}
 .ask-card,.ask-answer{background:var(--paper);border:1px solid var(--line);border-radius:1rem;padding:1.5rem}
 .ask-card{border-bottom:.25rem solid var(--orange)}

@@ -1,0 +1,79 @@
+/* Shared responsive behavior; retain Ajent's existing artwork and surfaces. */
+:root{--tap:2.75rem;--mobile-gap:.75rem;--page-gutter:1.25rem;--help-space:5.5rem}
+html{scroll-padding-block:1rem var(--help-space)}
+body:has(.chat-launcher){padding-bottom:calc(var(--help-space) + env(safe-area-inset-bottom))}
+:where(main,.workspace,.card,.author,.identity>span,.credential-row>div){min-width:0}
+:where(h1,h2,h3,.author,.identity,.credential-row,.post-footer,.directory-footer){overflow-wrap:anywhere}
+input,textarea,select{font-size:1rem;min-width:0;max-width:100%}
+button,.button,summary{min-height:var(--tap)}
+:where(.checkbox,.domain-choice,.explore-consent){min-height:var(--tap)}
+:where(input[type=checkbox],input[type=radio]){flex-shrink:0;min-width:1.25rem;min-height:1.25rem}
+.public-header{gap:1.5rem;flex-wrap:wrap}
+.public-header>.brand{flex-shrink:0}
+.public-header nav{flex-wrap:wrap;gap:.5rem 1.5rem;align-items:center}
+.public-header nav a,.public-footer a,.app-footer a{display:inline-flex;align-items:center;min-height:var(--tap)}
+.public-header>.button{flex-shrink:0}
+.account-menu>summary{display:none}
+.account-menu-content{display:flex;flex-direction:column;min-height:0}
+.account-menu:not([open])>.account-menu-content{display:flex}
+.account-menu .sidebar-note{margin-block:1.5rem}
+.identity{overflow-wrap:anywhere}
+.identity small{white-space:normal}
+.sidebar{scroll-padding-bottom:1rem}
+.sidebar>details{flex:1}
+.credential-row{flex-wrap:wrap}
+.credential-row>form{flex-shrink:0}
+.post-footer,.profile-actions,.directory-footer{flex-wrap:wrap}
+pre{max-width:100%;overflow:auto;overscroll-behavior-inline:contain}
+.verification-page code{display:inline-block;max-width:100%;overflow-wrap:anywhere}
+.skip:focus{z-index:60}
+@media(max-width:700px){
+ .public-header{padding:var(--page-gutter);gap:var(--mobile-gap)}
+ .public-header>.brand{margin-right:auto}
+ .public-header>.button{display:inline-flex}
+ .public-header nav{order:3;flex-basis:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.25rem var(--mobile-gap);font-size:.875rem}
+ .public-header nav a,.public-header nav a:nth-child(3){display:flex;padding:.25rem 0;white-space:normal}
+ .public-footer{gap:.25rem 1rem}
+ .public-footer a{display:inline-flex}
+ .brand span{font-size:2.5rem}
+ .sidebar{padding:var(--page-gutter);display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:var(--mobile-gap);overflow:visible}
+ .sidebar>.brand{padding:0}
+ .sidebar>.account-menu{flex:1;min-width:0}
+ .account-menu>summary{display:flex;align-items:center;justify-content:flex-end;gap:.5rem;font-weight:800;cursor:pointer;list-style:none}
+ .account-menu>summary::after{content:'▾'}
+ .account-menu[open]>summary::after{content:'▴'}
+ .account-menu:not([open])>.account-menu-content{display:none}
+ .account-menu[open]{flex-basis:100%}
+ .account-menu[open]>summary{justify-content:space-between;border-bottom:1px solid var(--line)}
+ .account-menu-content nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.25rem;white-space:normal;overflow:visible;margin-top:var(--mobile-gap)}
+ .nav-link{display:flex;align-items:center;min-height:var(--tap);padding:.65rem .75rem}
+ .account-menu .identity{display:flex;margin-top:var(--mobile-gap);border-top:1px solid var(--line)}
+ .account-menu .identity b{font-size:.9rem}
+ .account-menu .sidebar-note{display:none}
+ .account-menu form{display:block}
+ .account-menu form button{width:100%;text-align:left;padding:.5rem .75rem;color:var(--ink)}
+ .hero h1{font-size:clamp(3.5rem,18vw,4.75rem)}
+ .hero-art p{right:0}
+ .login-wrap h1,.docs h1{font-size:clamp(2rem,10vw,2.875rem)}
+ .feed-intro{flex-wrap:wrap;gap:var(--mobile-gap)}
+ .feed-intro h1{font-size:clamp(2.5rem,12vw,3.125rem)}
+ .feed-intro img{width:5rem;height:5rem}
+ .post-top{align-items:flex-start;flex-wrap:wrap}
+ .post-footer{gap:.5rem 1rem}
+ .post-footer>a,.post-footer button,.profile-actions a{min-height:var(--tap);display:inline-flex;align-items:center}
+ .post-footer form{margin-left:0}
+ .audience-label{display:inline}
+ .feed-tabs{flex-wrap:wrap;white-space:normal;gap:.25rem 1rem;overflow:visible}
+ .feed-tabs a{min-height:var(--tap)}
+ .search-form{flex-wrap:wrap}
+ .search-form input{flex:1 1 10rem;width:auto}
+ .search-form .button{flex-shrink:0}
+ .notification{align-items:flex-start}
+ .notification small{margin-left:0;flex-basis:100%}
+ .prose pre{padding:1rem}
+ .app-footer{flex-wrap:wrap;gap:var(--mobile-gap);align-items:center}
+ .verification-page button{width:100%;margin-inline:0}
+ .chat-panel{--chat-height:40rem}
+}
+/* Keep the floating conversation inside the visible area above a soft keyboard. */
+#ajent-chat{bottom:calc(var(--chat-edge) + var(--keyboard-inset,0px));height:min(var(--chat-height),calc(var(--visual-height,100dvh) - 2*var(--chat-edge)));max-height:calc(var(--visual-height,100dvh) - 2*var(--chat-edge))}
