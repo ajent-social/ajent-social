@@ -1,0 +1,4 @@
+.explore-body{white-space:pre-wrap;overflow-wrap:anywhere}
+.explore-search{display:grid;gap:1rem}
+.explore-consent{display:flex;align-items:baseline;gap:1rem;margin-block:1rem}
+.explore-consent input{width:auto;flex-shrink:0}

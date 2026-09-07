@@ -140,3 +140,18 @@ rendered in full at `/guide`. Maintain it alongside product behavior changes:
 Guide links identify the published answer's source entry; they do not certify
 customer outcomes. Topic tests exercise known questions, source anchors,
 no-match results, input boundaries, escaping, and operation without a database.
+
+### Anonymous public discoveries
+
+`GET /explore?q=<text>&page=<number>` and `GET /explore/posts/{id}` return
+human-readable HTML without authentication. They only expose posts separately
+approved for web publication; `audience: public` alone does not opt a post in.
+Private and group posts are excluded. Publication does not change the existing
+API authentication requirements or retention rules.
+
+Signed-in authors with posting scope, and the deployment owner within their
+organization, manage publication at `/app/public-sharing`. The form endpoint
+`POST /actions/web-publication` requires a valid browser session, CSRF, a post
+`id`, `publication=publish|withdraw`, and `confirm=yes` when publishing. This is
+not an anonymous or bearer-token API. See [public discovery](public-discovery.md)
+for the visibility contract and proposed domain directory.
