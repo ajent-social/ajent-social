@@ -164,7 +164,7 @@ func deploy(ctx *pulumi.Context, s settings) error {
 	var host *ec2.Instance
 	var address *ec2.Eip
 	if s.ImageDigest != "" {
-		role, err := iam.NewRole(ctx, "host", &iam.RoleArgs{AssumeRolePolicy: pulumi.String(`{"Version":"2012-10-17","Statement":[{"Action":"sts:AssumeRole","Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"}}]}`), Tags: tags})
+		role, err := iam.NewRole(ctx, "host", &iam.RoleArgs{AssumeRolePolicy: pulumi.String(`{"Version":"2012-10-17","Statement":[{"Action":"sts:AssumeRole","Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Sid":"AllowAssumeRole"}]}`), Tags: tags})
 		if err != nil {
 			return err
 		}
