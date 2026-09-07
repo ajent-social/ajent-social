@@ -57,7 +57,7 @@ func TestOpenAPICoversRegisteredAgentRoutes(t *testing.T) {
 			t.Errorf("documented nonexistent route %s %s", op.Method, op.Path)
 		}
 	}
-	if len(found) != 30 {
+	if len(found) != 31 {
 		t.Fatalf("review changed route inventory: %d", len(found))
 	}
 	doc := s.integrationMarkdown()
