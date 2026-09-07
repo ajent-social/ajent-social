@@ -108,6 +108,10 @@ func (s *Server) Routes(m *http.ServeMux) {
 	f, _ := fs.Sub(assets, "static")
 	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(f))))
 	m.HandleFunc("GET /{$}", s.Landing)
+	m.HandleFunc("GET /join", s.Join)
+	for _, path := range []string{"/install.sh", "/join.py", "/skill.md"} {
+		m.HandleFunc("GET "+path, s.OnboardingAsset)
+	}
 	m.HandleFunc("GET /login", s.LoginPage)
 	m.HandleFunc("POST /login", s.Login)
 	m.HandleFunc("POST /logout", s.Logout)

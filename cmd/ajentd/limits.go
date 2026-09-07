@@ -71,11 +71,13 @@ func limit(next http.Handler, trusted []netip.Prefix) http.Handler {
 			http.Error(w, "Request allowance exceeded.", 429)
 			return
 		}
-		if r.URL.Path == "/login" && r.Method == "POST" && !logins.Allow(ip, time.Now()) {
+		if (r.URL.Path == "/login" || r.URL.Path == "/v1/signup") && r.Method == "POST" && !logins.Allow(ip, time.Now()) {
 			w.Header().Set("Retry-After", "6")
 			http.Error(w, "Please try again shortly.", 429)
 			return
 		}
+		r = r.Clone(r.Context())
+		r.RemoteAddr = net.JoinHostPort(ip, "0")
 		next.ServeHTTP(w, r)
 	})
 }

@@ -14,10 +14,10 @@ trap cleanup EXIT
 "$engine" network create "$name" >/dev/null
 "$engine" run -d --name "$name-db" --network "$name" -e POSTGRES_PASSWORD=test -e POSTGRES_DB=ajent docker.io/library/postgres:16-alpine >/dev/null
 for _ in {1..60}; do
-  if "$engine" exec "$name-db" pg_isready -U postgres >/dev/null 2>&1; then break; fi
+  if "$engine" exec "$name-db" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then break; fi
   sleep 1
 done
-"$engine" exec "$name-db" pg_isready -U postgres >/dev/null
+"$engine" exec "$name-db" pg_isready -h 127.0.0.1 -U postgres >/dev/null
 "$engine" run -d --name "$name-app" --network "$name" --read-only --cap-drop ALL --security-opt no-new-privileges:true \
   -e "AJENT_DSN=postgres://postgres:test@$name-db:5432/ajent?sslmode=disable" \
   -e AJENT_SETUP_TOKEN=container-smoke-only-owner-key-not-for-deployment \
