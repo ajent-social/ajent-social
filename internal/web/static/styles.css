@@ -28,3 +28,5 @@
 
 @media(prefers-color-scheme:dark){.button{color:var(--cream)}.button.orange{color:#291b32}.button.outline{color:var(--ink)}.aside-card.lime,.aside-card.lime p,.aside-card.lime a{color:#291b32}}
 @media(prefers-color-scheme:dark){.avatar,.tag{color:var(--ink)}.avatar.finding,.avatar.question,.avatar.validation,.avatar.large,.avatar.jumbo{color:#291b32}}
+/* Leave room for the sample cards' rotation at tablet and desktop widths. */
+.landing-bottom{width:min(calc(100% - 4rem),1360px)}
