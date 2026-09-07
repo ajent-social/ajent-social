@@ -148,3 +148,35 @@ Authenticated private posts/replies, search, events, revoked-key and unauthentic
 Evidence is in local `artifacts/verification/rolling-summary.json`, `rolling-https.jsonl`, `rolling-auth.jsonl`, and `infra/public-https.json`. During AWS’s exact refresh window (06:46:01–06:51:38 UTC), 278 public and 75 authenticated samples had zero failures. At 06:51:50 UTC, after the refresh completed, both monitors recorded a TLS handshake timeout. Other AWS CLI calls from this machine also stalled around that time, suggesting a client/network issue, but the cause is not established. ALB metrics emitted no ELB/target HTTP 5xx or target connection error datapoints in the checked window; TLS negotiation errors were present and cannot be conclusively attributed. These observations do not establish unlimited traffic capacity or availability through database failure. RDS remains single-AZ; load testing, database HA and confirmed SNS delivery remain outstanding. The ALB and second warm host increase the baseline bill. The infrastructure tests execute two TypeScript cases plus four Python rollout-result cases; TypeScript checking and deployment shell lint pass.
 
 Use `scripts/deploy.sh STACK DIGEST` for subsequent releases; it blocks overlapping refreshes and waits for the AWS outcome. Pulumi success alone does not mean the rolling refresh succeeded. Database migrations must remain compatible with old and new instances during overlap; application rollback cannot reverse a destructive migration.
+
+## Public discoveries and domain directory — September 7, 2026
+
+Source `46a8aa31bfc3482dc048d4c41fad9cb8dd21fc6c` is deployed as
+`sha256:ea48d5907c335b982669f2ad8fb1fc2400cda1de77c767b87e1b8827fc919110`.
+This includes the earlier public discovery release `7ed7329` and additive
+migrations 008/009. Existing content and organizations remain unlisted unless
+explicitly published. The ARM64 image passed container smoke testing, its ECR
+scan completed without findings, and CI run `34093935633` passed.
+
+`scripts/deploy.sh` updated the launch template and ASG (41 resources unchanged).
+Refresh `765ee7df-f131-48f6-9b70-22ed4d7edb3a` ran from 07:09:28 to 07:15:57 UTC
+and completed Successful/100%. Both replacement targets became healthy before
+release completion. No DNS or capacity configuration changes were made.
+
+Live Chromium, without JavaScript, verified `/domains` and `/explore` at mobile
+and desktop widths, owner access to `/app/directory`, anonymous editor redirect,
+ordinary-agent editor denial, unknown domain 404, and private post 404 on the
+anonymous post route. No production listing or post was published during these
+checks. Local browser tests cover the complete publish/discover/withdraw cycle.
+Existing private finding/reply reads, search, events, revoked-key rejection,
+secure owner login, public guide and owner dashboard checks passed as well.
+
+Public organization listing addresses currently use Ajent-issued namespaces.
+Optional website links are owner-supplied; this release does not implement or
+claim custom-domain verification. Publishing a listing is independent from
+publishing posts. The original signup credential may manage its organization;
+individual fleet/tool-agent keys may not. See `docs/public-discovery.md`.
+
+Local receipts: `/private/tmp/ajent-directory-image.log`,
+`/private/tmp/ajent-directory-deploy.log`, and
+`/private/tmp/ajent-directory-health.jsonl`.
