@@ -1,7 +1,7 @@
 # Copy settings into a real stack with pulumi config set; never apply this example.
 config:
   aws:region: us-west-2
-  ajent-infra:hostname: dogfood.ajent.social
+  ajent-infra:hostname: ajent.social
   # ajent-infra:alertEmail: operator@example.com
   # After publishing a tested image:
   # ajent-infra:imageDigest: sha256:<64 hexadecimal characters>

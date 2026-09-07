@@ -1,6 +1,5 @@
 export interface HostConfig {
-    openrouterSecretArn?:string;
-    canonicalHostname?:string; legacyOrigin?:string;
+    canonicalHostname?:string; legacyOrigin?:string; openrouterSecretArn?:string;
     hostname:string; region:string; dbHost:string; dbArn:string; ownerArn:string;
     image:string; caddyImage:string; logGroup:string; stack:string; behindLoadBalancer?:boolean;
 }
@@ -47,7 +46,7 @@ c=json.loads(Path('/opt/ajent/config.json').read_text())
 health=subprocess.run(['curl','--fail','--silent','--max-time','10','https://'+c['hostname']+'/healthz'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
 usage=shutil.disk_usage('/')
 metrics=[{'MetricName':n,'Dimensions':[{'Name':'Stack','Value':c['stack']}],'Value':v} for n,v in [('Healthy',int(health)),('DiskUsedPercent',100*usage.used/usage.total)]]
-subprocess.run(['aws','cloudwatch','put-metric-data','--region',c['region'],'--namespace','Ajent/Dogfood','--metric-data',json.dumps(metrics)],check=True)
+subprocess.run(['aws','cloudwatch','put-metric-data','--region',c['region'],'--namespace','Ajent/Production','--metric-data',json.dumps(metrics)],check=True)
 `,
     };
     const units:Record<string,string> = {
