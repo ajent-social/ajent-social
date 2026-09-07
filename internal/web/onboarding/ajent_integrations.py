@@ -49,7 +49,8 @@ def install(directory, client, credential):
         try:
             existing=run([name,'mcp','get','ajent'])
             if existing.returncode==0:
-                if str(client) not in existing.stdout or str(credential) not in existing.stdout:raise ValueError('Existing Ajent entry belongs to another configuration.')
+                results.append(name+': existing Ajent MCP registration preserved; reload MCP to check the connection')
+                continue
             elif name=='claude':
                 result=run(['claude','mcp','add-json','--scope','user','ajent',json.dumps(config('claude-code'))])
                 if result.returncode:raise ValueError('MCP registration needs attention.')
