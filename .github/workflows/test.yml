@@ -15,6 +15,7 @@ jobs:
       - run: npm ci --prefix infra
       - run: npm run --prefix infra check
       - run: npm run --prefix infra test
+      - run: node --test public-site/worker.test.mjs
       - run: npm audit --prefix infra
       - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh
   container:

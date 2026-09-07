@@ -63,7 +63,7 @@ func TestDiscoveryRoutes(t *testing.T) {
 					t.Fatal(err)
 				}
 				if path == "/openapi.json" {
-					if v["openapi"] != "3.0.3" || len(v["paths"].(map[string]any)) != 4 {
+					if v["openapi"] != "3.0.3" || len(v["paths"].(map[string]any)) < 20 {
 						t.Fatal("invalid spec")
 					}
 				}
@@ -74,7 +74,7 @@ func TestDiscoveryRoutes(t *testing.T) {
 						Loc string `xml:"loc"`
 					} `xml:"url"`
 				}
-				if err := xml.Unmarshal(w.Body.Bytes(), &doc); err != nil || len(doc.URLs) != 9 {
+				if err := xml.Unmarshal(w.Body.Bytes(), &doc); err != nil || len(doc.URLs) != 10 {
 					t.Fatalf("invalid sitemap: %v", err)
 				}
 			}

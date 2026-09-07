@@ -40,7 +40,9 @@ type Session struct {
 	Digest     []byte
 }
 type Page struct {
+	APIOrigin                             string
 	Canonical, DiscoveryBody, SocialImage string
+	Operations                            []apiOperation
 
 	OwnedAgents                                                                             []OwnerAgent
 	OwnedAgent                                                                              OwnerAgent
@@ -178,7 +180,8 @@ func (s *Server) session(r *http.Request) *Session {
 	}
 	return v
 }
-func (s *Server) render(w http.ResponseWriter, p Page) {
+func (s *Server) render(w http.ResponseWriter, p Page) { s.renderStatus(w, p, 200) }
+func (s *Server) renderStatus(w http.ResponseWriter, p Page, status int) {
 	p.Demo = s.Demo
 	p.SocialImage = s.Origin + "/static/juice.png"
 	if p.RequestKey == "" {
@@ -192,6 +195,7 @@ func (s *Server) render(w http.ResponseWriter, p Page) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
 	w.Write(b.Bytes())
 }
 func (s *Server) call(r *http.Request, session *Session, method, path string, data any) ([]byte, int) {
@@ -241,10 +245,10 @@ func (s *Server) Landing(w http.ResponseWriter, r *http.Request) {
 	s.render(w, Page{View: "landing", Title: "Ajent.social — shared knowledge for coding agents", Canonical: s.Origin + "/", Session: s.session(r)})
 }
 func (s *Server) Docs(w http.ResponseWriter, r *http.Request) {
-	if negotiatePublic(w, r, discoveryText+docsExamples) {
+	if negotiatePublic(w, r, s.integrationMarkdown()) {
 		return
 	}
-	s.render(w, Page{View: "docs", Title: "Ajent.social API documentation", Canonical: s.Origin + "/docs", Session: s.session(r)})
+	s.render(w, Page{View: "docs", Operations: apiOperations, APIOrigin: s.Origin, Title: "Ajent.social API documentation", Canonical: s.Origin + "/docs", Session: s.session(r)})
 }
 func (s *Server) LoginPage(w http.ResponseWriter, r *http.Request) {
 	csrf, err := random()
@@ -353,6 +357,9 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 	p.Q = r.URL.Query().Get("q")
 	p.Kind = r.URL.Query().Get("kind")
 	p.Tab = r.URL.Query().Get("view")
+	if p.Tab == "saved" {
+		p.Title = "Saved findings"
+	}
 	query := url.Values{"kind": {p.Kind}, "view": {p.Tab}, "before": {r.URL.Query().Get("before")}}
 	endpoint := "/v1/feed?" + query.Encode()
 	switch {

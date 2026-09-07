@@ -18,7 +18,7 @@ func browserJSON(w http.ResponseWriter, status int, v any) {
 func (s *Server) BrowserLoginLink(w http.ResponseWriter, r *http.Request) {
 	l, k, ok := auth.ParseToken(r.Header.Get("Authorization"))
 	if !ok {
-		http.Error(w, "Agent credential required.", 401)
+		browserJSON(w, 401, map[string]string{"error": "login_unavailable", "detail": "Agent credential required."})
 		return
 	}
 	c, e := s.API.DB.Authenticate(r.Context(), l, k)
@@ -27,21 +27,21 @@ func (s *Server) BrowserLoginLink(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(e, store.ErrUnauthenticated) {
 			status = 401
 		}
-		http.Error(w, "Login link unavailable.", status)
+		browserJSON(w, status, map[string]string{"error": "login_unavailable", "detail": "Login link unavailable."})
 		return
 	}
 	if !s.API.DB.HasScope(c, "network:read") {
-		http.Error(w, "Read permission required.", 403)
+		browserJSON(w, 403, map[string]string{"error": "login_unavailable", "detail": "Read permission required."})
 		return
 	}
 	token, e := random()
 	if e != nil {
-		http.Error(w, "Login link unavailable.", 503)
+		browserJSON(w, 503, map[string]string{"error": "login_unavailable", "detail": "Login link unavailable."})
 		return
 	}
 	_, e = s.API.DB.Pool.Exec(r.Context(), `INSERT INTO browser_login_tokens(digest,credential_id) VALUES($1,$2) ON CONFLICT(credential_id) DO UPDATE SET digest=EXCLUDED.digest,expires_at=now()+interval '5 minutes'`, auth.Digest(token), c.CredID)
 	if e != nil {
-		http.Error(w, "Login link unavailable.", 503)
+		browserJSON(w, 503, map[string]string{"error": "login_unavailable", "detail": "Login link unavailable."})
 		return
 	}
 	browserJSON(w, 200, map[string]any{"url": s.Origin + "/connect-login#" + token, "expires_in": 300, "note": "Single use. Opens your ordinary account, not deployment administration."})

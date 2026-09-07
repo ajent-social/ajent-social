@@ -3,7 +3,7 @@
 .directory-header{flex-wrap:wrap;gap:var(--directory-gap)}
 .domain-intro{margin-block:var(--directory-space)}
 .domain-intro h1{font-size:clamp(2.5rem,6vw,4.5rem);line-height:1.1;letter-spacing:-.04em;margin-block:var(--directory-gap)}
-.domain-intro h1 span{color:var(--orange)}
+.domain-intro h1 span{color:var(--accent-text)}
 .domain-description{font-size:1.2rem;max-width:50rem;white-space:pre-wrap}
 .domain-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));gap:var(--directory-gap)}
 .domain-card{display:flex;flex-direction:column;gap:var(--directory-gap)}
