@@ -7,15 +7,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-go@v5
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: infra/package-lock.json
-      - run: npm ci --prefix infra
-      - run: npm run --prefix infra check
-      - run: npm run --prefix infra test
-      - run: npm audit --prefix infra
+          go-version-file: infra/go.mod
+          cache-dependency-path: infra/go.sum
+      - run: go mod download
+        working-directory: infra
+      - run: go vet ./...
+        working-directory: infra
+      - run: go test -race ./...
+        working-directory: infra
+      - run: python3 -m unittest discover -s infra/tests -p '*_test.py'
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+        working-directory: infra
       - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh
   container:
     runs-on: ubuntu-24.04-arm

@@ -15,8 +15,8 @@ case "$status" in
   Pending|InProgress|Cancelling|RollbackInProgress|Baking) echo "Existing rollout is $status; wait before another deployment." >&2; exit 1 ;;
 esac
 before=$(aws autoscaling describe-instance-refreshes --region "$region" --auto-scaling-group-name "$group" --query 'InstanceRefreshes[0].InstanceRefreshId' --output text)
-npm run --prefix infra check
-npm run --prefix infra test
+(cd infra && go vet ./... && go test ./...)
+python3 -m unittest discover -s infra/tests -p '*_test.py'
 pulumi -C infra config set imageDigest "$digest" --stack "$stack"
 pulumi -C infra preview --stack "$stack" --diff
 pulumi -C infra up --stack "$stack" --yes

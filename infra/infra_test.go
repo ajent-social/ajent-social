@@ -1,0 +1,177 @@
+package main
+
+import (
+	"encoding/json"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"os"
+	"reflect"
+	"sort"
+	"strings"
+	"sync"
+	"testing"
+)
+
+type capturedResource struct {
+	Type   string         `json:"type"`
+	Name   string         `json:"name"`
+	Inputs map[string]any `json:"inputs"`
+}
+type infraMocks struct {
+	mu                  sync.Mutex
+	resources           []capturedResource
+	protected           map[string]bool
+	ignoredCapacity     bool
+	rollingDependencies int
+}
+
+func (m *infraMocks) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
+	switch {
+	case strings.Contains(a.Token, "getAvailabilityZones"):
+		return resource.NewPropertyMapFromMap(map[string]any{"names": []string{"us-west-2a", "us-west-2b"}}), nil
+	case strings.Contains(a.Token, "getParameter"):
+		return resource.NewPropertyMapFromMap(map[string]any{"value": "ami-test"}), nil
+	default:
+		return a.Args, nil
+	}
+}
+func (m *infraMocks) NewResource(a pulumi.MockResourceArgs) (string, resource.PropertyMap, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.resources = append(m.resources, capturedResource{a.TypeToken, a.Name, a.Inputs.Mappable()})
+	if a.RegisterRPC != nil {
+		m.protected[a.TypeToken+"/"+a.Name] = a.RegisterRPC.GetProtect()
+		if a.TypeToken == "aws:autoscaling/group:Group" {
+			m.ignoredCapacity = reflect.DeepEqual(a.RegisterRPC.GetIgnoreChanges(), []string{"desiredCapacity"})
+			m.rollingDependencies = len(a.RegisterRPC.GetDependencies())
+		}
+	}
+	state := a.Inputs.Copy()
+	for key, value := range map[string]any{"arn": "arn:aws:test::123:" + a.Name, "address": "database.test", "repositoryUrl": "123.dkr.ecr.us-west-2.amazonaws.com/ajent", "publicIp": "192.0.2.1", "result": "fake-secret-for-test", "name": a.Name, "latestVersion": 1, "arnSuffix": a.Name, "identifier": a.Name, "dnsName": "edge.example", "domainValidationOptions": []any{}} {
+		state[resource.PropertyKey(key)] = resource.NewPropertyValue(value)
+	}
+	return a.Name + "_id", state, nil
+}
+
+// Policy object ordering is insignificant. Names, arrays and bootstrap bytes are exact.
+func normalized(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		if x["4dabf18193072939515e22adb298388d"] == "1b47061264138c4ac30d75fd1eb44270" {
+			return normalized(x["value"])
+		}
+		out := map[string]any{}
+		for k, v := range x {
+			out[k] = normalized(v)
+		}
+		return out
+	case []any:
+		for i := range x {
+			x[i] = normalized(x[i])
+		}
+		return x
+	case string:
+		var obj any
+		if strings.HasPrefix(x, "{") && json.Unmarshal([]byte(x), &obj) == nil {
+			return normalized(obj)
+		}
+	}
+	return v
+}
+func jsonValue(t *testing.T, v any) any {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var obj any
+	if err := json.Unmarshal(b, &obj); err != nil {
+		t.Fatal(err)
+	}
+	return normalized(obj)
+}
+func TestTypeScriptResourceParity(t *testing.T) {
+	for _, mode := range []string{"foundation", "legacy", "transition", "rolling"} {
+		t.Run(mode, func(t *testing.T) {
+			s := settings{Hostname: "dogfood.ajent.social", Region: "us-west-2", Stack: "test"}
+			if mode != "foundation" {
+				s.ImageDigest = "sha256:" + strings.Repeat("a", 64)
+				s.CaddyImage = "caddy@sha256:" + strings.Repeat("b", 64)
+				s.CloudflareZoneID = "test-zone"
+				s.OpenrouterSecretARN = "arn:chat-test"
+				s.AlertEmail = "operator@example.test"
+			}
+			s.RollingService = mode == "rolling" || mode == "transition"
+			s.RetireLegacyHost = mode == "rolling"
+			mocks := &infraMocks{protected: map[string]bool{}}
+			if err := pulumi.RunErr(func(ctx *pulumi.Context) error { return deploy(ctx, s) }, pulumi.WithMocks("ajent-infra", "test", mocks)); err != nil {
+				t.Fatal(err)
+			}
+			raw, err := os.ReadFile("testdata/" + mode + "-resources.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var want []capturedResource
+			if err := json.Unmarshal(raw, &want); err != nil {
+				t.Fatal(err)
+			}
+			var got []capturedResource
+			for _, r := range mocks.resources {
+				if r.Type != "pulumi:pulumi:Stack" {
+					got = append(got, r)
+				}
+			}
+			less := func(a, b capturedResource) bool { return a.Type+a.Name < b.Type+b.Name }
+			sort.Slice(got, func(i, j int) bool { return less(got[i], got[j]) })
+			sort.Slice(want, func(i, j int) bool { return less(want[i], want[j]) })
+			if len(got) != len(want) {
+				t.Fatalf("resource count: Go %d, TypeScript %d", len(got), len(want))
+			}
+			for i := range want {
+				if got[i].Type != want[i].Type || got[i].Name != want[i].Name {
+					t.Errorf("identity: got %s/%s want %s/%s", got[i].Type, got[i].Name, want[i].Type, want[i].Name)
+					continue
+				}
+				if !reflect.DeepEqual(jsonValue(t, got[i].Inputs), jsonValue(t, want[i].Inputs)) {
+					t.Errorf("inputs differ for %s/%s\nGo: %#v\nTypeScript: %#v", got[i].Type, got[i].Name, jsonValue(t, got[i].Inputs), jsonValue(t, want[i].Inputs))
+				}
+			}
+			for _, name := range []string{"aws:rds/instance:Instance/database", "aws:secretsmanager/secret:Secret/database-secret", "aws:secretsmanager/secret:Secret/owner-secret"} {
+				if !mocks.protected[name] {
+					t.Errorf("lost protection: %s", name)
+				}
+			}
+			if s.RollingService {
+				if !mocks.protected["aws:acm/certificate:Certificate/public-tls"] {
+					t.Error("certificate lost protection")
+				}
+				if !mocks.ignoredCapacity {
+					t.Error("autoscaler desired capacity must remain ignored")
+				}
+				if mocks.rollingDependencies < 8 {
+					t.Errorf("fleet lost dependencies: %d", mocks.rollingDependencies)
+				}
+			}
+		})
+	}
+}
+func TestConfigurationValidation(t *testing.T) {
+	valid := settings{Hostname: "dogfood.ajent.social", Region: "us-west-2", ImageDigest: "sha256:" + strings.Repeat("a", 64), CaddyImage: "caddy@sha256:" + strings.Repeat("b", 64), RollingService: true, RetireLegacyHost: true}
+	for _, tc := range []struct {
+		name    string
+		mutate  func(*settings)
+		wantErr bool
+	}{
+		{"valid", func(*settings) {}, false}, {"foundation", func(s *settings) { s.ImageDigest = ""; s.CaddyImage = "" }, false},
+		{"region required", func(s *settings) { s.Region = "" }, true}, {"lowercase hostname", func(s *settings) { s.Hostname = "Dogfood.ajent.social" }, true}, {"shell injection", func(s *settings) { s.Hostname = "$(id).example.com" }, true}, {"digest pinned", func(s *settings) { s.ImageDigest = "latest" }, true}, {"caddy pinned", func(s *settings) { s.CaddyImage = "caddy:latest" }, true}, {"retirement guard", func(s *settings) { s.RollingService = false }, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := valid
+			tc.mutate(&s)
+			err := s.validate()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validation error=%v; want error=%v", err, tc.wantErr)
+			}
+		})
+	}
+}

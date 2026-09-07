@@ -1,0 +1,572 @@
+[
+  {
+    "type": "aws:cloudwatch/logGroup:LogGroup",
+    "name": "application-logs",
+    "inputs": {
+      "retentionInDays": 30,
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:cloudwatch/metricAlarm:MetricAlarm",
+    "name": "database-cpu",
+    "inputs": {
+      "alarmActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "comparisonOperator": "GreaterThanThreshold",
+      "dimensions": {
+        "DBInstanceIdentifier": "database"
+      },
+      "evaluationPeriods": 3,
+      "metricName": "CPUUtilization",
+      "namespace": "AWS/RDS",
+      "okActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "period": 300,
+      "statistic": "Average",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "threshold": 85,
+      "treatMissingData": "breaching"
+    }
+  },
+  {
+    "type": "aws:cloudwatch/metricAlarm:MetricAlarm",
+    "name": "database-storage",
+    "inputs": {
+      "alarmActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "comparisonOperator": "LessThanThreshold",
+      "dimensions": {
+        "DBInstanceIdentifier": "database"
+      },
+      "evaluationPeriods": 3,
+      "metricName": "FreeStorageSpace",
+      "namespace": "AWS/RDS",
+      "okActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "period": 300,
+      "statistic": "Average",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "threshold": 5368709120,
+      "treatMissingData": "breaching"
+    }
+  },
+  {
+    "type": "aws:cloudwatch/metricAlarm:MetricAlarm",
+    "name": "host-disk",
+    "inputs": {
+      "alarmActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "comparisonOperator": "GreaterThanThreshold",
+      "dimensions": {
+        "Stack": "test"
+      },
+      "evaluationPeriods": 3,
+      "metricName": "DiskUsedPercent",
+      "namespace": "Ajent/Dogfood",
+      "okActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "period": 60,
+      "statistic": "Maximum",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "threshold": 85,
+      "treatMissingData": "breaching"
+    }
+  },
+  {
+    "type": "aws:cloudwatch/metricAlarm:MetricAlarm",
+    "name": "host-status",
+    "inputs": {
+      "alarmActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "comparisonOperator": "GreaterThanOrEqualToThreshold",
+      "dimensions": {
+        "InstanceId": "application-host_id"
+      },
+      "evaluationPeriods": 2,
+      "metricName": "StatusCheckFailed",
+      "namespace": "AWS/EC2",
+      "period": 60,
+      "statistic": "Maximum",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "threshold": 1,
+      "treatMissingData": "breaching"
+    }
+  },
+  {
+    "type": "aws:cloudwatch/metricAlarm:MetricAlarm",
+    "name": "http-health",
+    "inputs": {
+      "alarmActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "comparisonOperator": "LessThanThreshold",
+      "dimensions": {
+        "Stack": "test"
+      },
+      "evaluationPeriods": 3,
+      "metricName": "Healthy",
+      "namespace": "Ajent/Dogfood",
+      "okActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "period": 60,
+      "statistic": "Minimum",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "threshold": 1,
+      "treatMissingData": "breaching"
+    }
+  },
+  {
+    "type": "aws:ec2/eip:Eip",
+    "name": "application-address",
+    "inputs": {
+      "domain": "vpc",
+      "instance": "application-host_id",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:ec2/instance:Instance",
+    "name": "application-host",
+    "inputs": {
+      "ami": "ami-test",
+      "associatePublicIpAddress": true,
+      "iamInstanceProfile": "host",
+      "instanceType": "t4g.small",
+      "metadataOptions": {
+        "httpEndpoint": "enabled",
+        "httpPutResponseHopLimit": 2,
+        "httpTokens": "required"
+      },
+      "rootBlockDevice": {
+        "encrypted": true,
+        "volumeSize": 20,
+        "volumeType": "gp3"
+      },
+      "subnetId": "application-subnet_id",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "userData": "#!/bin/bash\nset -euo pipefail\numask 077\ndnf install -y docker awscli-2 python3\nsystemctl enable --now docker\ninstall -d -m 755 /opt/ajent\ninstall -d -m 700 /var/lib/ajent/caddy-data /var/lib/ajent/caddy-config\nprintf '%s' 'eyJvcGVucm91dGVyU2VjcmV0QXJuIjoiYXJuOmNoYXQtdGVzdCIsImhvc3RuYW1lIjoiZG9nZm9vZC5hamVudC5zb2NpYWwiLCJyZWdpb24iOiJ1cy13ZXN0LTIiLCJkYkhvc3QiOiJkYXRhYmFzZS50ZXN0IiwiZGJBcm4iOiJhcm46YXdzOnRlc3Q6OjEyMzpkYXRhYmFzZS1zZWNyZXQiLCJvd25lckFybiI6ImFybjphd3M6dGVzdDo6MTIzOm93bmVyLXNlY3JldCIsImltYWdlIjoiMTIzLmRrci5lY3IudXMtd2VzdC0yLmFtYXpvbmF3cy5jb20vYWplbnRAc2hhMjU2OmFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJjYWRkeUltYWdlIjoiY2FkZHlAc2hhMjU2OmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLCJsb2dHcm91cCI6ImFwcGxpY2F0aW9uLWxvZ3MiLCJzdGFjayI6InRlc3QifQ==' | base64 -d > /opt/ajent/config.json\nprintf '%s' 'ZG9nZm9vZC5hamVudC5zb2NpYWwgewogaGVhZGVyIFN0cmljdC1UcmFuc3BvcnQtU2VjdXJpdHkgIm1heC1hZ2U9MzE1MzYwMDAiCiByZXZlcnNlX3Byb3h5IDEyNy4wLjAuMTo4MDgwCn0K' | base64 -d > /opt/ajent/Caddyfile\nprintf '%s' 'aW1wb3J0IGpzb24sIHN1YnByb2Nlc3MsIG9zLCB1cmxsaWIucGFyc2UKZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCmM9anNvbi5sb2FkcyhQYXRoKCcvb3B0L2FqZW50L2NvbmZpZy5qc29uJykucmVhZF90ZXh0KCkpCmRlZiBzZWNyZXQoYXJuKToKICAgIHJldHVybiBqc29uLmxvYWRzKHN1YnByb2Nlc3MuY2hlY2tfb3V0cHV0KFsnYXdzJywnc2VjcmV0c21hbmFnZXInLCdnZXQtc2VjcmV0LXZhbHVlJywnLS1yZWdpb24nLGNbJ3JlZ2lvbiddLCctLXNlY3JldC1pZCcsYXJuXSkpWydTZWNyZXRTdHJpbmcnXQpwdz1zZWNyZXQoY1snZGJBcm4nXSkKb3duZXI9c2VjcmV0KGNbJ293bmVyQXJuJ10pCmRzbj0ncG9zdGdyZXM6Ly9hamVudDonK3VybGxpYi5wYXJzZS5xdW90ZShwdyxzYWZlPScnKSsnQCcrY1snZGJIb3N0J10rJzo1NDMyL2FqZW50P3NzbG1vZGU9dmVyaWZ5LWZ1bGwmc3Nscm9vdGNlcnQ9L2NlcnRzL3Jkcy5wZW0nCm9zLnVtYXNrKDBvMDc3KQpwPVBhdGgoJy9ydW4vYWplbnQuZW52LnRtcCcpCnAud3JpdGVfdGV4dCgnQUpFTlRfRFNOPScrZHNuKydcbkFKRU5UX1NFVFVQX1RPS0VOPScrb3duZXIrJ1xuQUpFTlRfT1JJR0lOPWh0dHBzOi8vJytjWydob3N0bmFtZSddKydcbkFKRU5UX1RSVVNURURfUFJPWElFUz0xMjcuMC4wLjEvMzJcbicpCmlmIGMuZ2V0KCdvcGVucm91dGVyU2VjcmV0QXJuJyk6CiAgICBrZXk9c2VjcmV0KGNbJ29wZW5yb3V0ZXJTZWNyZXRBcm4nXSkKICAgIGlmIG5vdCBrZXkgb3IgYW55KGNoIGluIGtleSBmb3IgY2ggaW4gWydcbicsJ1xyJ10pOnJhaXNlIFZhbHVlRXJyb3IoJ0ludmFsaWQgY2hhdCBzZWNyZXQgZm9ybWF0JykKICAgIHdpdGggcC5vcGVuKCdhJykgYXMgZjpmLndyaXRlKCdPUEVOUk9VVEVSX0FQSV9LRVk9JytrZXkrJ1xuJykKcC5yZXBsYWNlKCcvcnVuL2FqZW50LmVudicpCnJlZ2lzdHJ5PWNbJ2ltYWdlJ10uc3BsaXQoJy8nKVswXQpwdz1zdWJwcm9jZXNzLmNoZWNrX291dHB1dChbJ2F3cycsJ2VjcicsJ2dldC1sb2dpbi1wYXNzd29yZCcsJy0tcmVnaW9uJyxjWydyZWdpb24nXV0pCnN1YnByb2Nlc3MucnVuKFsnZG9ja2VyJywnbG9naW4nLCctLXVzZXJuYW1lJywnQVdTJywnLS1wYXNzd29yZC1zdGRpbicscmVnaXN0cnldLGlucHV0PXB3LGNoZWNrPVRydWUsc3Rkb3V0PXN1YnByb2Nlc3MuREVWTlVMTCkKc3VicHJvY2Vzcy5ydW4oWydkb2NrZXInLCdwdWxsJyxjWydpbWFnZSddXSxjaGVjaz1UcnVlKQo=' | base64 -d > /opt/ajent/refresh.py\nprintf '%s' 'aW1wb3J0IGpzb24sIG9zLCBzeXMKZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCmM9anNvbi5sb2FkcyhQYXRoKCcvb3B0L2FqZW50L2NvbmZpZy5qc29uJykucmVhZF90ZXh0KCkpCmtpbmQ9c3lzLmFyZ3ZbMV0KYXJncz1bJ2RvY2tlcicsJ3J1bicsJy0tcm0nLCctLW5hbWUnLCdhamVudC0nK2tpbmQsJy0tbmV0d29yaycsJ2hvc3QnLCctLWxvZy1kcml2ZXInLCdhd3Nsb2dzJywnLS1sb2ctb3B0JywnYXdzbG9ncy1yZWdpb249JytjWydyZWdpb24nXSwnLS1sb2ctb3B0JywnYXdzbG9ncy1ncm91cD0nK2NbJ2xvZ0dyb3VwJ10sJy0tbG9nLW9wdCcsJ2F3c2xvZ3Mtc3RyZWFtPScra2luZCwnLS1zZWN1cml0eS1vcHQnLCduby1uZXctcHJpdmlsZWdlczp0cnVlJ10KaWYga2luZD09J2FwcCc6CiAgICBhcmdzKz1bJy0tcmVhZC1vbmx5JywnLS1jYXAtZHJvcCcsJ0FMTCcsJy0tZW52LWZpbGUnLCcvcnVuL2FqZW50LmVudicsJy12JywnL29wdC9hamVudC9yZHMucGVtOi9jZXJ0cy9yZHMucGVtOnJvJyxjWydpbWFnZSddLCctYWRkcicsJzEyNy4wLjAuMTo4MDgwJ10KZWxzZToKICAgIGFyZ3MrPVsnLXYnLCcvb3B0L2FqZW50L0NhZGR5ZmlsZTovZXRjL2NhZGR5L0NhZGR5ZmlsZTpybycsJy12JywnL3Zhci9saWIvYWplbnQvY2FkZHktZGF0YTovZGF0YScsJy12JywnL3Zhci9saWIvYWplbnQvY2FkZHktY29uZmlnOi9jb25maWcnLGNbJ2NhZGR5SW1hZ2UnXV0Kb3MuZXhlY3ZwKGFyZ3NbMF0sYXJncykK' | base64 -d > /opt/ajent/run.py\nprintf '%s' 'aW1wb3J0IGpzb24sIHN1YnByb2Nlc3MsIHNodXRpbApmcm9tIHBhdGhsaWIgaW1wb3J0IFBhdGgKYz1qc29uLmxvYWRzKFBhdGgoJy9vcHQvYWplbnQvY29uZmlnLmpzb24nKS5yZWFkX3RleHQoKSkKaGVhbHRoPXN1YnByb2Nlc3MucnVuKFsnY3VybCcsJy0tZmFpbCcsJy0tc2lsZW50JywnLS1tYXgtdGltZScsJzEwJywnaHR0cHM6Ly8nK2NbJ2hvc3RuYW1lJ10rJy9oZWFsdGh6J10sc3Rkb3V0PXN1YnByb2Nlc3MuREVWTlVMTCxzdGRlcnI9c3VicHJvY2Vzcy5ERVZOVUxMKS5yZXR1cm5jb2RlPT0wCnVzYWdlPXNodXRpbC5kaXNrX3VzYWdlKCcvJykKbWV0cmljcz1beydNZXRyaWNOYW1lJzpuLCdEaW1lbnNpb25zJzpbeydOYW1lJzonU3RhY2snLCdWYWx1ZSc6Y1snc3RhY2snXX1dLCdWYWx1ZSc6dn0gZm9yIG4sdiBpbiBbKCdIZWFsdGh5JyxpbnQoaGVhbHRoKSksKCdEaXNrVXNlZFBlcmNlbnQnLDEwMCp1c2FnZS51c2VkL3VzYWdlLnRvdGFsKV1dCnN1YnByb2Nlc3MucnVuKFsnYXdzJywnY2xvdWR3YXRjaCcsJ3B1dC1tZXRyaWMtZGF0YScsJy0tcmVnaW9uJyxjWydyZWdpb24nXSwnLS1uYW1lc3BhY2UnLCdBamVudC9Eb2dmb29kJywnLS1tZXRyaWMtZGF0YScsanNvbi5kdW1wcyhtZXRyaWNzKV0sY2hlY2s9VHJ1ZSkK' | base64 -d > /opt/ajent/metrics.py\nchmod 644 /opt/ajent/Caddyfile\ncurl --fail --retry 5 --proto =https --tlsv1.2 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o /opt/ajent/rds.pem\nchmod 644 /opt/ajent/rds.pem\nprintf '%s' 'W1VuaXRdCkRlc2NyaXB0aW9uPUFqZW50IGFwcGxpY2F0aW9uCkFmdGVyPW5ldHdvcmstb25saW5lLnRhcmdldCBkb2NrZXIuc2VydmljZQpXYW50cz1uZXR3b3JrLW9ubGluZS50YXJnZXQKUmVxdWlyZXM9ZG9ja2VyLnNlcnZpY2UKU3RhcnRMaW1pdEludGVydmFsU2VjPTAKW1NlcnZpY2VdCkV4ZWNTdGFydFByZT0vdXNyL2Jpbi9weXRob24zIC9vcHQvYWplbnQvcmVmcmVzaC5weQpFeGVjU3RhcnRQcmU9LS91c3IvYmluL2RvY2tlciBybSAtZiBhamVudC1hcHAKRXhlY1N0YXJ0PS91c3IvYmluL3B5dGhvbjMgL29wdC9hamVudC9ydW4ucHkgYXBwCkV4ZWNTdG9wPS91c3IvYmluL2RvY2tlciBzdG9wIC10IDE1IGFqZW50LWFwcApSZXN0YXJ0PWFsd2F5cwpSZXN0YXJ0U2VjPTE1ClRpbWVvdXRTdGFydFNlYz0zMDAKVGltZW91dFN0b3BTZWM9MzAKW0luc3RhbGxdCldhbnRlZEJ5PW11bHRpLXVzZXIudGFyZ2V0Cg==' | base64 -d > /etc/systemd/system/ajent-app.service\nprintf '%s' 'W1VuaXRdCkRlc2NyaXB0aW9uPUFqZW50IFRMUyBwcm94eQpBZnRlcj1uZXR3b3JrLW9ubGluZS50YXJnZXQgZG9ja2VyLnNlcnZpY2UKUmVxdWlyZXM9ZG9ja2VyLnNlcnZpY2UKU3RhcnRMaW1pdEludGVydmFsU2VjPTAKW1NlcnZpY2VdCkV4ZWNTdGFydFByZT0tL3Vzci9iaW4vZG9ja2VyIHJtIC1mIGFqZW50LXByb3h5CkV4ZWNTdGFydD0vdXNyL2Jpbi9weXRob24zIC9vcHQvYWplbnQvcnVuLnB5IHByb3h5CkV4ZWNTdG9wPS91c3IvYmluL2RvY2tlciBzdG9wIC10IDE1IGFqZW50LXByb3h5ClJlc3RhcnQ9YWx3YXlzClJlc3RhcnRTZWM9MTUKVGltZW91dFN0YXJ0U2VjPTMwMApUaW1lb3V0U3RvcFNlYz0zMApbSW5zdGFsbF0KV2FudGVkQnk9bXVsdGktdXNlci50YXJnZXQK' | base64 -d > /etc/systemd/system/ajent-proxy.service\nprintf '%s' 'W1VuaXRdCkRlc2NyaXB0aW9uPUFqZW50IEhUVFBTIGFuZCBkaXNrIG1ldHJpY3MKQWZ0ZXI9bmV0d29yay1vbmxpbmUudGFyZ2V0CltTZXJ2aWNlXQpUeXBlPW9uZXNob3QKRXhlY1N0YXJ0PS91c3IvYmluL3B5dGhvbjMgL29wdC9hamVudC9tZXRyaWNzLnB5ClRpbWVvdXRTdGFydFNlYz01MAo=' | base64 -d > /etc/systemd/system/ajent-metrics.service\nprintf '%s' 'W1VuaXRdCkRlc2NyaXB0aW9uPUNoZWNrIEFqZW50IGVhY2ggbWludXRlCltUaW1lcl0KT25Cb290U2VjPTEyMApPblVuaXRBY3RpdmVTZWM9NjAKW0luc3RhbGxdCldhbnRlZEJ5PXRpbWVycy50YXJnZXQK' | base64 -d > /etc/systemd/system/ajent-metrics.timer\nsystemctl daemon-reload\nsystemctl enable --now ajent-app ajent-proxy ajent-metrics.timer\n",
+      "userDataReplaceOnChange": true,
+      "vpcSecurityGroupIds": [
+        "application_id"
+      ]
+    }
+  },
+  {
+    "type": "aws:ec2/internetGateway:InternetGateway",
+    "name": "internet",
+    "inputs": {
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/routeTable:RouteTable",
+    "name": "public-routes",
+    "inputs": {
+      "routes": [
+        {
+          "cidrBlock": "0.0.0.0/0",
+          "gatewayId": "internet_id"
+        }
+      ],
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/routeTableAssociation:RouteTableAssociation",
+    "name": "application-route",
+    "inputs": {
+      "routeTableId": "public-routes_id",
+      "subnetId": "application-subnet_id"
+    }
+  },
+  {
+    "type": "aws:ec2/securityGroup:SecurityGroup",
+    "name": "application",
+    "inputs": {
+      "description": "Managed by Pulumi",
+      "egress": [
+        {
+          "cidrBlocks": [
+            "0.0.0.0/0"
+          ],
+          "fromPort": 0,
+          "protocol": "-1",
+          "toPort": 0
+        }
+      ],
+      "ingress": [
+        {
+          "cidrBlocks": [
+            "0.0.0.0/0"
+          ],
+          "fromPort": 80,
+          "protocol": "tcp",
+          "toPort": 80
+        },
+        {
+          "cidrBlocks": [
+            "0.0.0.0/0"
+          ],
+          "fromPort": 443,
+          "protocol": "tcp",
+          "toPort": 443
+        }
+      ],
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/securityGroup:SecurityGroup",
+    "name": "database",
+    "inputs": {
+      "description": "Managed by Pulumi",
+      "ingress": [
+        {
+          "fromPort": 5432,
+          "protocol": "tcp",
+          "securityGroups": [
+            "application_id"
+          ],
+          "toPort": 5432
+        }
+      ],
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/subnet:Subnet",
+    "name": "application-subnet",
+    "inputs": {
+      "availabilityZone": "us-west-2a",
+      "cidrBlock": "10.87.1.0/24",
+      "mapPublicIpOnLaunch": true,
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/subnet:Subnet",
+    "name": "database-subnet-0",
+    "inputs": {
+      "availabilityZone": "us-west-2a",
+      "cidrBlock": "10.87.10.0/24",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/subnet:Subnet",
+    "name": "database-subnet-1",
+    "inputs": {
+      "availabilityZone": "us-west-2b",
+      "cidrBlock": "10.87.11.0/24",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/vpc:Vpc",
+    "name": "network",
+    "inputs": {
+      "cidrBlock": "10.87.0.0/16",
+      "enableDnsHostnames": true,
+      "enableDnsSupport": true,
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:ecr/repository:Repository",
+    "name": "application-images",
+    "inputs": {
+      "forceDelete": false,
+      "imageScanningConfiguration": {
+        "scanOnPush": true
+      },
+      "imageTagMutability": "IMMUTABLE",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:iam/instanceProfile:InstanceProfile",
+    "name": "host",
+    "inputs": {
+      "role": "host",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:iam/role:Role",
+    "name": "host",
+    "inputs": {
+      "assumeRolePolicy": {
+        "Statement": [
+          {
+            "Action": "sts:AssumeRole",
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "ec2.amazonaws.com"
+            },
+            "Sid": "AllowAssumeRole"
+          }
+        ],
+        "Version": "2012-10-17"
+      },
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:iam/rolePolicy:RolePolicy",
+    "name": "runtime",
+    "inputs": {
+      "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"secretsmanager:GetSecretValue\"],\"Resource\":[\"arn:aws:test::123:database-secret\",\"arn:aws:test::123:owner-secret\",\"arn:chat-test\"]},{\"Effect\":\"Allow\",\"Action\":[\"ecr:GetAuthorizationToken\"],\"Resource\":\"*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:BatchGetImage\",\"ecr:GetDownloadUrlForLayer\",\"ecr:BatchCheckLayerAvailability\"],\"Resource\":\"arn:aws:test::123:application-images\"},{\"Effect\":\"Allow\",\"Action\":[\"logs:CreateLogStream\",\"logs:PutLogEvents\"],\"Resource\":\"arn:aws:test::123:application-logs:*\"},{\"Effect\":\"Allow\",\"Action\":[\"cloudwatch:PutMetricData\"],\"Resource\":\"*\",\"Condition\":{\"StringEquals\":{\"cloudwatch:namespace\":\"Ajent/Dogfood\"}}}]}",
+      "role": "host_id"
+    }
+  },
+  {
+    "type": "aws:iam/rolePolicyAttachment:RolePolicyAttachment",
+    "name": "ssm",
+    "inputs": {
+      "policyArn": "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+      "role": "host"
+    }
+  },
+  {
+    "type": "aws:rds/instance:Instance",
+    "name": "database",
+    "inputs": {
+      "allocatedStorage": 20,
+      "autoMinorVersionUpgrade": true,
+      "backupRetentionPeriod": 7,
+      "backupWindow": "09:00-10:00",
+      "copyTagsToSnapshot": true,
+      "dbName": "ajent",
+      "dbSubnetGroupName": "database",
+      "deletionProtection": true,
+      "engine": "postgres",
+      "engineVersion": "16",
+      "finalSnapshotIdentifier": "ajent-test-final",
+      "instanceClass": "db.t4g.micro",
+      "maintenanceWindow": "sun:10:00-sun:11:00",
+      "maxAllocatedStorage": 100,
+      "multiAz": false,
+      "password": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": "fake-secret-for-test"
+      },
+      "port": 5432,
+      "publiclyAccessible": false,
+      "skipFinalSnapshot": false,
+      "storageEncrypted": true,
+      "storageType": "gp3",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "username": "ajent",
+      "vpcSecurityGroupIds": [
+        "database_id"
+      ]
+    }
+  },
+  {
+    "type": "aws:rds/subnetGroup:SubnetGroup",
+    "name": "database",
+    "inputs": {
+      "description": "Managed by Pulumi",
+      "subnetIds": [
+        "database-subnet-0_id",
+        "database-subnet-1_id"
+      ],
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:secretsmanager/secret:Secret",
+    "name": "database-secret",
+    "inputs": {
+      "recoveryWindowInDays": 7,
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:secretsmanager/secret:Secret",
+    "name": "owner-secret",
+    "inputs": {
+      "recoveryWindowInDays": 7,
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:secretsmanager/secretVersion:SecretVersion",
+    "name": "database-secret-value",
+    "inputs": {
+      "secretId": "database-secret_id",
+      "secretString": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": "fake-secret-for-test"
+      }
+    }
+  },
+  {
+    "type": "aws:secretsmanager/secretVersion:SecretVersion",
+    "name": "owner-secret-value",
+    "inputs": {
+      "secretId": "owner-secret_id",
+      "secretString": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": "fake-secret-for-test"
+      }
+    }
+  },
+  {
+    "type": "aws:sns/topic:Topic",
+    "name": "alerts",
+    "inputs": {
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:sns/topicSubscription:TopicSubscription",
+    "name": "operator",
+    "inputs": {
+      "endpoint": "operator@example.test",
+      "protocol": "email",
+      "topic": "arn:aws:test::123:alerts"
+    }
+  },
+  {
+    "type": "cloudflare:index/dnsRecord:DnsRecord",
+    "name": "dogfood-dns",
+    "inputs": {
+      "comment": "Ajent service; DNS-only",
+      "content": "192.0.2.1",
+      "name": "dogfood.ajent.social",
+      "proxied": false,
+      "ttl": 300,
+      "type": "A",
+      "zoneId": "test-zone"
+    }
+  },
+  {
+    "type": "random:index/randomPassword:RandomPassword",
+    "name": "database-password",
+    "inputs": {
+      "length": 48,
+      "special": false
+    }
+  },
+  {
+    "type": "random:index/randomPassword:RandomPassword",
+    "name": "owner-key",
+    "inputs": {
+      "length": 64,
+      "special": false
+    }
+  }
+]

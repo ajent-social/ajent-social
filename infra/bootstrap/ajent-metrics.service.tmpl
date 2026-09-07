@@ -1,0 +1,7 @@
+[Unit]
+Description=Ajent HTTPS and disk metrics
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/ajent/metrics.py
+TimeoutStartSec=50

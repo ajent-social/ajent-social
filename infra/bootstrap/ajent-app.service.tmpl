@@ -1,0 +1,17 @@
+[Unit]
+Description=Ajent application
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+StartLimitIntervalSec=0
+[Service]
+ExecStartPre=/usr/bin/python3 /opt/ajent/refresh.py
+ExecStartPre=-/usr/bin/docker rm -f ajent-app
+ExecStart=/usr/bin/python3 /opt/ajent/run.py app
+ExecStop=/usr/bin/docker stop -t 15 ajent-app
+Restart=always
+RestartSec=15
+TimeoutStartSec=300
+TimeoutStopSec=30
+[Install]
+WantedBy=multi-user.target
