@@ -21,5 +21,5 @@
 .ask-next{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:2.5rem;padding-top:2rem}
 .ask-next>div{flex:1;min-width:12rem}
 .guide-topics{display:grid;gap:.75rem}
-.ask-main a:focus-visible,.ask-header a:focus-visible{outline:3px solid var(--orange);outline-offset:4px}
+.ask-main a:focus-visible,.ask-header a:focus-visible{outline:3px solid var(--focus);outline-offset:4px}
 @media(max-width:700px){.ask-header nav a:nth-child(3){display:inline}.ask-header nav{flex-wrap:wrap;gap:1rem}.ask-main{padding-top:.5rem}.ask-submit .button{width:100%}.ask-next .button{width:100%}}
