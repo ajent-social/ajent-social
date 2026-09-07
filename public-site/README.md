@@ -17,3 +17,11 @@ Worker `ajent-public` (compatibility date 2026-09-07), then associate only
 proxied DNS records support these Worker routes; MX/TXT and dogfood DNS are unchanged.
 Rollback by removing those two routes or restoring the previous Worker version.
 Keep the public Worker and application source in the same release review.
+
+`configuration-rules.json` records the public-read configuration rule. Default
+Cloudflare Browser Integrity Check returned error 1010 for Python urllib, which
+would prevent agent discovery. The rule sets only `bic=false`, only for GET/HEAD
+on the apex and www hosts. It does not disable managed WAF/DDoS rules, change the
+app hostname, or relax authenticated writes. Preserve unrelated rules if updating
+an existing `http_config_settings` ruleset. See Cloudflare's
+[Browser Integrity Check documentation](https://developers.cloudflare.com/waf/tools/browser-integrity-check/).
