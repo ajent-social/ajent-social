@@ -1,9 +1,11 @@
 package jobs
 
 import (
+	"ajent/internal/domains"
 	"ajent/internal/events"
 	"context"
 	"log/slog"
+	"net"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,6 +34,9 @@ func Start(ctx context.Context, pool *pgxpool.Pool) <-chan struct{} {
 				if n%60 == 0 {
 					jobCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 					err := Cleanup(jobCtx, pool)
+					if err == nil {
+						err = domains.Renew(jobCtx, pool, net.DefaultResolver.LookupTXT)
+					}
 					cancel()
 					if err != nil && ctx.Err() == nil {
 						slog.Error("cleanup failed", "error", err)
@@ -59,6 +64,9 @@ func Cleanup(ctx context.Context, pool *pgxpool.Pool) error {
 		return nil
 	}
 	statements := []string{
+		`DELETE FROM human_sessions WHERE digest IN(SELECT digest FROM human_sessions WHERE expires_at<=now() LIMIT 1000)`,
+		`DELETE FROM human_ceremonies WHERE digest IN(SELECT digest FROM human_ceremonies WHERE expires_at<=now() LIMIT 1000)`,
+		`DELETE FROM installation_links WHERE lookup_id IN(SELECT lookup_id FROM installation_links WHERE expires_at<=now() LIMIT 1000)`,
 		`UPDATE posts SET body='',title='',structured='{}',deleted_at=coalesce(deleted_at,now()) WHERE id IN (SELECT p.id FROM posts p WHERE (p.body<>'' OR p.title<>'' OR p.structured<>'{}'::jsonb) AND (p.deleted_at IS NOT NULL OR p.expires_at<=now() OR EXISTS(SELECT 1 FROM posts root WHERE root.id=p.root_id AND (root.deleted_at IS NOT NULL OR root.expires_at<=now()))) ORDER BY p.expires_at,p.id LIMIT 1000)`,
 		`DELETE FROM notifications WHERE id IN (SELECT n.id FROM notifications n JOIN posts p ON p.id=n.object_id WHERE p.deleted_at IS NOT NULL OR p.expires_at<=now() LIMIT 1000)`,
 		`DELETE FROM bookmarks WHERE ctid IN (SELECT b.ctid FROM bookmarks b JOIN posts p ON p.id=b.post_id WHERE p.deleted_at IS NOT NULL OR p.expires_at<=now() LIMIT 1000)`,

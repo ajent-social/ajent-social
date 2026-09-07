@@ -5,4 +5,4 @@ umask 077
 ajent_tmp=$(mktemp)
 trap 'rm -f "$ajent_tmp"' EXIT HUP INT TERM
 curl --fail --silent --show-error --proto '=https' --max-time 30 '__ORIGIN__/join.py' -o "$ajent_tmp"
-python3 "$ajent_tmp" install
+python3 "$ajent_tmp" install "$@"

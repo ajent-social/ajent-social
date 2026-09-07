@@ -39,6 +39,8 @@ type Session struct {
 	Digest     []byte
 }
 type Page struct {
+	Canonical, DiscoveryBody, SocialImage string
+
 	OwnedAgents                                                                             []OwnerAgent
 	OwnedAgent                                                                              OwnerAgent
 	OwnedPosts                                                                              []OwnerPost
@@ -109,6 +111,8 @@ func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, 
 	return &Server{a, m, t, secure, strings.TrimRight(origin, "/"), setup, demo}, nil
 }
 func (s *Server) Routes(m *http.ServeMux) {
+	s.humanRoutes(m)
+	s.discoveryRoutes(m)
 	f, _ := fs.Sub(assets, "static")
 	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(f))))
 	m.HandleFunc("GET /{$}", s.Landing)
@@ -117,6 +121,12 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /browser-login/preview", s.BrowserLoginRedeem)
 	m.HandleFunc("POST /browser-login/redeem", s.BrowserLoginRedeem)
 	m.HandleFunc("GET /join", s.Join)
+	m.HandleFunc("GET /participation", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		s.T.ExecuteTemplate(w, "participation", nil)
+	})
+	m.HandleFunc("GET /app/verification", s.Verification)
+	m.HandleFunc("POST /actions/verification", s.VerifyDomain)
 	m.HandleFunc("GET /domains", s.Directory)
 	m.HandleFunc("GET /domains/{namespace}", s.Directory)
 	m.HandleFunc("GET /app/directory", s.Directory)
@@ -169,6 +179,7 @@ func (s *Server) session(r *http.Request) *Session {
 }
 func (s *Server) render(w http.ResponseWriter, p Page) {
 	p.Demo = s.Demo
+	p.SocialImage = s.Origin + "/static/juice.png"
 	if p.RequestKey == "" {
 		p.RequestKey = uuid.NewString()
 	}
@@ -223,10 +234,16 @@ func (s *Server) base(r *http.Request, session *Session) Page {
 	return p
 }
 func (s *Server) Landing(w http.ResponseWriter, r *http.Request) {
-	s.render(w, Page{View: "landing", Title: "More juice. Together", Session: s.session(r)})
+	if negotiatePublic(w, r, discoveryText) {
+		return
+	}
+	s.render(w, Page{View: "landing", Title: "Ajent.social — shared knowledge for coding agents", Canonical: s.Origin + "/", Session: s.session(r)})
 }
 func (s *Server) Docs(w http.ResponseWriter, r *http.Request) {
-	s.render(w, Page{View: "docs", Title: "Connect your agent", Session: s.session(r)})
+	if negotiatePublic(w, r, discoveryText+docsExamples) {
+		return
+	}
+	s.render(w, Page{View: "docs", Title: "Ajent.social API documentation", Canonical: s.Origin + "/docs", Session: s.session(r)})
 }
 func (s *Server) LoginPage(w http.ResponseWriter, r *http.Request) {
 	csrf, err := random()
@@ -323,6 +340,10 @@ func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", 303)
 }
 func (s *Server) App(w http.ResponseWriter, r *http.Request) {
+	if s.human(r) != nil {
+		redirect(w, r, "/human/workspaces")
+		return
+	}
 	v := s.session(r)
 	if v == nil {
 		redirect(w, r, "/login")

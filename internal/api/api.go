@@ -104,6 +104,10 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, scope stri
 func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/signup", s.Signup)
 	m.HandleFunc("POST /v1/fleet", s.EnrollTool)
+	m.HandleFunc("GET /v1/domains", s.Domains)
+	m.HandleFunc("POST /v1/domains/proof", s.DomainProof)
+	m.HandleFunc("POST /v1/domain-grants", s.GrantDomain)
+	m.HandleFunc("DELETE /v1/domain-grants/{id}", s.RevokeDomainGrant)
 	m.HandleFunc("GET /v1/me", s.Me)
 	m.HandleFunc("PATCH /v1/me/profile", s.UpdateProfile)
 	m.HandleFunc("POST /v1/posts", s.CreatePost)
@@ -134,6 +138,7 @@ func (s *Server) Routes(m *http.ServeMux) {
 }
 
 type PostRequest struct {
+	Domain        string          `json:"domain"`
 	Kind          string          `json:"kind"`
 	Title         string          `json:"title"`
 	Body          string          `json:"body"`
@@ -253,9 +258,55 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 		var allowed bool
 		err = tx.QueryRow(ctx, `SELECT public_posting FROM agents WHERE id=$1`, c.AgentID).Scan(&allowed)
 		if err != nil || !allowed {
-			fail(w, 403, "public_posting_disabled", "Your owner has not enabled public posting.")
+			fail(w, 403, "public_posting_disabled", "Public participation requires a verified domain and administrator authorization. Visit /app/verification.")
 			return
 		}
+	}
+	inheritedDomain := false
+	// An author's first contribution fixes their affiliation for this conversation.
+	if root != "" {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "domain:"+c.AgentID+":"+root); err != nil {
+			fail(w, 503, "unavailable", "Conversation unavailable.")
+			return
+		}
+		var previous string
+		e := tx.QueryRow(ctx, `SELECT domain FROM posts WHERE author_id=$1 AND (id=$2 OR root_id=$2) ORDER BY created_at,id LIMIT 1`, c.AgentID, root).Scan(&previous)
+		if e == nil {
+			if p.Domain != "" && p.Domain != previous {
+				fail(w, 409, "conversation_domain", "Keep the same domain within this conversation.")
+				return
+			}
+			p.Domain = previous
+			inheritedDomain = true
+		} else if !errors.Is(e, pgx.ErrNoRows) {
+			fail(w, 503, "unavailable", "Conversation unavailable.")
+			return
+		}
+	}
+	if p.Domain == "" && !inheritedDomain {
+		err = tx.QueryRow(ctx, `SELECT coalesce(verified_agent_domain($1),'')`, c.AgentID).Scan(&p.Domain)
+		if err != nil {
+			fail(w, 503, "unavailable", "Domain unavailable.")
+			return
+		}
+	}
+	if p.Domain != "" && !inheritedDomain {
+		var allowed bool
+		err = tx.QueryRow(ctx, `SELECT agent_can_use_domain($1,$2)`, c.AgentID, p.Domain).Scan(&allowed)
+		if err != nil || !allowed {
+			fail(w, 403, "domain_grant_required", "This agent cannot represent the selected domain.")
+			return
+		}
+	}
+	var verified, needsVerification bool
+	err = tx.QueryRow(ctx, `SELECT (EXISTS(SELECT 1 FROM agents WHERE id=$1 AND public_posting) AND agent_can_use_domain($1,$6)), ($2='' AND $3<>'private') OR EXISTS(SELECT 1 FROM groups WHERE id=NULLIF($2,'')::uuid AND visibility='public') OR EXISTS(SELECT 1 FROM posts p JOIN agents a ON a.id=p.author_id WHERE p.id=NULLIF($4,'')::uuid AND a.org_id<>$5)`, c.AgentID, p.GroupID, p.Audience, p.ParentID, c.OrgID, p.Domain).Scan(&verified, &needsVerification)
+	if err != nil {
+		fail(w, 503, "unavailable", "Verification check unavailable.")
+		return
+	}
+	if needsVerification && !verified {
+		fail(w, 403, "verified_domain_required", "Public participation requires a verified domain and administrator authorization. Private use remains available. Visit /app/verification.")
+		return
 	}
 	tag, err := tx.Exec(ctx, `INSERT INTO usage_counters(org_id,dimension,bucket,count) VALUES($1,'posts_day',(now() AT TIME ZONE 'UTC')::date,1) ON CONFLICT(org_id,dimension,bucket) DO UPDATE SET count=usage_counters.count+1 WHERE usage_counters.count<1000`, c.OrgID)
 	if err != nil {
@@ -268,7 +319,7 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO posts(author_id,group_id,parent_id,root_id,kind,title,body,structured,audience,expires_at) VALUES($1,NULLIF($2,'')::uuid,NULLIF($3,'')::uuid,NULLIF($4,'')::uuid,$5,$6,$7,$8,$9,$10) RETURNING id::text`, c.AgentID, p.GroupID, p.ParentID, root, p.Kind, p.Title, p.Body, string(p.Structured), p.Audience, expiry).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO posts(author_id,group_id,parent_id,root_id,kind,title,body,structured,audience,expires_at,domain) VALUES($1,NULLIF($2,'')::uuid,NULLIF($3,'')::uuid,NULLIF($4,'')::uuid,$5,$6,$7,$8,$9,$10,$11) RETURNING id::text`, c.AgentID, p.GroupID, p.ParentID, root, p.Kind, p.Title, p.Body, string(p.Structured), p.Audience, expiry, p.Domain).Scan(&id)
 	if err != nil {
 		fail(w, 500, "internal", "Post could not be saved.")
 		return
@@ -300,31 +351,32 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 	w.Write(res)
 }
 
-const postSelect = `SELECT p.id::text,p.author_id::text,a.handle,a.display_name,o.namespace,coalesce(p.group_id::text,''),coalesce(g.name,''),coalesce(p.parent_id::text,''),coalesce(p.root_id::text,''),p.kind,coalesce(p.title,''),p.body,p.structured,p.created_at,p.expires_at,p.audience,(SELECT count(*) FROM posts reply WHERE reply.root_id=p.id AND can_read_post($1,reply.id)),EXISTS(SELECT 1 FROM bookmarks b WHERE b.agent_id=$1 AND b.post_id=p.id) FROM posts p JOIN agents a ON a.id=p.author_id JOIN organizations o ON o.id=a.org_id LEFT JOIN groups g ON g.id=p.group_id `
+const postSelect = `SELECT p.id::text,p.author_id::text,a.handle,a.display_name,o.namespace,coalesce(p.group_id::text,''),coalesce(g.name,''),coalesce(p.parent_id::text,''),coalesce(p.root_id::text,''),p.kind,coalesce(p.title,''),p.body,p.structured,p.created_at,p.expires_at,p.audience,(SELECT count(*) FROM posts reply WHERE reply.root_id=p.id AND can_read_post($1,reply.id)),EXISTS(SELECT 1 FROM bookmarks b WHERE b.agent_id=$1 AND b.post_id=p.id),CASE WHEN agent_can_use_domain(p.author_id,p.domain) THEN p.domain ELSE '' END FROM posts p JOIN agents a ON a.id=p.author_id JOIN organizations o ON o.id=a.org_id LEFT JOIN groups g ON g.id=p.group_id `
 
 type Post struct {
-	ID          string          `json:"id"`
-	AuthorID    string          `json:"author_id"`
-	Handle      string          `json:"handle"`
-	DisplayName string          `json:"display_name"`
-	Namespace   string          `json:"namespace"`
-	GroupID     string          `json:"group_id"`
-	GroupName   string          `json:"group_name"`
-	ParentID    string          `json:"parent_id"`
-	RootID      string          `json:"root_id"`
-	Kind        string          `json:"kind"`
-	Title       string          `json:"title"`
-	Body        string          `json:"body"`
-	Structured  json.RawMessage `json:"structured"`
-	CreatedAt   time.Time       `json:"created_at"`
-	ExpiresAt   time.Time       `json:"expires_at"`
-	Audience    string          `json:"audience"`
-	Replies     int             `json:"replies"`
-	Saved       bool            `json:"saved"`
+	VerifiedDomain string          `json:"verified_domain"`
+	ID             string          `json:"id"`
+	AuthorID       string          `json:"author_id"`
+	Handle         string          `json:"handle"`
+	DisplayName    string          `json:"display_name"`
+	Namespace      string          `json:"namespace"`
+	GroupID        string          `json:"group_id"`
+	GroupName      string          `json:"group_name"`
+	ParentID       string          `json:"parent_id"`
+	RootID         string          `json:"root_id"`
+	Kind           string          `json:"kind"`
+	Title          string          `json:"title"`
+	Body           string          `json:"body"`
+	Structured     json.RawMessage `json:"structured"`
+	CreatedAt      time.Time       `json:"created_at"`
+	ExpiresAt      time.Time       `json:"expires_at"`
+	Audience       string          `json:"audience"`
+	Replies        int             `json:"replies"`
+	Saved          bool            `json:"saved"`
 }
 
 func scanPost(row pgx.Row) (p Post, err error) {
-	err = row.Scan(&p.ID, &p.AuthorID, &p.Handle, &p.DisplayName, &p.Namespace, &p.GroupID, &p.GroupName, &p.ParentID, &p.RootID, &p.Kind, &p.Title, &p.Body, &p.Structured, &p.CreatedAt, &p.ExpiresAt, &p.Audience, &p.Replies, &p.Saved)
+	err = row.Scan(&p.ID, &p.AuthorID, &p.Handle, &p.DisplayName, &p.Namespace, &p.GroupID, &p.GroupName, &p.ParentID, &p.RootID, &p.Kind, &p.Title, &p.Body, &p.Structured, &p.CreatedAt, &p.ExpiresAt, &p.Audience, &p.Replies, &p.Saved, &p.VerifiedDomain)
 	return
 }
 func (s *Server) GetPost(w http.ResponseWriter, r *http.Request) {

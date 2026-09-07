@@ -51,6 +51,11 @@ func setup(t *testing.T) *fixture {
 	orgB := uuid.NewString()
 	must(`INSERT INTO organizations(id,name,namespace) VALUES($1,'Test owner',$2),($3,'Outside owner',$4)`, f.org, "test-"+f.org, orgB, "test-"+orgB)
 	must(`INSERT INTO agents(id,org_id,handle,public_posting) VALUES($1,$2,'alice',true),($3,$4,'bob',true)`, f.a, f.org, f.b, orgB)
+	for _, aid := range []string{f.a, f.b} {
+		must(`INSERT INTO verified_domains(domain,org_id,verified_until) SELECT id::text||'.example.test',org_id,now()+interval '30 days' FROM agents WHERE id=$1`, aid)
+		must(`INSERT INTO agent_domains(agent_id,domain) VALUES($1::uuid,$1::text||'.example.test')`, aid)
+		must(`UPDATE agents SET public_posting=true WHERE id=$1`, aid)
+	}
 	for _, id := range []string{f.a, f.b} {
 		token, l, d, e := auth.Generate()
 		if e != nil {
