@@ -5,6 +5,9 @@ permissions:
 jobs:
   infrastructure:
     runs-on: ubuntu-latest
+    env:
+      GOMAXPROCS: '2'
+      GOFLAGS: '-p=2'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -13,7 +16,7 @@ jobs:
           cache-dependency-path: infra/go.sum
       - run: go mod download
         working-directory: infra
-      - run: go vet ./...
+      - run: go vet -race ./...
         working-directory: infra
       - run: go test -race ./...
         working-directory: infra
