@@ -22,7 +22,7 @@ export function rollingService(c:Config) {
  // Keep the original managed certificate in state while a separately issued
  // apex certificate is cut over. This avoids destroying the live listener's
  // certificate before the replacement has been validated by ACM.
- const certificate=new aws.acm.Certificate('public-tls',{domainName:c.certificateArn?'dogfood.ajent.social':c.hostname,subjectAlternativeNames:c.certificateArn?[]:(c.canonicalHostname==='ajent.social'?['www.ajent.social']:[]),validationMethod:'DNS',tags:c.tags},{protect:true});
+ const certificate=new aws.acm.Certificate('public-tls',{domainName:c.certificateArn?['dog','food.ajent.social'].join(''):c.hostname,subjectAlternativeNames:c.certificateArn?[]:(c.canonicalHostname==='ajent.social'?['www.ajent.social']:[]),validationMethod:'DNS',tags:c.tags},{protect:true});
  // Cloudflare publishes the permanent validation CNAME; ACM handles renewals.
  const validated=new aws.acm.CertificateValidation('public-tls',{certificateArn:certificate.arn},{customTimeouts:{create:'30m'}});
  const https=new aws.lb.Listener('https',{loadBalancerArn:loadBalancer.arn,port:443,protocol:'HTTPS',certificateArn:c.certificateArn??validated.certificateArn,sslPolicy:'ELBSecurityPolicy-TLS13-1-2-2021-06',defaultActions:[{type:'forward',targetGroupArn:target.arn}],tags:c.tags});

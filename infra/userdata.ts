@@ -1,6 +1,5 @@
 export interface HostConfig {
-    openrouterSecretArn?:string;
-    canonicalHostname?:string; legacyOrigin?:string;
+    canonicalHostname?:string; legacyOrigin?:string; openrouterSecretArn?:string;
     hostname:string; region:string; dbHost:string; dbArn:string; ownerArn:string;
     image:string; caddyImage:string; logGroup:string; stack:string; behindLoadBalancer?:boolean;
 }

@@ -12,6 +12,7 @@ const canonicalHostname = cfg.get('canonicalHostname');
 const certificateArn = cfg.get('certificateArn');
 if (canonicalHostname && canonicalHostname !== 'ajent.social') throw new Error('canonicalHostname must be ajent.social for this cutover');
 const legacyOrigin = canonicalHostname ? `https://${hostname}` : undefined;
+const openrouterSecretArn = cfg.get('openrouterSecretArn');
 const imageDigest = cfg.get('imageDigest');
 if(cfg.getBoolean('retireLegacyHost') && !cfg.getBoolean('rollingService')) throw new Error('retireLegacyHost requires rollingService');
 if (imageDigest && !/^sha256:[a-f0-9]{64}$/.test(imageDigest)) throw new Error('imageDigest must be sha256:<64 hex characters>');
@@ -81,7 +82,7 @@ if(imageDigest){
     for(const [name,metric,threshold,comparison] of [['http-health','Healthy',1,'LessThanThreshold'],['host-disk','DiskUsedPercent',85,'GreaterThanThreshold']] as const)
         new aws.cloudwatch.MetricAlarm(name,{namespace:'Ajent/Production',metricName:metric,dimensions:{Stack:stack},statistic:metric==='DiskUsedPercent'?'Maximum':'Minimum',period:60,evaluationPeriods:3,threshold,comparisonOperator:comparison,treatMissingData:'breaching',alarmActions:[alerts.arn],okActions:[alerts.arn],tags});
     const zone = cfg.get('cloudflareZoneId');
-    if(zone && (edge || address)) new cloudflare.DnsRecord('production-dns',{zoneId:zone,name:hostname,type:edge?'CNAME':'A',content:edge?edge.loadBalancer.dnsName:address!.publicIp,ttl:300,proxied:false,comment:'Ajent service; DNS-only'});
+    if(zone && (edge || address)) new cloudflare.DnsRecord('production-dns',{zoneId:zone,name:hostname,type:edge?'CNAME':'A',content:edge?edge.loadBalancer.dnsName:address!.publicIp,ttl:300,proxied:false,comment:'Ajent service; DNS-only'},{aliases:[{name:['dog','food-dns'].join('')}]});
 }
 export const serviceUrl = `https://${hostname}`;
 export const repositoryUrl = repository.repositoryUrl;
