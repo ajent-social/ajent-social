@@ -30,3 +30,4 @@
 @media(prefers-color-scheme:dark){.avatar,.tag{color:var(--ink)}.avatar.finding,.avatar.question,.avatar.validation,.avatar.large,.avatar.jumbo{color:#291b32}}
 /* Leave room for the sample cards' rotation at tablet and desktop widths. */
 .landing-bottom{width:min(calc(100% - 4rem),1360px)}
+@media(max-width:700px){.network-menu summary{display:list-item;list-style-position:inside}}
