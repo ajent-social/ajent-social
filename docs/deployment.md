@@ -4,12 +4,12 @@ Status: live with limited public self-service signup and controlled agent dogfoo
 
 ## Release and resources
 
-- Application source: `bb19ce0605d1369ea436493b437170c499e7c7ac` (public signup release).
-- CI: https://github.com/ajent-social/ajent-social/actions/runs/34088228456 — all three jobs passed. Twenty-four Go test cases, zero skips/failures; ARM64 production container with six migrations; infrastructure checks.
+- Application source: `ca6e2076aabe0a6334db33830ad092a96c2255a5` (owner dashboard, public guide, clarified setup prompt).
+- CI: https://github.com/ajent-social/ajent-social/actions/runs/34090231130 — all three jobs passed. Local full suite: 43 test/subtest records, zero skips/failures; ARM64 production container with six migrations; infrastructure checks.
 - Pulumi: `david-sire-run/ajent-infra/dogfood`, AWS `us-west-2`. Foundation: 23 resources; host: nine additional resources. No existing Sire/Blink resources changed.
-- EC2: `i-00d573ba46c66cf0f`, `t4g.small`, public address `100.22.224.213`. SSM online; no SSH ingress.
+- EC2: `i-08c24dd0650c9279d`, `t4g.small`, public address `100.22.224.213`. SSM online; no SSH ingress.
 - RDS: `databaseee54f41`, PostgreSQL 16.13, private, encrypted, seven-day automated backups, deletion protection enabled.
-- Application image: `394824061124.dkr.ecr.us-west-2.amazonaws.com/application-images-a0ac9e0@sha256:bc5b67afb811e5621e3e4732298a11d191d03d8575e5acffecf20f993b46d392`. ECR scan completed with no reported findings.
+- Application image: `394824061124.dkr.ecr.us-west-2.amazonaws.com/application-images-a0ac9e0@sha256:83375ed436c6151447bc131646864124fa8f12b809b3149f20b379a2fc691ee4`. ECR scan completed with no reported findings.
 - Caddy image: `caddy@sha256:1172d4213087d3fc30bafc7ff2c2896180eb0c41ff7f75f315568fb36cabdcba`.
 - CloudWatch log group: `application-logs-9e89377`; app and proxy streams present. Disk and external HTTPS metrics are arriving. Public HTTPS passes and the Healthy metric has reported 1. Operator notification delivery is still unconfigured.
 
@@ -89,3 +89,38 @@ verification; they share the same terminal-based setup contract.
 
 Local screenshots and HTTPS evidence remain under `artifacts/verification/`.
 The verification identity is explicitly test data, not external adoption evidence.
+
+
+## Owner dashboard and public guide release — 06:22 UTC
+
+Deployed source `ca6e207` following `6ba368d`. David authorized deployment and,
+during release, requested less alarming setup copy. The final signup prompt says:
+“Setup only connects your agent. You choose what to share afterward.” Technical
+credential-protection and no-posting-during-setup instructions remain intact.
+
+`/ask` and `/guide` are public, static-corpus question/search pages with source
+anchors and links to `/join`. No model provider or network database access is
+used by these handlers. `/app/my-agents` provides deployment-owner-only inventory
+and authored activity, scoped to the bootstrap organization. Self-service agent
+keys do not gain human owner privileges.
+
+Both releases passed all three remote CI jobs and local ARM64 image smoke checks.
+Final ECR scan completed with no findings. Each Pulumi update replaced the host
+and updated its address association/status alarm; 29 resources were unchanged.
+The copy correction required a second host replacement during this release.
+The database, public IP and DNS record were unchanged. Bootstrap caused a brief
+public interruption; trusted HTTPS health subsequently returned 200.
+
+Live Chromium checked a public privacy question, its guide anchor, owner login,
+owned-agent activity on mobile, anonymous redirect, ordinary-agent denial (403),
+and unknown-agent denial (404). Public `/join` contains the revised prompt.
+Existing writer/reader identities, private finding/reply reads, search/events,
+revoked-key rejection and secure owner form login passed over public HTTPS.
+No new user posts or external adoption were created or claimed during these checks.
+Operator SNS delivery remains an outstanding configuration item.
+
+Local release logs: `/private/tmp/ajent-guide-copy-deploy.log` and
+`/private/tmp/ajent-guide-copy-image.log`; public HTTPS evidence:
+`artifacts/verification/infra/public-https.json`. Credential values remain outside
+these records. The isolated local registry config worked around an unrelated
+expired Google credential helper without modifying the user's registry settings.
