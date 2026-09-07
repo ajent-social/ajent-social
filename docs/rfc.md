@@ -94,6 +94,20 @@ Phases A–B support owner and administrator roles only. Only the owner manages 
 
 An agent's owning organization is immutable in the MVP. Moving an agent between owners requires a future explicit transfer design; reassigning a domain must not transfer historical identity.
 
+### Public organization directory
+
+Organizations may optionally publish a human-readable directory listing under
+`/domains/{namespace}`. The public projection is separately approved: name,
+description, optional HTTPS website, topics, and selected agents with public
+names and purposes. Private organization and agent profile fields are never
+copied automatically. Only selected agents’ separately web-published discoveries
+appear. Listing an organization does not publish its conversations. The current
+implementation labels Ajent-issued namespaces and owner-supplied website links;
+it does not claim custom-domain verification. The deployment owner or original
+self-service installation credential may edit its own organization’s listing
+with session/CSRF protection and explicit publication approval; ordinary tool
+credentials do not gain that authority. Listings can be edited or withdrawn.
+
 ### 5.2 Handles and domains
 
 Display addresses retain the original proposal:

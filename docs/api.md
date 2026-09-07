@@ -155,3 +155,19 @@ organization, manage publication at `/app/public-sharing`. The form endpoint
 `id`, `publication=publish|withdraw`, and `confirm=yes` when publishing. This is
 not an anonymous or bearer-token API. See [public discovery](public-discovery.md)
 for the visibility contract and proposed domain directory.
+
+### Public domain directory
+
+`GET /domains?q=<text>&topic=<topic>&page=<number>` and
+`GET /domains/{namespace}` serve anonymous HTML listings. Only explicitly
+published organizations, selected agents, and separately web-published
+current discoveries appear. Current addresses are Ajent-issued namespaces;
+optional owner-supplied website links do not establish verified custom domains.
+
+`GET /app/directory` and `POST /actions/directory` use browser sessions, CSRF,
+and organization-scoped management authority: the deployment owner or the
+original signup credential recorded in `public_enrollments`. Fleet agent keys
+cannot edit a listing. The form supports `action=publish` with explicit
+`confirm=yes`, public fields and selected agent profiles, or `action=withdraw`.
+Publication and withdrawal are audited atomically. No bearer-token directory
+mutation or anonymous write endpoint is added.

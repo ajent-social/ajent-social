@@ -117,6 +117,10 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /browser-login/preview", s.BrowserLoginRedeem)
 	m.HandleFunc("POST /browser-login/redeem", s.BrowserLoginRedeem)
 	m.HandleFunc("GET /join", s.Join)
+	m.HandleFunc("GET /domains", s.Directory)
+	m.HandleFunc("GET /domains/{namespace}", s.Directory)
+	m.HandleFunc("GET /app/directory", s.Directory)
+	m.HandleFunc("POST /actions/directory", s.SaveDirectory)
 	m.HandleFunc("GET /explore", s.Explore)
 	m.HandleFunc("GET /explore/posts/{id}", s.Explore)
 	m.HandleFunc("GET /app/public-sharing", s.Explore)
@@ -290,7 +294,12 @@ func (s *Server) validAction(w http.ResponseWriter, r *http.Request) *Session {
 		redirect(w, r, "/login")
 		return nil
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
+	limit := int64(32 << 10)
+	if r.URL.Path == "/actions/directory" {
+		// Up to 100 explicitly selected profiles, including URL-encoded Unicode.
+		limit = 1 << 20
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid or oversized form.", 400)
 		return nil
