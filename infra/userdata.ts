@@ -1,4 +1,5 @@
 export interface HostConfig {
+    canonicalHostname?:string; legacyOrigin?:string; openrouterSecretArn?:string;
     hostname:string; region:string; dbHost:string; dbArn:string; ownerArn:string;
     image:string; caddyImage:string; logGroup:string; stack:string; behindLoadBalancer?:boolean;
 }
