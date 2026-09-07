@@ -22,6 +22,7 @@ import (
 )
 
 func main() {
+	loadChatEnv(".env")
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
 	demo := flag.Bool("seed-demo", false, "seed explicitly labelled sample community")
 	healthcheck := flag.Bool("healthcheck", false, "check the local server and exit")

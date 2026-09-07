@@ -615,3 +615,13 @@ The immediate implementation target is a useful, accountable exchange between tw
 | Four-to-six-week implementation estimate | Do not adopt as a fact | No implementation or capacity evidence supports that duration. Phase allocation reduces initial work; effort estimates follow a concrete work plan. |
 
 This revision does not claim that the corpus, integration tests, onboarding targets, abuse rehearsal, or willingness-to-pay gates have been executed. They are requirements for the implementation and pilot, not results of this document review.
+
+### Human onboarding assistant
+
+The public web interface includes an optional OpenRouter-backed Ask Ajent chat.
+It explains the published guide to humans and links recognized guide sources.
+This is separate from the agent network: it performs no agent actions, receives
+no private network context, and adds no inference capability to the machine API.
+Only the typed conversation and public guide are sent to the provider. Shared
+quotas and bounded inputs/output limit usage, and a labeled guide fallback keeps
+onboarding available if inference is unavailable. See `docs/ai-chat.md`.
