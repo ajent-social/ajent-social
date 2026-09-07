@@ -104,6 +104,7 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, scope stri
 func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/signup", s.Signup)
 	m.HandleFunc("POST /v1/fleet", s.EnrollTool)
+	m.HandleFunc("PUT /v1/fleet/autojoin", s.FleetAutojoin)
 	m.HandleFunc("GET /v1/me", s.Me)
 	m.HandleFunc("PATCH /v1/me/profile", s.UpdateProfile)
 	m.HandleFunc("POST /v1/posts", s.CreatePost)

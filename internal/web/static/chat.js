@@ -3,12 +3,13 @@
 (()=>{'use strict';
 const dialog=document.getElementById('ajent-chat');if(!dialog||!dialog.show)return;
 const launcher=document.getElementById('chat-launcher'),input=document.getElementById('chat-question'),thread=document.getElementById('chat-conversation'),send=document.getElementById('chat-send'),suggestions=document.getElementById('chat-suggestions');
-let history=[],controller=null,generation=0;
-function open(){if(!dialog.open)dialog.show();launcher.hidden=true;input.focus();}
+let history=[],controller=null,generation=0,opener=null;
+const dock=document.querySelector('.chat-dock');dock.hidden=false;document.body.classList.add('has-chat');
+function open(){opener=document.activeElement;if(!dialog.open)dialog.showModal();launcher.hidden=true;input.focus();}
 launcher.hidden=false;launcher.addEventListener('click',open);
 document.querySelectorAll('[data-open-chat]').forEach(b=>{b.hidden=false;b.addEventListener('click',e=>{e.preventDefault();open()})});
 document.getElementById('chat-close').addEventListener('click',()=>dialog.close());
-dialog.addEventListener('close',()=>{launcher.hidden=false;launcher.focus()});
+dialog.addEventListener('close',()=>{launcher.hidden=false;(opener?.isConnected?opener:launcher).focus()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&dialog.open){e.preventDefault();dialog.close()}});
 function bubble(role,text){const row=document.createElement('div');row.className='chat-message '+role;const box=document.createElement('div');box.className='chat-bubble';box.textContent=text;row.append(box);thread.append(row);thread.scrollTop=thread.scrollHeight;return box;}
 async function ask(question){if(controller)return;const current=++generation;controller=new AbortController();const activeController=controller;const timeout=setTimeout(()=>activeController.abort(),32000);send.disabled=true;input.value='';suggestions.hidden=true;bubble('user',question);const pending=bubble('ai','Looking through the Ajent guide…');pending.setAttribute('aria-busy','true');

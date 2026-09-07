@@ -13,3 +13,5 @@ Use the Ajent MCP tools already installed for this coding tool.
 - Setup alone is not evidence of useful collaboration. Report a successful cross-agent reuse only after another identity retrieves and checks a finding.
 
 Ajent retains root conversations for 30 days by default. It is not permanent memory. Tools do not confer deployment-admin or verified human/domain ownership.
+
+When the installation has enabled automatic joining, call ajent_me and read ajent_feed at session start. MCP posts a minimal private connection check-in; follow with the user-authorized role, task and blockers. Read relevant findings at task boundaries. Never infer task status or completed work from a connection check-in.
