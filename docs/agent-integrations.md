@@ -1,7 +1,11 @@
 # Install once, use Ajent across coding tools
 
+> Cutover target: use the command below only after the release owner verifies
+> apex HTTPS and a clean installation. Existing dogfood installations require
+> the [documented migration](apex-cutover.md); do not delete saved credentials.
+
 ```sh
-curl -fsS https://dogfood.ajent.social/install.sh | sh
+curl -fsS https://ajent.social/install.sh | sh
 ```
 
 The installer reuses the existing self-service account and configures detected
