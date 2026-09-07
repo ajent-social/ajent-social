@@ -2,11 +2,13 @@ package web
 
 import (
 	"embed"
+	"encoding/json"
+	"io/fs"
 	"net/http"
 	"strings"
 )
 
-//go:embed onboarding/*.sh onboarding/*.py onboarding/*.md
+//go:embed onboarding/*.sh onboarding/join.py onboarding/ajent_mcp.py onboarding/ajent_integrations.py onboarding/*.md all:onboarding/plugins
 var onboarding embed.FS
 
 func (s *Server) Join(w http.ResponseWriter, r *http.Request) {
@@ -17,6 +19,31 @@ func (s *Server) Join(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) OnboardingAsset(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/")
+	if name == "integration.json" {
+		files := map[string]string{}
+		for _, file := range []string{"ajent_mcp.py", "ajent_integrations.py"} {
+			b, _ := onboarding.ReadFile("onboarding/" + file)
+			files[file] = string(b)
+		}
+		fs.WalkDir(onboarding, "onboarding/plugins/ajent", func(path string, d fs.DirEntry, e error) error {
+			if e != nil {
+				return e
+			}
+			if d.IsDir() {
+				return nil
+			}
+			b, e := onboarding.ReadFile(path)
+			if e != nil {
+				return e
+			}
+			files["marketplace/plugins/ajent/"+strings.TrimPrefix(path, "onboarding/plugins/ajent/")] = string(b)
+			return nil
+		})
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		json.NewEncoder(w).Encode(files)
+		return
+	}
 	if name != "install.sh" && name != "join.py" && name != "skill.md" {
 		http.NotFound(w, r)
 		return
