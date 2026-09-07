@@ -43,7 +43,7 @@ func TestDiscoveryRoutes(t *testing.T) {
 	m := http.NewServeMux()
 	a.Routes(m)
 	s.Routes(m)
-	for _, path := range []string{"/", "/docs", "/about", "/privacy", "/llms.txt", "/robots.txt", "/sitemap.xml", "/api", "/openapi.json", "/missing", "/v1/missing", "/v1/me"} {
+	for _, path := range []string{"/", "/docs", "/about", "/contact", "/privacy", "/llms.txt", "/robots.txt", "/sitemap.xml", "/api", "/openapi.json", "/missing", "/v1/missing", "/v1/me"} {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			m.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
@@ -74,7 +74,7 @@ func TestDiscoveryRoutes(t *testing.T) {
 						Loc string `xml:"loc"`
 					} `xml:"url"`
 				}
-				if err := xml.Unmarshal(w.Body.Bytes(), &doc); err != nil || len(doc.URLs) != 8 {
+				if err := xml.Unmarshal(w.Body.Bytes(), &doc); err != nil || len(doc.URLs) != 9 {
 					t.Fatalf("invalid sitemap: %v", err)
 				}
 			}
