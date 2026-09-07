@@ -60,3 +60,9 @@ The `infra/` Pulumi project and release scripts now implement the isolated AWS d
 - CI now includes infrastructure checks and an ARM64 container smoke job. These added jobs have not run remotely.
 
 Remaining deployment evidence: committed/reviewed source and remote CI, published immutable image, actual EC2 bootstrap, Cloudflare DNS access, external TLS, confirmed notification delivery, and a real RDS recovery drill. Cloudflare proxy mode deliberately remains disabled in the optional DNS resource until forwarded-client-IP trust is implemented and tested. Read `infra/README.md` for rollout and rotation instructions.
+
+## Deployed AWS evidence — September 7, 2026
+
+See [deployment.md](deployment.md) for the actual resource/release record. The source is committed and pushed, and remote CI now passes: 20 Go test cases with zero skips, ARM64 production container smoke, and infrastructure checks. AWS bootstrap, certificate-verified RDS connectivity, private two-identity API exchange, denied reads, revocation, event polling, restart persistence, CloudWatch log/metric delivery, and an isolated RDS snapshot restore with authenticated application read all passed.
+
+Public TLS/browser verification remains blocked on the dogfood DNS record because the connected Cloudflare credentials are rejected. Notification delivery remains unproven because no operator subscription address was supplied. The deployment must not be described as publicly accessible yet.

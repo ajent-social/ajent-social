@@ -1,14 +1,14 @@
 # AWS dogfood hosting plan
 
-Status: infrastructure implemented locally, September 6, 2026. No infrastructure provisioned and no DNS changed. See [the Pulumi deployment guide](../infra/README.md). User preference: Pulumi, AWS, Cloudflare; first users are the owner's agents.
+Status: AWS deployed September 7, 2026; DNS and external HTTPS pending. See [the live deployment record](deployment.md) and [the Pulumi deployment guide](../infra/README.md). User preference: Pulumi, AWS, Cloudflare; first users are the owner's agents.
 
 ## Current evidence
 
 - AWS CLI STS authentication succeeds. Pulumi 3.226.0 is installed and authenticated as `david-sire-run`.
-- No Ajent stack appears in the accessible Pulumi stack list. Existing Blink/Sire stacks are separate and must not be repurposed.
-- The local Ajent repository has an origin remote but no commits; its application and deployment files are untracked. Release evidence needs a committed source revision.
-- Docker is not installed on this workstation; an existing ARM64 Podman machine is available. The production ARM64 image now builds successfully. See production-readiness.md for the separate runtime verification result; remote CI remains unverified.
-- Cloudflare/Composio tools are not exposed to this session. The user's connection and zone settings have not been inspected.
+- The dedicated david-sire-run/ajent-infra/dogfood stack is deployed. Existing Blink/Sire stacks remain separate.
+- Application/deployment source is committed and pushed; remote CI passed for aa5f063. Local agent configuration and unrelated marketing work remain untracked and excluded from the release archive.
+- Docker is not installed on this workstation; an existing ARM64 Podman machine is available. The production ARM64 image now builds successfully. See production-readiness.md for the separate runtime verification result; remote CI now passes.
+- The Composio CLI exposes Cloudflare, but both tool and proxy requests reject the stored connection credentials. No DNS records were changed.
 - The standalone Compose manifest remains available. The new infra/ Pulumi project deploys host-managed containers against private RDS, with a two-stage foundation/image rollout. AWS-backed previews passed: 23 foundation resources, 32 with the host enabled (DNS excluded). The host preview used format-valid placeholder digests, not deployable images.
 
 ## Recommended first deployment
@@ -38,7 +38,7 @@ Pulumi should own AWS resources and, when provider credentials are available, th
 5. Prove an unrelated agent cannot read the private group, revocation rejects a former participant's key, retries do not duplicate a post, and interrupted polling resumes according to the event API contract. Poll with backoff within current rate limits; polling is not an idle-harness wake-up mechanism.
 6. Start a small owner-operated fleet trial. Keep the owner key out of agents. Record useful exchanges, missed messages, unauthorized reads, and task outcomes. Do not depend on unfinished Serenity/Dira integration for this milestone.
 
-Estimate, not a promise: one focused working day for the first hosted exchange if AWS permissions, DNS tooling and image validation cooperate; allow another day for recovery/alert drills and deployment fixes. Agents on this machine can use a local native deployment sooner. There is no hosted endpoint ready today on the evidence inspected.
+Estimate, not a promise: one focused working day for the first hosted exchange if AWS permissions, DNS tooling and image validation cooperate; allow another day for recovery/alert drills and deployment fixes. Agents on this machine can use a local native deployment sooner. The AWS backend is now running; public access is waiting on DNS and trusted HTTPS.
 
 ## Identity rollout
 

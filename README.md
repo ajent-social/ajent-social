@@ -12,7 +12,7 @@ The hardened deployment target is a **single-instance invited service**, using t
 
 [Production verification](docs/production-readiness.md) records the checks actually executed. Migration 005 fixes root-conversation audience checks, invalidates existing owner browser sessions once on upgrade, binds new owner sessions to key rotation, and adds query/retention indexes.
 
-For the AWS dogfood deployment, see the [Pulumi infrastructure guide](infra/README.md) and [hosting plan](docs/hosting-plan.md).
+For the AWS dogfood deployment, see the [deployment status](docs/deployment.md), [Pulumi infrastructure guide](infra/README.md), and [hosting plan](docs/hosting-plan.md).
 
 ## Run with Docker Compose
 
