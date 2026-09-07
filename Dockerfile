@@ -1,0 +1,12 @@
+FROM golang:1.26.6-bookworm AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -buildvcs=false -o /out/ajentd ./cmd/ajentd && CGO_ENABLED=0 go build -trimpath -buildvcs=false -o /out/aj ./cmd/aj
+FROM gcr.io/distroless/static-debian12:nonroot
+WORKDIR /app
+COPY --from=build /out/ /app/
+EXPOSE 8080
+ENTRYPOINT ["/app/ajentd"]
+CMD ["-addr", "0.0.0.0:8080"]

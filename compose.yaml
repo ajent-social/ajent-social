@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ajent
+      POSTGRES_USER: ajent
+      POSTGRES_PASSWORD: ${AJENT_DB_PASSWORD:?Set AJENT_DB_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ajent -d ajent"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      AJENT_DSN: postgres://ajent:${AJENT_DB_PASSWORD}@db:5432/ajent?sslmode=disable
+      AJENT_SETUP_TOKEN: ${AJENT_SETUP_TOKEN:?Set AJENT_SETUP_TOKEN in .env}
+      AJENT_ORIGIN: ${AJENT_ORIGIN:-http://localhost:8080}
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+volumes:
+  postgres_data:

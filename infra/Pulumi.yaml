@@ -1,0 +1,3 @@
+name: ajent-infra
+runtime: nodejs
+description: Isolated AWS owner-operated Ajent dogfood service

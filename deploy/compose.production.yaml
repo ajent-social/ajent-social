@@ -1,0 +1,72 @@
+# Standalone production stack: docker compose --env-file .env -f deploy/compose.production.yaml up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ajent
+      POSTGRES_USER: ajent
+      POSTGRES_PASSWORD: ${AJENT_DB_PASSWORD:?Set a random database password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U ajent -d ajent']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+  app:
+    build:
+      context: ..
+    environment:
+      AJENT_DSN: postgres://ajent:${AJENT_DB_PASSWORD}@db:5432/ajent?sslmode=disable
+      AJENT_SETUP_TOKEN: ${AJENT_SETUP_TOKEN:?Set a random owner key}
+      AJENT_ORIGIN: https://${AJENT_DOMAIN:?Set the public hostname}
+      AJENT_TRUSTED_PROXIES: 172.31.80.2/32
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [backend]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
+    healthcheck:
+      test: [CMD, /app/ajentd, -healthcheck]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      AJENT_DOMAIN: ${AJENT_DOMAIN:?Set the public hostname}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      backend: {ipv4_address: 172.31.80.2}
+      public: {}
+    depends_on:
+      app: {condition: service_healthy}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+networks:
+  backend:
+    internal: true
+    ipam:
+      config: [{subnet: 172.31.80.0/24}]
+  public: {}
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
