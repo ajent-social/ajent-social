@@ -3,11 +3,13 @@ import * as aws from '@pulumi/aws';
 import * as random from '@pulumi/random';
 import * as cloudflare from '@pulumi/cloudflare';
 import { bootstrap } from './userdata';
+import { rollingService } from './rolling';
 
 const cfg = new pulumi.Config();
 const hostname = cfg.get('hostname') ?? 'dogfood.ajent.social';
 if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(hostname)) throw new Error('hostname must be a lowercase DNS name');
 const imageDigest = cfg.get('imageDigest');
+if(cfg.getBoolean('retireLegacyHost') && !cfg.getBoolean('rollingService')) throw new Error('retireLegacyHost requires rollingService');
 if (imageDigest && !/^sha256:[a-f0-9]{64}$/.test(imageDigest)) throw new Error('imageDigest must be sha256:<64 hex characters>');
 const caddyImage = cfg.get('caddyImage');
 if (imageDigest && (!caddyImage || !/^caddy@sha256:[a-f0-9]{64}$/.test(caddyImage))) throw new Error('Set caddyImage to caddy@sha256:<digest> before enabling the host');
@@ -22,7 +24,7 @@ const publicSubnet = new aws.ec2.Subnet('application-subnet',{vpcId:vpc.id,cidrB
 const privateSubnets = [0,1].map(i=>new aws.ec2.Subnet(`database-subnet-${i}`,{vpcId:vpc.id,cidrBlock:`10.87.${10+i}.0/24`,availabilityZone:az.names.apply(n=>{if(n.length<2)throw new Error('Two AZs required');return n[i];}),tags}));
 const route = new aws.ec2.RouteTable('public-routes',{vpcId:vpc.id,routes:[{cidrBlock:'0.0.0.0/0',gatewayId:gateway.id}],tags});
 new aws.ec2.RouteTableAssociation('application-route',{subnetId:publicSubnet.id,routeTableId:route.id});
-const appSG = new aws.ec2.SecurityGroup('application',{vpcId:vpc.id,ingress:[80,443].map(port=>({protocol:'tcp',fromPort:port,toPort:port,cidrBlocks:['0.0.0.0/0']})),egress:[{protocol:'-1',fromPort:0,toPort:0,cidrBlocks:['0.0.0.0/0']}],tags});
+const appSG = new aws.ec2.SecurityGroup('application',{vpcId:vpc.id,ingress:cfg.getBoolean('retireLegacyHost') ? [] : [80,443].map(port=>({protocol:'tcp',fromPort:port,toPort:port,cidrBlocks:['0.0.0.0/0']})),egress:[{protocol:'-1',fromPort:0,toPort:0,cidrBlocks:['0.0.0.0/0']}],tags});
 const dbSG = new aws.ec2.SecurityGroup('database',{vpcId:vpc.id,ingress:[{protocol:'tcp',fromPort:5432,toPort:5432,securityGroups:[appSG.id]}],tags});
 const subnetGroup = new aws.rds.SubnetGroup('database',{subnetIds:privateSubnets.map(s=>s.id),tags});
 const dbPassword = new random.RandomPassword('database-password',{length:48,special:false});
@@ -46,6 +48,7 @@ for (const [name,metric,threshold,comparison] of [
     ['database-storage','FreeStorageSpace',5*1024**3,'LessThanThreshold'],
     ['database-cpu','CPUUtilization',85,'GreaterThanThreshold'],
 ] as const) new aws.cloudwatch.MetricAlarm(name,{namespace:'AWS/RDS',metricName:metric,dimensions:{DBInstanceIdentifier:db.identifier},statistic:'Average',period:300,evaluationPeriods:3,threshold,comparisonOperator:comparison,treatMissingData:'breaching',alarmActions:[alerts.arn],okActions:[alerts.arn],tags});
+let edge: ReturnType<typeof rollingService> | undefined;
 let host: aws.ec2.Instance | undefined;
 let address: aws.ec2.Eip | undefined;
 if(imageDigest){
@@ -60,6 +63,8 @@ if(imageDigest){
     ]}))});
     const profile = new aws.iam.InstanceProfile('host',{role:role.name,tags});
     const ami = aws.ssm.getParameterOutput({name:'/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64'});
+    if(cfg.getBoolean('rollingService')) edge = rollingService({hostname,region,stack,tags,vpc,publicSubnet,route,appSG,profile,ami:ami.value,repository,logs,db,dbSecret,ownerSecret,imageDigest,caddyImage:caddyImage!,alerts,dependencies:[policy,ssm,dbSecretVersion,ownerSecretVersion,gateway,route]});
+    if(!cfg.getBoolean('retireLegacyHost')) {
     host = new aws.ec2.Instance('application-host',{ami:ami.value,instanceType:'t4g.small',subnetId:publicSubnet.id,vpcSecurityGroupIds:[appSG.id],iamInstanceProfile:profile.name,
         associatePublicIpAddress:true,metadataOptions:{httpTokens:'required',httpEndpoint:'enabled',httpPutResponseHopLimit:2},
         rootBlockDevice:{encrypted:true,volumeType:'gp3',volumeSize:20},userDataReplaceOnChange:true,
@@ -67,10 +72,11 @@ if(imageDigest){
     },{dependsOn:[policy,ssm,dbSecretVersion,ownerSecretVersion,gateway,route]});
     address = new aws.ec2.Eip('application-address',{domain:'vpc',instance:host.id,tags});
     new aws.cloudwatch.MetricAlarm('host-status',{namespace:'AWS/EC2',metricName:'StatusCheckFailed',dimensions:{InstanceId:host.id},statistic:'Maximum',period:60,evaluationPeriods:2,threshold:1,comparisonOperator:'GreaterThanOrEqualToThreshold',treatMissingData:'breaching',alarmActions:[alerts.arn],tags});
+    }
     for(const [name,metric,threshold,comparison] of [['http-health','Healthy',1,'LessThanThreshold'],['host-disk','DiskUsedPercent',85,'GreaterThanThreshold']] as const)
-        new aws.cloudwatch.MetricAlarm(name,{namespace:'Ajent/Dogfood',metricName:metric,dimensions:{Stack:stack},statistic:'Minimum',period:60,evaluationPeriods:3,threshold,comparisonOperator:comparison,treatMissingData:'breaching',alarmActions:[alerts.arn],okActions:[alerts.arn],tags});
+        new aws.cloudwatch.MetricAlarm(name,{namespace:'Ajent/Dogfood',metricName:metric,dimensions:{Stack:stack},statistic:metric==='DiskUsedPercent'?'Maximum':'Minimum',period:60,evaluationPeriods:3,threshold,comparisonOperator:comparison,treatMissingData:'breaching',alarmActions:[alerts.arn],okActions:[alerts.arn],tags});
     const zone = cfg.get('cloudflareZoneId');
-    if(zone) new cloudflare.DnsRecord('dogfood-dns',{zoneId:zone,name:hostname,type:'A',content:address.publicIp,ttl:300,proxied:false,comment:'Ajent dogfood; DNS-only until proxy trust is verified'});
+    if(zone && (edge || address)) new cloudflare.DnsRecord('dogfood-dns',{zoneId:zone,name:hostname,type:edge?'CNAME':'A',content:edge?edge.loadBalancer.dnsName:address!.publicIp,ttl:300,proxied:false,comment:'Ajent service; DNS-only'});
 }
 export const serviceUrl = `https://${hostname}`;
 export const repositoryUrl = repository.repositoryUrl;
@@ -80,4 +86,8 @@ export const instanceId = host?.id;
 export const publicIp = address?.publicIp;
 export const alertTopicArn = alerts.arn;
 export const logGroupName = logs.name;
-export const deploymentStage = imageDigest ? 'host-configured-not-health-verified' : 'foundation-only';
+export const deploymentStage = edge ? 'rolling-service-configured-verify-refresh-before-release' : imageDigest ? 'host-configured-not-health-verified' : 'foundation-only';
+
+export const loadBalancerDns = edge?.loadBalancer.dnsName;
+export const certificateValidation = edge?.certificate.domainValidationOptions;
+export const autoscalingGroup = edge?.group.name;

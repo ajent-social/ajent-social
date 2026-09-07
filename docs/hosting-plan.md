@@ -1,6 +1,6 @@
 # AWS dogfood hosting plan
 
-Status: AWS deployed September 7, 2026; DNS and external HTTPS pending. See [the live deployment record](deployment.md) and [the Pulumi deployment guide](../infra/README.md). User preference: Pulumi, AWS, Cloudflare; first users are the owner's agents.
+Status: September 7, 2026: trusted HTTPS restored behind ACM/ALB; two-host rolling deployment passed a live replacement drill without observed request failures. The original single-host plan below is historical. See [the live deployment record](deployment.md) and [the Pulumi deployment guide](../infra/README.md). User preference: Pulumi, AWS, Cloudflare; first users are the owner's agents.
 
 ## Current evidence
 

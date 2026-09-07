@@ -1,4 +1,24 @@
-# Ajent dogfood infrastructure
+# Ajent infrastructure
+
+Current production path: ACM TLS → Application Load Balancer → two Graviton hosts across two availability zones, with bounded autoscaling to four. RDS remains single-AZ. `rollingService=true` and `retireLegacyHost=true` are enabled for dogfood. The legacy stages below document initial provisioning; use the rolling release procedure for updates.
+
+## Rolling releases
+
+After publishing a tested image, run `scripts/deploy.sh david-sire-run/ajent-infra/dogfood sha256:ACTUAL_DIGEST`. It checks for an active refresh, validates infrastructure, previews/applies the change and waits for the AWS result. Keep one deployment operator at a time across machines. The steps below describe the underlying workflow.
+
+1. Run application CI, `npm run --prefix infra check`, and `npm run --prefix infra test`. Publish the tested ARM64 image using `scripts/publish-image.sh`.
+2. Set `imageDigest` to its immutable digest. Run `pulumi -C infra preview --stack dogfood --diff`; an ordinary release updates the launch template and autoscaling group, never the database or HTTPS certificate.
+3. Apply with `pulumi -C infra up --stack dogfood`. **Pulumi returning success does not mean the rolling refresh finished.**
+4. Run `python3 scripts/wait-rollout.py "$(pulumi -C infra stack output autoscalingGroup --stack dogfood)"`. Require `Successful`; rollback is a failed release. Check the refresh start time belongs to this deployment.
+5. Verify trusted public HTTPS, authenticated reads, login, writes, search and revoked-key rejection. Monitor the public endpoint throughout the rollout.
+
+The fleet keeps 100% healthy capacity, permits 150% during replacement, waits 120 seconds for warmup, and drains targets for 30 seconds. Baseline is two hosts; CPU target tracking uses 60% with a four-host normal maximum (maintenance can temporarily exceed this). Each host caps its database pool at four connections. New targets must pass database-backed `/healthz`. Failed refreshes have AWS automatic rollback enabled. Always use backward-compatible expand/contract database migrations: an image rollback cannot undo a destructive schema change.
+
+TLS lives in ACM, independent of hosts. Cloudflare owns a DNS-only CNAME from `dogfood.ajent.social` to `loadBalancerDns` and a permanent ACM validation CNAME. Native Cloudflare MCP manages these records; import the existing service record before enabling `cloudflareZoneId`; the optional provider resource uses CNAME in rolling mode. The application trusts only the two load-balancer subnet CIDRs, and its port 8080 accepts ingress only from the edge security group.
+
+This increases baseline costs: two instances/EBS volumes, ALB hours and usage, and public IPv4 charges. No NAT gateway is required. RDS remains a single-AZ availability bottleneck; database storage autoscaling is not compute or connection autoscaling. SNS email delivery still requires configuring and confirming `alertEmail`.
+
+## Historical foundation and single-host bootstrap
 
 Dedicated Pulumi TypeScript project. AWS EC2 Graviton (`t4g.small`), private single-AZ RDS PostgreSQL 16 (`db.t4g.micro`), ECR, Secrets Manager, CloudWatch and optional Cloudflare DNS. No existing Sire/Blink resources are imported or modified.
 

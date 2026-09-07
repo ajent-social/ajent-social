@@ -1,6 +1,6 @@
 export interface HostConfig {
     hostname:string; region:string; dbHost:string; dbArn:string; ownerArn:string;
-    image:string; caddyImage:string; logGroup:string; stack:string;
+    image:string; caddyImage:string; logGroup:string; stack:string; behindLoadBalancer?:boolean;
 }
 // Values enter shell scripts only through JSON/base64, never shell interpolation.
 export function bootstrap(config:HostConfig):string {
@@ -14,10 +14,10 @@ def secret(arn):
     return json.loads(subprocess.check_output(['aws','secretsmanager','get-secret-value','--region',c['region'],'--secret-id',arn]))['SecretString']
 pw=secret(c['dbArn'])
 owner=secret(c['ownerArn'])
-dsn='postgres://ajent:'+urllib.parse.quote(pw,safe='')+'@'+c['dbHost']+':5432/ajent?sslmode=verify-full&sslrootcert=/certs/rds.pem'
+dsn='postgres://ajent:'+urllib.parse.quote(pw,safe='')+'@'+c['dbHost']+':5432/ajent?sslmode=verify-full&sslrootcert=/certs/rds.pem${config.behindLoadBalancer ? '&pool_max_conns=4' : ''}'
 os.umask(0o077)
 p=Path('/run/ajent.env.tmp')
-p.write_text('AJENT_DSN='+dsn+'\\nAJENT_SETUP_TOKEN='+owner+'\\nAJENT_ORIGIN=https://'+c['hostname']+'\\nAJENT_TRUSTED_PROXIES=127.0.0.1/32\\n')
+p.write_text('AJENT_DSN='+dsn+'\\nAJENT_SETUP_TOKEN='+owner+'\\nAJENT_ORIGIN=https://'+c['hostname']+'\\nAJENT_TRUSTED_PROXIES=${config.behindLoadBalancer ? '10.87.1.0/24,10.87.2.0/24' : '127.0.0.1/32'}\\n')
 p.replace('/run/ajent.env')
 registry=c['image'].split('/')[0]
 pw=subprocess.check_output(['aws','ecr','get-login-password','--region',c['region']])
@@ -30,7 +30,7 @@ c=json.loads(Path('/opt/ajent/config.json').read_text())
 kind=sys.argv[1]
 args=['docker','run','--rm','--name','ajent-'+kind,'--network','host','--log-driver','awslogs','--log-opt','awslogs-region='+c['region'],'--log-opt','awslogs-group='+c['logGroup'],'--log-opt','awslogs-stream='+kind,'--security-opt','no-new-privileges:true']
 if kind=='app':
-    args+=['--read-only','--cap-drop','ALL','--env-file','/run/ajent.env','-v','/opt/ajent/rds.pem:/certs/rds.pem:ro',c['image'],'-addr','127.0.0.1:8080']
+    args+=['--read-only','--cap-drop','ALL','--env-file','/run/ajent.env','-v','/opt/ajent/rds.pem:/certs/rds.pem:ro',c['image'],'-addr','${config.behindLoadBalancer ? '0.0.0.0:8080' : '127.0.0.1:8080'}']
 else:
     args+=['-v','/opt/ajent/Caddyfile:/etc/caddy/Caddyfile:ro','-v','/var/lib/ajent/caddy-data:/data','-v','/var/lib/ajent/caddy-config:/config',c['caddyImage']]
 os.execvp(args[0],args)
@@ -103,5 +103,5 @@ WantedBy=timers.target
         Object.entries(files).map(([name,body])=>write('/opt/ajent/'+name,body)).join('\n')+'\n'+
         'chmod 644 /opt/ajent/Caddyfile\ncurl --fail --retry 5 --proto =https --tlsv1.2 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o /opt/ajent/rds.pem\nchmod 644 /opt/ajent/rds.pem\n'+
         Object.entries(units).map(([name,body])=>write('/etc/systemd/system/'+name,body)).join('\n')+'\n'+
-        'systemctl daemon-reload\nsystemctl enable --now ajent-app ajent-proxy ajent-metrics.timer\n';
+        `systemctl daemon-reload\nsystemctl enable --now ajent-app ${config.behindLoadBalancer ? '' : 'ajent-proxy '}ajent-metrics.timer\n`;
 }

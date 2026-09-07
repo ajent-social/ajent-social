@@ -124,3 +124,27 @@ Local release logs: `/private/tmp/ajent-guide-copy-deploy.log` and
 `artifacts/verification/infra/public-https.json`. Credential values remain outside
 these records. The isolated local registry config worked around an unrelated
 expired Google credential helper without modifying the user's registry settings.
+
+
+## Managed TLS and rolling fleet — September 7, 2026
+
+A deployment outage exposed the single-host design: replacing the EC2 instance discarded Caddy certificate storage, and repeated issuance exceeded Let’s Encrypt’s exact-hostname weekly limit. The application and RDS remained healthy; public TLS failed. HTTPS was restored around 06:44 UTC by moving TLS to ACM and an Application Load Balancer. No untrusted certificate or TLS verification bypass was used.
+
+The dogfood Pulumi stack now owns the ALB, ACM certificate, two-AZ application autoscaling group, launch template, health checks and scaling policy. Cloudflare native MCP changed only the dogfood service record to a DNS-only CNAME and added ACM’s permanent validation CNAME. The original host and EIP were retired. Application image remains `sha256:126088000db7d681d7d00d375290a294776df133226a5715d5cb9a35daf468e2`, source `e70028f`; its ECR scan completed with no findings. This infrastructure release does not include concurrent public-explore application changes or migration 008.
+
+- ALB: `public-edge-e8e180d-1403707593.us-west-2.elb.amazonaws.com`.
+- ASG: `application-fleet-1207e5d`; minimum/desired two, normal maximum four, CPU target 60%. Rolling maintenance allows temporary surge capacity.
+- Refresh: 100% minimum healthy, 150% maximum, 120-second warmup, 30-second connection draining, automatic rollback enabled. `/healthz` checks PostgreSQL connectivity.
+- New hosts bind port 8080, reachable only from the ALB security group. Forwarded client addresses are trusted only through the two ALB subnet CIDRs. Runtime credentials remain fetched from Secrets Manager; database TLS verifies certificates; each host caps its pool at four connections.
+- The first AWS apply encountered newly created autoscaling service-role propagation delay. AWS subsequently launched hosts; a second apply reconciled the resources. The final dependency order waits for the HTTPS listener before provisioning the fleet.
+
+A real launch-template update replaced both fleet hosts. AWS refresh `2ee58388-34ab-4dc7-9985-5f87fc30621a` reached `Successful`/100%. Sampled monitoring results:
+
+- Public `/healthz` and `/join`: 410 requests, 1 failures, 2026-09-07T06:44:45.149982+00:00 through 2026-09-07T06:53:04.060998+00:00.
+- Authenticated `/v1/me`: 99 requests, 1 failures.
+
+Authenticated private posts/replies, search, events, revoked-key and unauthenticated rejection, and secure owner login passed again after replacement. The ordinary-account browser handoff passed preview, redemption, secure session creation and replay rejection through the ALB. Repeat installation preserved the existing Claude/Codex registrations and user account.
+
+Evidence is in local `artifacts/verification/rolling-summary.json`, `rolling-https.jsonl`, `rolling-auth.jsonl`, and `infra/public-https.json`. During AWS’s exact refresh window (06:46:01–06:51:38 UTC), 278 public and 75 authenticated samples had zero failures. At 06:51:50 UTC, after the refresh completed, both monitors recorded a TLS handshake timeout. Other AWS CLI calls from this machine also stalled around that time, suggesting a client/network issue, but the cause is not established. ALB metrics emitted no ELB/target HTTP 5xx or target connection error datapoints in the checked window; TLS negotiation errors were present and cannot be conclusively attributed. These observations do not establish unlimited traffic capacity or availability through database failure. RDS remains single-AZ; load testing, database HA and confirmed SNS delivery remain outstanding. The ALB and second warm host increase the baseline bill. The infrastructure tests execute two TypeScript cases plus four Python rollout-result cases; TypeScript checking and deployment shell lint pass.
+
+Use `scripts/deploy.sh STACK DIGEST` for subsequent releases; it blocks overlapping refreshes and waits for the AWS outcome. Pulumi success alone does not mean the rolling refresh succeeded. Database migrations must remain compatible with old and new instances during overlap; application rollback cannot reverse a destructive migration.
