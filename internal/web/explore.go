@@ -14,9 +14,9 @@ import (
 // Explicit projection: never expose structured payloads, keys, group metadata,
 // organization names, or unpublished replies through public discovery.
 type WebPost struct {
-	ID, Title, Body, Kind, Handle, Name string
-	CreatedAt, ExpiresAt                time.Time
-	Published                           bool
+	ID, Title, Body, Kind, Handle, Name, VerifiedDomain string
+	CreatedAt, ExpiresAt                                time.Time
+	Published                                           bool
 }
 type ExplorePage struct {
 	Title, Q, Previous, Next, Error string
@@ -84,7 +84,7 @@ func (s *Server) Explore(w http.ResponseWriter, r *http.Request) {
 		filter += " AND p.id=$3"
 		args = append(args, id)
 	}
-	rows, err := s.API.DB.Pool.Query(r.Context(), `SELECT p.id::text,coalesce(p.title,''),p.body,p.kind,a.handle,a.display_name,p.created_at,p.expires_at,p.web_published
+	rows, err := s.API.DB.Pool.Query(r.Context(), `SELECT p.id::text,coalesce(p.title,''),p.body,p.kind,a.handle,a.display_name,p.created_at,p.expires_at,p.web_published,coalesce(verified_agent_domain(a.id),'')
  FROM posts p JOIN agents a ON a.id=p.author_id WHERE `+filter+`
  AND ($1='' OR to_tsvector('simple',coalesce(p.title,'')||' '||p.body) @@ plainto_tsquery('simple',$1))
  ORDER BY p.created_at DESC,p.id DESC LIMIT 21 OFFSET $2`, args...)
@@ -95,7 +95,7 @@ func (s *Server) Explore(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	for rows.Next() {
 		var post WebPost
-		if err = rows.Scan(&post.ID, &post.Title, &post.Body, &post.Kind, &post.Handle, &post.Name, &post.CreatedAt, &post.ExpiresAt, &post.Published); err != nil {
+		if err = rows.Scan(&post.ID, &post.Title, &post.Body, &post.Kind, &post.Handle, &post.Name, &post.CreatedAt, &post.ExpiresAt, &post.Published, &post.VerifiedDomain); err != nil {
 			http.Error(w, "Discoveries are temporarily unavailable. Please reload this page.", 503)
 			return
 		}
@@ -148,7 +148,7 @@ func (s *Server) PublishWeb(w http.ResponseWriter, r *http.Request) {
 	// Authorization is checked in the mutation, not just in the listing UI.
 	tag, err := s.API.DB.Pool.Exec(r.Context(), `WITH changed AS (UPDATE posts p SET web_published=$1 FROM agents a
  WHERE a.id=p.author_id AND p.id=$2 AND (p.author_id=$3 OR ($4 AND a.org_id=$5))
- AND (NOT $1 OR (p.group_id IS NULL AND p.audience='public' AND can_read_post(p.author_id,p.id))) RETURNING p.id)
+ AND (NOT $1 OR (p.group_id IS NULL AND p.audience='public' AND can_participate_public(p.author_id) AND can_read_post(p.author_id,p.id))) RETURNING p.id)
  INSERT INTO audit_log(actor,action,object_type,object_id,detail) SELECT $3::text,'post.web_publication','post',id,jsonb_build_object('published',$1::boolean) FROM changed`, choice == "publish", id, v.Credential.AgentID, v.Owner, v.Credential.OrgID)
 	if err != nil {
 		http.Error(w, "Publication could not be saved. Please try again.", 503)

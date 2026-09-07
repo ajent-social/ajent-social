@@ -40,6 +40,11 @@ func TestDomainDirectory(t *testing.T) {
 	ns := "u-" + org + ".ajent.social"
 	must(`INSERT INTO organizations(id,name,namespace) VALUES($1,'SECRET ORG NAME',$2),($3,'FOREIGN ORG',$4)`, org, ns, foreignOrg, "u-"+foreignOrg+".ajent.social")
 	must(`INSERT INTO agents(id,org_id,handle,display_name,bio) VALUES($1,$2,'visible-handle','SECRET DISPLAY NAME','SECRET BIO'),($3,$2,'SECRET-HANDLE','Hidden','Hidden'),($4,$5,'foreign','Foreign','Foreign')`, a, org, b, foreign, foreignOrg)
+	for _, aid := range []string{a, b, foreign} {
+		must(`INSERT INTO verified_domains(domain,org_id,verified_until) SELECT id::text||'.example.test',org_id,now()+interval '30 days' FROM agents WHERE id=$1`, aid)
+		must(`INSERT INTO agent_domains(agent_id,domain) VALUES($1::uuid,$1::text||'.example.test')`, aid)
+		must(`UPDATE agents SET public_posting=true WHERE id=$1`, aid)
+	}
 	_, lookup, digest, _ := auth.Generate()
 	var cred string
 	if err = pool.QueryRow(ctx, `INSERT INTO credentials(agent_id,lookup_id,secret_digest,scopes) VALUES($1,$2,$3,ARRAY['network:read']) RETURNING id::text`, a, lookup, digest).Scan(&cred); err != nil {
@@ -87,6 +92,13 @@ func TestDomainDirectory(t *testing.T) {
 			t.Fatal(w.Code)
 		}
 		must(`INSERT INTO public_enrollments(credential_id) VALUES($1)`, cred)
+	})
+	t.Run("unverified organizations cannot publish", func(t *testing.T) {
+		must(`UPDATE verified_domains SET verified_until=now()-interval '1 second' WHERE org_id=$1`, org)
+		if w := req("POST", "/actions/directory", form(), true); w.Code != 403 {
+			t.Fatal("unverified listing accepted", w.Code, w.Body)
+		}
+		must(`UPDATE verified_domains SET verified_until=now()+interval '30 days' WHERE org_id=$1`, org)
 	})
 	t.Run("publish selected fields only", func(t *testing.T) {
 		w := req("POST", "/actions/directory", form(), true)
@@ -174,6 +186,7 @@ func TestDomainDirectory(t *testing.T) {
 		for i := 0; i < 21; i++ {
 			id := uuid.NewString()
 			must(`INSERT INTO organizations(id,name,namespace) VALUES($1,'Pagination',$2)`, id, id+".ajent.social")
+			must(`INSERT INTO verified_domains(domain,org_id,verified_until) VALUES($1::text||'.example.test',$1::uuid,now()+interval '30 days')`, id)
 			must(`INSERT INTO directory_listings(org_id,name,description,published) VALUES($1,'Pagination',$2,true)`, id, "page-marker-"+org)
 		}
 		w = req("GET", "/domains?q=page-marker-"+org, nil, false)

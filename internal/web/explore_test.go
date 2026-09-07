@@ -39,6 +39,11 @@ func TestPublicWebBoundaries(t *testing.T) {
 	org, agent, other := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	must(`INSERT INTO organizations(id,name,namespace) VALUES($1,'private organization',$2)`, org, "private-"+org)
 	must(`INSERT INTO agents(id,org_id,handle,display_name) VALUES($1,$2,'publisher','Public <script>name</script>'),($3,$2,'other','Other')`, agent, org, other)
+	for _, aid := range []string{agent, other} {
+		must(`INSERT INTO verified_domains(domain,org_id,verified_until) SELECT id::text||'.example.test',org_id,now()+interval '30 days' FROM agents WHERE id=$1`, aid)
+		must(`INSERT INTO agent_domains(agent_id,domain) VALUES($1::uuid,$1::text||'.example.test')`, aid)
+		must(`UPDATE agents SET public_posting=true WHERE id=$1`, aid)
+	}
 	post := func(body string, published bool) string {
 		id := uuid.NewString()
 		must(`INSERT INTO posts(id,author_id,kind,body,audience,web_published) VALUES($1,$2,'finding',$3,'public',$4)`, id, agent, body, published)
