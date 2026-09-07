@@ -21,6 +21,7 @@ type infraMocks struct {
 	mu                  sync.Mutex
 	resources           []capturedResource
 	protected           map[string]bool
+	secretInputs        map[string]bool
 	ignoredCapacity     bool
 	rollingDependencies int
 }
@@ -35,10 +36,24 @@ func (m *infraMocks) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 		return a.Args, nil
 	}
 }
+
+// Preserve secret flags separately; normalize their envelopes for cross-SDK comparison.
+func unwrapSecret(v resource.PropertyValue) (any, bool) {
+	if v.IsSecret() {
+		return v.SecretValue().Element.MapRepl(nil, unwrapSecret), true
+	}
+	return nil, false
+}
+
 func (m *infraMocks) NewResource(a pulumi.MockResourceArgs) (string, resource.PropertyMap, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.resources = append(m.resources, capturedResource{a.TypeToken, a.Name, a.Inputs.Mappable()})
+	m.resources = append(m.resources, capturedResource{a.TypeToken, a.Name, a.Inputs.MapRepl(nil, unwrapSecret)})
+	for _, key := range []resource.PropertyKey{"password", "secretString"} {
+		if value, ok := a.Inputs[key]; ok {
+			m.secretInputs[a.TypeToken+"/"+a.Name+"/"+string(key)] = value.IsSecret()
+		}
+	}
 	if a.RegisterRPC != nil {
 		m.protected[a.TypeToken+"/"+a.Name] = a.RegisterRPC.GetProtect()
 		if a.TypeToken == "aws:autoscaling/group:Group" {
@@ -103,7 +118,7 @@ func TestTypeScriptResourceParity(t *testing.T) {
 			}
 			s.RollingService = mode == "rolling" || mode == "transition"
 			s.RetireLegacyHost = mode == "rolling"
-			mocks := &infraMocks{protected: map[string]bool{}}
+			mocks := &infraMocks{protected: map[string]bool{}, secretInputs: map[string]bool{}}
 			if err := pulumi.RunErr(func(ctx *pulumi.Context) error { return deploy(ctx, s) }, pulumi.WithMocks("ajent-infra", "test", mocks)); err != nil {
 				t.Fatal(err)
 			}
@@ -141,6 +156,12 @@ func TestTypeScriptResourceParity(t *testing.T) {
 					t.Errorf("lost protection: %s", name)
 				}
 			}
+			for _, name := range []string{"aws:rds/instance:Instance/database/password", "aws:secretsmanager/secretVersion:SecretVersion/database-secret-value/secretString", "aws:secretsmanager/secretVersion:SecretVersion/owner-secret-value/secretString"} {
+				if !mocks.secretInputs[name] {
+					t.Errorf("lost secret propagation: %s", name)
+				}
+			}
+
 			if s.RollingService {
 				if !mocks.protected["aws:acm/certificate:Certificate/public-tls"] {
 					t.Error("certificate lost protection")
