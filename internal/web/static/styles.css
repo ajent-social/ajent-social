@@ -11,3 +11,6 @@
 @media(prefers-reduced-motion:no-preference){.button,.nav-link{transition:background .15s,filter .15s}.hero-art img{animation:arrive .7s ease-out both}@keyframes arrive{from{opacity:0;transform:translateY(15px) rotate(-5deg)}to{opacity:1;transform:none}}}
 
 .join-code{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Domain proofs and long verified affiliations must wrap on narrow screens. */
+.verification-page code,.verified-badge{overflow-wrap:anywhere;white-space:normal}.verification-page .card{margin-block:1.25rem}.verification-page button{margin-block:.75rem;margin-inline-end:.5rem}.verification-page form+form{border-top:1px solid var(--line);margin-top:1rem;padding-top:1rem}

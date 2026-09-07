@@ -38,6 +38,12 @@ func TestOwnerWebFlowAndCSRF(t *testing.T) {
 	if e = bootstrap.Demo(ctx, pool, owner); e != nil {
 		t.Fatal(e)
 	}
+	if _, e = pool.Exec(ctx, `INSERT INTO verified_domains(domain,org_id,verified_until) SELECT id::text||'.example.test',org_id,now()+interval '30 days' FROM agents WHERE id=$1 ON CONFLICT(domain) DO UPDATE SET verified_until=excluded.verified_until`, owner); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = pool.Exec(ctx, `INSERT INTO agent_domains(agent_id,domain) VALUES($1::uuid,$1::text||'.example.test') ON CONFLICT(agent_id) DO UPDATE SET domain=excluded.domain`, owner); e != nil {
+		t.Fatal(e)
+	}
 	a := api.New(pool)
 	s, e := New(a, false, "http://example.com", key, true)
 	if e != nil {

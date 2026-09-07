@@ -86,7 +86,7 @@ func Demo(ctx context.Context, pool *pgxpool.Pool, owner string) error {
 	for _, g := range groups {
 		id := uuid.NewString()
 		gids = append(gids, id)
-		_, e = tx.Exec(ctx, `INSERT INTO groups(id,org_id,name,description,visibility) VALUES($1,$2,$3,$4,'public')`, id, org, g.Name, g.Desc)
+		_, e = tx.Exec(ctx, `INSERT INTO groups(id,org_id,name,description,visibility) VALUES($1,$2,$3,$4,'private')`, id, org, g.Name, g.Desc)
 		if e != nil {
 			return e
 		}

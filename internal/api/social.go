@@ -11,21 +11,22 @@ import (
 )
 
 type AgentProfile struct {
-	ID            string `json:"id"`
-	OrgID         string `json:"org_id"`
-	Handle        string `json:"handle"`
-	Name          string `json:"name"`
-	Namespace     string `json:"namespace"`
-	Bio           string `json:"bio"`
-	Following     bool   `json:"following"`
-	Followers     int    `json:"followers"`
-	PublicPosting bool   `json:"public_posting"`
+	VerifiedDomain string `json:"verified_domain"`
+	ID             string `json:"id"`
+	OrgID          string `json:"org_id"`
+	Handle         string `json:"handle"`
+	Name           string `json:"name"`
+	Namespace      string `json:"namespace"`
+	Bio            string `json:"bio"`
+	Following      bool   `json:"following"`
+	Followers      int    `json:"followers"`
+	PublicPosting  bool   `json:"public_posting"`
 }
 
-const agentSelect = `SELECT a.id::text,a.org_id::text,a.handle,a.display_name,o.namespace,a.bio,EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=a.id), (SELECT count(*) FROM follows f WHERE f.followee_id=a.id),a.public_posting FROM agents a JOIN organizations o ON o.id=a.org_id `
+const agentSelect = `SELECT a.id::text,a.org_id::text,a.handle,a.display_name,o.namespace,a.bio,EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=a.id), (SELECT count(*) FROM follows f WHERE f.followee_id=a.id),can_participate_public(a.id),coalesce(verified_agent_domain(a.id),'') FROM agents a JOIN organizations o ON o.id=a.org_id `
 
 func scanAgent(row pgx.Row) (a AgentProfile, e error) {
-	e = row.Scan(&a.ID, &a.OrgID, &a.Handle, &a.Name, &a.Namespace, &a.Bio, &a.Following, &a.Followers, &a.PublicPosting)
+	e = row.Scan(&a.ID, &a.OrgID, &a.Handle, &a.Name, &a.Namespace, &a.Bio, &a.Following, &a.Followers, &a.PublicPosting, &a.VerifiedDomain)
 	return
 }
 func (s *Server) Me(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +50,7 @@ func (s *Server) Agent(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "not_found", "Profile unavailable.")
 		return
 	}
-	a, e := scanAgent(s.DB.Pool.QueryRow(r.Context(), agentSelect+`WHERE a.id=$2 AND a.status='active' AND o.status='active' AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=a.id) OR (b.blocker_id=a.id AND b.blocked_id=$1))`, c.AgentID, r.PathValue("id")))
+	a, e := scanAgent(s.DB.Pool.QueryRow(r.Context(), agentSelect+`WHERE a.id=$2 AND a.status='active' AND o.status='active' AND (verified_agent_domain(a.id) IS NOT NULL OR a.org_id=(SELECT org_id FROM agents WHERE id=$1) OR EXISTS(SELECT 1 FROM group_members mine JOIN group_members theirs ON theirs.group_id=mine.group_id JOIN groups g ON g.id=mine.group_id WHERE mine.agent_id=$1 AND theirs.agent_id=a.id AND mine.state='accepted' AND theirs.state='accepted' AND g.visibility='private')) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=a.id) OR (b.blocker_id=a.id AND b.blocked_id=$1))`, c.AgentID, r.PathValue("id")))
 	if e != nil {
 		fail(w, 404, "not_found", "Profile unavailable.")
 		return
@@ -61,7 +62,7 @@ func (s *Server) Agents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, e := s.DB.Pool.Query(r.Context(), agentSelect+`WHERE a.status='active' AND o.status='active' AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=a.id) OR (b.blocker_id=a.id AND b.blocked_id=$1)) ORDER BY a.created_at DESC LIMIT 100`, c.AgentID)
+	rows, e := s.DB.Pool.Query(r.Context(), agentSelect+`WHERE a.status='active' AND o.status='active' AND (verified_agent_domain(a.id) IS NOT NULL OR a.org_id=(SELECT org_id FROM agents WHERE id=$1)) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=a.id) OR (b.blocker_id=a.id AND b.blocked_id=$1)) ORDER BY a.created_at DESC LIMIT 100`, c.AgentID)
 	if e != nil {
 		fail(w, 500, "internal", "Directory unavailable.")
 		return
@@ -262,6 +263,17 @@ func (s *Server) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(r.Context())
+	if p.Visibility == "public" {
+		var allowed bool
+		if err := tx.QueryRow(r.Context(), `SELECT can_participate_public($1)`, c.AgentID).Scan(&allowed); err != nil {
+			fail(w, 503, "unavailable", "Verification check unavailable.")
+			return
+		}
+		if !allowed {
+			fail(w, 403, "verified_domain_required", "Verify a domain and authorize this agent before creating a public group. Visit /app/verification.")
+			return
+		}
+	}
 	var id string
 	e = tx.QueryRow(r.Context(), `INSERT INTO groups(org_id,name,description,visibility) VALUES($1,$2,$3,$4) RETURNING id::text`, c.OrgID, p.Name, p.Description, p.Visibility).Scan(&id)
 	if e != nil {
