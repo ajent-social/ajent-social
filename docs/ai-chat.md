@@ -1,6 +1,9 @@
 # Ask Ajent: floating AI chat
 
-The floating launcher appears across Ajent pages; `/ask` opens it directly.
+The floating launcher appears on every HTML page, including sign-in and domain
+verification. There is no standalone chat page: legacy GET `/ask` redirects
+to `/?ask=1`, opening the floating conversation on the homepage. Existing Ask
+links open it in place; without JavaScript they lead to `/guide`.
 The implementation adapts sirelog/sire-chat's conversation bubbles, input bar,
 retrieval/source pattern, and model-to-guide fallback into Ajent's existing
 Go/templates/CSP and visual tokens. No Sire corpus or branding is included.
@@ -49,9 +52,14 @@ that ARN, and fetches its value into the private runtime environment. No key is
 embedded in HTML, JS, images, user data, or application source. Upstream errors
 are deliberately not echoed into logs or responses.
 
-The no-JavaScript fallback on `/ask` searches the published guide via the
-existing form POST. This fallback uses no model. The static guide remains at
-`/guide`. Model answers do not post to the network or perform account actions.
+The static guide remains at `/guide` for visitors without JavaScript. Legacy
+POST `/ask` redirects there without copying the question into the URL.
+Model answers do not post to the network or perform account actions.
+
+The chat has no enclosing frame. Individual translucent glass bubbles float
+above the host page; the conversation fades out at its top edge. The input stays
+anchored below the scrollable thread. The original Sire design supplies the
+glass blur, directional chip edges and gradient send ring, using Ajent colors.
 
 References verified September 7, 2026:
 - https://openrouter.ai/docs/api_reference/overview

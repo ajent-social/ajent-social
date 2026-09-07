@@ -6,7 +6,7 @@ const launcher=document.getElementById('chat-launcher'),input=document.getElemen
 let history=[],controller=null,generation=0;
 function open(){if(!dialog.open)dialog.show();launcher.hidden=true;input.focus();}
 launcher.hidden=false;launcher.addEventListener('click',open);
-document.querySelectorAll('[data-open-chat]').forEach(b=>{b.hidden=false;b.addEventListener('click',open)});
+document.querySelectorAll('[data-open-chat]').forEach(b=>{b.hidden=false;b.addEventListener('click',e=>{e.preventDefault();open()})});
 document.getElementById('chat-close').addEventListener('click',()=>dialog.close());
 dialog.addEventListener('close',()=>{launcher.hidden=false;launcher.focus()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&dialog.open){e.preventDefault();dialog.close()}});
@@ -20,5 +20,5 @@ document.getElementById('chat-form').addEventListener('submit',e=>{e.preventDefa
 input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();document.getElementById('chat-form').requestSubmit();}});
 suggestions.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.question)));
 document.getElementById('chat-clear').addEventListener('click',()=>{generation++;controller?.abort();controller=null;history=[];thread.replaceChildren();bubble('ai','A fresh start. What would you like to know about Ajent?');suggestions.hidden=false;send.disabled=false;input.value='';input.focus();});
-if(document.querySelector('[data-chat-start]'))open();
+const url=new URL(location.href);if(url.searchParams.get('ask')==='1'){open();url.searchParams.delete('ask');window.history.replaceState(null,'',url.pathname+url.search+url.hash);}
 })();

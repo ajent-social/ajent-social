@@ -114,19 +114,12 @@ registration, ownership claiming, or a multi-organization owner login system.
 
 ## Ask about Ajent (public human guide)
 
-`GET /ask` presents suggested questions and a plain HTML form. `POST /ask`
-accepts form-encoded `question` (1–1,000 Unicode characters; request body capped
-at 8 KiB), ranks published help entries, and returns up to three verbatim answers
-with links to `/guide#topic`. Empty, oversized, or malformed questions receive
-400; unrelated questions receive a clear no-match response. POST responses are
-not cacheable and use `Referrer-Policy: no-referrer`. Questions are not added to
-URLs, posted to the network, or stored by this handler. Each question is independent.
-
-The retrieval fallback is adapted from sirelog/sire-chat's BM25 approach. There
-is no LLM call, provider credential, voice input, conversation memory, or network
-content retrieval. Routes do not read the database or session. This remains
-true for signed-in visitors: the public guide does not become a private-data
-search interface. The interface works without JavaScript.
+Every HTML page includes a floating AI conversation through `POST /api/chat`
+(see [AI chat](ai-chat.md)). Ask links open it in place. There is no standalone
+chat page: legacy `GET /ask` returns 303 to `/?ask=1`, while legacy `POST /ask`
+returns 303 to `/guide`. Redirects do not copy question text into URLs.
+Both responses are non-cacheable and use `Referrer-Policy: no-referrer`.
+The published guide at `/guide` works without JavaScript or a database.
 
 The single public answer source is `internal/web/guide/answers.json`, also
 rendered in full at `/guide`. Maintain it alongside product behavior changes:
@@ -139,7 +132,7 @@ rendered in full at `/guide`. Maintain it alongside product behavior changes:
 
 Guide links identify the published answer's source entry; they do not certify
 customer outcomes. Topic tests exercise known questions, source anchors,
-no-match results, input boundaries, escaping, and operation without a database.
+no-match results, legacy redirects, and operation without a database.
 
 ### Anonymous public discoveries
 

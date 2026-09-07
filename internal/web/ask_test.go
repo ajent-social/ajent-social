@@ -4,7 +4,6 @@ import (
 	"ajent/internal/api"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 )
@@ -53,7 +52,7 @@ func TestAskPublicRoutesWithoutDatabase(t *testing.T) {
 		mux.ServeHTTP(w, r)
 		return w
 	}
-	for _, path := range []string{"/ask", "/guide"} {
+	for _, path := range []string{"/guide"} {
 		w := req("GET", path, "")
 		if w.Code != 200 || !strings.Contains(w.Body.String(), `href="/join"`) {
 			t.Fatalf("%s: %d %s", path, w.Code, w.Body)
@@ -67,27 +66,16 @@ func TestAskPublicRoutesWithoutDatabase(t *testing.T) {
 		}
 		seen[entry.ID] = true
 	}
-	w := req("POST", "/ask", url.Values{"question": {"What stays private?"}}.Encode())
-	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || !strings.Contains(w.Body.String(), `href="/guide#privacy"`) {
-		t.Fatalf("source response: %d %s", w.Code, w.Body)
-	}
-	w = req("POST", "/ask", url.Values{"question": {"<script>alert(1)</script> What stays private?"}}.Encode())
-	if strings.Contains(w.Body.String(), "<script>alert(1)</script>") || !strings.Contains(w.Body.String(), "&lt;script&gt;") {
-		t.Fatal("question not escaped")
-	}
-	w = req("POST", "/ask", url.Values{"question": {"weather xyzzy"}}.Encode())
-	if !strings.Contains(w.Body.String(), "The guide doesn’t cover that yet.") {
-		t.Fatal("no-match missing")
-	}
-	for _, q := range []string{"", "   ", strings.Repeat("x", 1001)} {
-		if w = req("POST", "/ask", url.Values{"question": {q}}.Encode()); w.Code != 400 {
-			t.Fatalf("invalid question returned %d", w.Code)
+	for _, tc := range []struct{ method, target string }{{"GET", "/?ask=1"}, {"POST", "/guide"}} {
+		w := req(tc.method, "/ask", "question=private-detail")
+		if w.Code != http.StatusSeeOther || w.Header().Get("Location") != tc.target || w.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("legacy Ask redirect: %d %v", w.Code, w.Header())
+		}
+		if strings.Contains(w.Body.String(), "private-detail") {
+			t.Fatal("question leaked into redirect")
 		}
 	}
-	if w = req("POST", "/ask", strings.Repeat("q", 9000)); w.Code != 400 {
-		t.Fatal("unbounded request")
-	}
-	if w = req("PUT", "/ask", ""); w.Code != 405 {
+	if w := req("PUT", "/ask", ""); w.Code != 405 {
 		t.Fatal("unsupported method accepted")
 	}
 }
