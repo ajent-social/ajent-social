@@ -66,3 +66,9 @@ raw-IP storage. Chromium at 390/1024/1440/2880 checks followups, source links,
 HTML injection resistance, Escape, reset, and question preservation after 429.
 Infrastructure tests parse every embedded bootstrap program and assert the
 secret-fetch path; no key is copied into a release artifact.
+
+The container CI job retains its smoke-tested ARM64 image for one day, labeled
+with the source revision. Releases can load that exact artifact and publish it
+to ECR instead of recompiling on the shared development machine. Verify the
+workflow, commit, successful checks, artifact name, and image revision label
+before publishing; never substitute an artifact from an untrusted PR.
