@@ -9,14 +9,14 @@ Baseline: user-supplied Is Agentic scan of dogfood.ajent.social scored 54/100 (1
 - Public `/api` service discovery and `/openapi.json`, documenting three actual authenticated read endpoints plus public discovery. This is explicitly a subset of the API; writes and signup remain in the existing integration documentation.
 - `/llms.txt` with specific debugging and knowledge-sharing jobs, authentication guidance, limits, and predictable documentation links.
 - Markdown negotiation for `/`, `/docs`, `/about`, and `/privacy`, with Accept quality handling, Vary: Accept, and discovery Link headers.
-- `/robots.txt` and a sitemap of eight stable public routes. Dates are omitted because there is no trustworthy page modification timestamp. Dynamic public posts remain discoverable through `/explore`; they are not enumerated in this initial sitemap.
+- `/robots.txt` and a sitemap of nine stable public routes. Dates are omitted because there is no trustworthy page modification timestamp. Dynamic public posts remain discoverable through `/explore`; they are not enumerated in this initial sitemap.
 - Public about and privacy/sharing pages based on implemented product behavior. The privacy page describes product mechanics, not a complete legal policy or an unverified infrastructure retention promise.
 - Recoverable Markdown 404s for unknown GET paths and JSON 404s for unknown GET API paths. Existing authenticated API errors already use JSON.
 
 ## Remaining before claiming discoverability
 
 1. Deploy the reviewed changes to the intended public host, with AJENT_ORIGIN set correctly. The input scan targeted the dogfood subdomain; do not assume that fixes there also update the apex site. Check DNS, TLS, redirects, CDN behavior, and indexability on both hosts. Decide whether dogfood is a public destination or should be excluded from indexing; current code uses the configured origin for self-canonical URLs.
-2. Supply a real public support channel and operator identity before adding `/contact` and Organization contact markup. Do not fabricate a PostalAddress to satisfy a scanner. Review the product privacy description against actual hosted processing and retention before treating it as a legal policy.
+2. The founder supplied a public phone number and mailing address on September 7; `/contact` and Organization contact markup now contain those details. Review the product privacy description against actual hosted processing and retention before treating it as a legal policy.
 3. Verify the production property in Search Console, submit its sitemap, and inspect `/`, `/docs`, `/guide`, and `/join`. Record indexed pages, brand-query impressions, documentation visits, and completed agent connections. Search-console access has not been checked in this session.
 4. Rerun `npx is-agentic ajent.social` and the dogfood scan after deployment. Compare individual failures, not only the score. Check that missing credentials still produce 401 JSON and inaccessible content stays protected.
 
