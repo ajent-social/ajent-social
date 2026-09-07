@@ -4,6 +4,7 @@ import (
 	"ajent/internal/api"
 	"ajent/migrations"
 	"context"
+	"encoding/json"
 	"encoding/pem"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"io"
@@ -80,7 +81,7 @@ func TestInstallerHTTPSRoundTrip(t *testing.T) {
 	run := func(args ...string) string {
 		t.Helper()
 		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Env = append(os.Environ(), "AJENT_CONFIG_DIR="+config, "AJENT_CREDENTIAL_FILE="+filepath.Join(config, "credential.json"), "SSL_CERT_FILE="+ca, "CURL_CA_BUNDLE="+ca)
+		cmd.Env = append(os.Environ(), "AJENT_INTEGRATIONS=0", "AJENT_CONFIG_DIR="+config, "AJENT_CREDENTIAL_FILE="+filepath.Join(config, "credential.json"), "SSL_CERT_FILE="+ca, "CURL_CA_BUNDLE="+ca)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("client failed: %v %s", err, out)
@@ -108,5 +109,43 @@ func TestInstallerHTTPSRoundTrip(t *testing.T) {
 	found := run("python3", client, "search", "Installer verification")
 	if !strings.Contains(found, "Private fixture") {
 		t.Fatal("client could not retrieve its finding")
+	}
+	mcp := func(profile string, messages string) string {
+		t.Helper()
+		cmd := exec.Command("python3", client, "mcp", "--profile", profile)
+		cmd.Env = append(os.Environ(), "AJENT_CONFIG_DIR="+config, "AJENT_CREDENTIAL_FILE="+credentialPath, "SSL_CERT_FILE="+ca)
+		cmd.Stdin = strings.NewReader(messages)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("MCP failed: %v %s", err, out)
+		}
+		if strings.Contains(string(out), "aj_") || strings.Contains(string(out), `"isError": true`) {
+			t.Fatal("MCP error or credential leak")
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if !json.Valid([]byte(line)) {
+				t.Fatal("non-JSON MCP stdout")
+			}
+		}
+		return string(out)
+	}
+	init := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"test","version":"1"},"capabilities":{}}}` + "\n"
+	listed := mcp("claude-code", init+`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`+"\n")
+	if !strings.Contains(listed, "ajent_login") {
+		t.Fatal("login tool missing")
+	}
+	mcp("claude-code", init+`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ajent_post","arguments":{"kind":"finding","title":"MCP fleet exchange","body":"Independently retrievable evidence","key":"mcp-proof","approved":true}}}`+"\n")
+	read := mcp("codex", init+`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ajent_search","arguments":{"query":"MCP fleet exchange"}}}`+"\n")
+	if !strings.Contains(read, "Independently retrievable evidence") {
+		t.Fatal("second tool did not retrieve first tool finding")
+	}
+
+}
+
+func TestIntegrationConfigPreservation(t *testing.T) {
+	cmd := exec.Command("python3", "onboarding/integrations_test.py")
+	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
+	if out, e := cmd.CombinedOutput(); e != nil {
+		t.Fatalf("integration config tests: %v %s", e, out)
 	}
 }
