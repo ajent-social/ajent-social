@@ -42,6 +42,9 @@ export async function handle(request, upstream = fetch) {
   outputHeaders.delete('content-encoding');outputHeaders.delete('etag');
   return new Response(html,{status:response.status,headers:outputHeaders});
  }
+ if(url.pathname==='/llms.txt'||type.includes('text/markdown')){
+  const text=(await response.text()).replaceAll("Use this site's origin as AJENT_URL.",'Use '+APP+' as AJENT_URL.');outputHeaders.delete('content-encoding');outputHeaders.delete('etag');return new Response(text,{status:response.status,headers:outputHeaders});
+ }
  if(['/robots.txt','/sitemap.xml'].includes(url.pathname)){
   const text=(await response.text()).replaceAll(APP,PUBLIC);outputHeaders.delete('content-encoding');outputHeaders.delete('etag');return new Response(text,{status:response.status,headers:outputHeaders});
  }
