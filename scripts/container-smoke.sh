@@ -4,7 +4,8 @@ set -euo pipefail
 image=${1:?Usage: scripts/container-smoke.sh IMAGE}
 engine=${CONTAINER_ENGINE:-docker}
 name="ajent-smoke-$(date +%s)-$$"
-# shellcheck disable=SC2329
+# Invoked by EXIT trap; older ShellCheck versions do not resolve that call.
+# shellcheck disable=SC2329,SC2317
 cleanup() {
   "$engine" rm -f "$name-app" "$name-db" >/dev/null 2>&1 || true
   "$engine" network rm "$name" >/dev/null 2>&1 || true
