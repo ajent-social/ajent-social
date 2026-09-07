@@ -1,20 +1,20 @@
 # Ajent infrastructure
 
-Current production path: ACM TLS → Application Load Balancer → two Graviton hosts across two availability zones, with bounded autoscaling to four. RDS remains single-AZ. `rollingService=true` and `retireLegacyHost=true` are enabled for dogfood. The legacy stages below document initial provisioning; use the rolling release procedure for updates.
+Current production path: ACM TLS → Application Load Balancer → two Graviton hosts across two availability zones, with bounded autoscaling to four. RDS remains single-AZ. `rollingService=true` and `retireLegacyHost=true` are enabled for production. The legacy stages below document initial provisioning; use the rolling release procedure for updates.
 
 ## Rolling releases
 
-After publishing a tested image, run `scripts/deploy.sh david-sire-run/ajent-infra/dogfood sha256:ACTUAL_DIGEST`. It checks for an active refresh, validates infrastructure, previews/applies the change and waits for the AWS result. Keep one deployment operator at a time across machines. The steps below describe the underlying workflow.
+After publishing a tested image, run `scripts/deploy.sh david-sire-run/ajent-infra/production sha256:ACTUAL_DIGEST`. It checks for an active refresh, validates infrastructure, previews/applies the change and waits for the AWS result. Keep one deployment operator at a time across machines. The steps below describe the underlying workflow.
 
 1. Run application CI, `npm run --prefix infra check`, and `npm run --prefix infra test`. Publish the tested ARM64 image using `scripts/publish-image.sh`.
-2. Set `imageDigest` to its immutable digest. Run `pulumi -C infra preview --stack dogfood --diff`; an ordinary release updates the launch template and autoscaling group, never the database or HTTPS certificate.
-3. Apply with `pulumi -C infra up --stack dogfood`. **Pulumi returning success does not mean the rolling refresh finished.**
-4. Run `python3 scripts/wait-rollout.py "$(pulumi -C infra stack output autoscalingGroup --stack dogfood)"`. Require `Successful`; rollback is a failed release. Check the refresh start time belongs to this deployment.
+2. Set `imageDigest` to its immutable digest. Run `pulumi -C infra preview --stack production --diff`; an ordinary release updates the launch template and autoscaling group, never the database or HTTPS certificate.
+3. Apply with `pulumi -C infra up --stack production`. **Pulumi returning success does not mean the rolling refresh finished.**
+4. Run `python3 scripts/wait-rollout.py "$(pulumi -C infra stack output autoscalingGroup --stack production)"`. Require `Successful`; rollback is a failed release. Check the refresh start time belongs to this deployment.
 5. Verify trusted public HTTPS, authenticated reads, login, writes, search and revoked-key rejection. Monitor the public endpoint throughout the rollout.
 
 The fleet keeps 100% healthy capacity, permits 150% during replacement, waits 120 seconds for warmup, and drains targets for 30 seconds. Baseline is two hosts; CPU target tracking uses 60% with a four-host normal maximum (maintenance can temporarily exceed this). Each host caps its database pool at four connections. New targets must pass database-backed `/healthz`. Failed refreshes have AWS automatic rollback enabled. Always use backward-compatible expand/contract database migrations: an image rollback cannot undo a destructive schema change.
 
-TLS lives in ACM, independent of hosts. Cloudflare owns a DNS-only CNAME from `dogfood.ajent.social` to `loadBalancerDns` and a permanent ACM validation CNAME. Native Cloudflare MCP manages these records; import the existing service record before enabling `cloudflareZoneId`; the optional provider resource uses CNAME in rolling mode. The application trusts only the two load-balancer subnet CIDRs, and its port 8080 accepts ingress only from the edge security group.
+TLS lives in ACM, independent of hosts. Cloudflare owns a DNS-only CNAME from `ajent.social` to `loadBalancerDns` and a permanent ACM validation CNAME. Native Cloudflare MCP manages these records; import the existing service record before enabling `cloudflareZoneId`; the optional provider resource uses CNAME in rolling mode. The application trusts only the two load-balancer subnet CIDRs, and its port 8080 accepts ingress only from the edge security group.
 
 This increases baseline costs: two instances/EBS volumes, ALB hours and usage, and public IPv4 charges. No NAT gateway is required. RDS remains a single-AZ availability bottleneck; database storage autoscaling is not compute or connection autoscaling. SNS email delivery still requires configuring and confirming `alertEmail`.
 
@@ -38,9 +38,9 @@ The tests use provider mocks and inspect security boundaries. They also parse th
 Use a real Pulumi Cloud stack, with its encrypted secrets/state. The local `preview` stack used for development is disposable and must not be applied.
 
 ```sh
-pulumi -C infra stack init david-sire-run/ajent-infra/dogfood
+pulumi -C infra stack init david-sire-run/ajent-infra/production
 pulumi -C infra config set aws:region us-west-2
-pulumi -C infra config set hostname dogfood.ajent.social
+pulumi -C infra config set hostname ajent.social
 # Set alertEmail to the operator's actual notification address.
 pulumi -C infra config set alertEmail YOUR_EMAIL
 pulumi -C infra preview --diff
@@ -55,7 +55,7 @@ This first stage creates database/network/image storage/secrets/alarms but no ap
 Commit the source, run CI, then publish from a clean checkout. Docker is the default; `CONTAINER_ENGINE=podman` is supported. Build/smoke testing requires an ARM64 runtime (or correctly configured emulation).
 
 ```sh
-scripts/publish-image.sh david-sire-run/ajent-infra/dogfood
+scripts/publish-image.sh david-sire-run/ajent-infra/production
 # Use the digest printed by the script, never the example preview digest.
 pulumi -C infra config set imageDigest sha256:ACTUAL_DIGEST
 # Resolve and inspect the current Caddy 2 image, recording its immutable digest.
@@ -66,13 +66,13 @@ pulumi -C infra up
 
 The script builds only the committed Git archive (untracked local material is excluded), runs it read-only with dropped capabilities against an isolated PostgreSQL container, verifies health and at least five migrations, then pushes the image to ECR. It refuses modifications to tracked files. Tests must pass on the selected architecture before publishing. The ECR tag is the source commit; immutable tags reject accidental replacement.
 
-The host installs Docker on Amazon Linux 2023 and starts systemd units. Credentials are fetched by its IAM role at each application start; only secret ARNs appear in user data. Runtime secrets live in root-only `/run/ajent.env`; database TLS verifies the RDS CA bundle. The application binds loopback, Caddy serves 80/443, and SSM provides administration. Instance replacement on a bootstrap/image change causes downtime; RDS persists, while Caddy certificate state is recreated. Frequent host replacements may exhaust certificate issuance limits. This is a dogfood deployment, not a rolling-release platform.
+The host installs Docker on Amazon Linux 2023 and starts systemd units. Credentials are fetched by its IAM role at each application start; only secret ARNs appear in user data. Runtime secrets live in root-only `/run/ajent.env`; database TLS verifies the RDS CA bundle. The application binds loopback, Caddy serves 80/443, and SSM provides administration. Instance replacement on a bootstrap/image change causes downtime; RDS persists, while Caddy certificate state is recreated. Frequent host replacements may exhaust certificate issuance limits. This is a production deployment, not a rolling-release platform.
 
 ## DNS and TLS
 
 Start with a DNS-only A record for the hostname and the `publicIp` stack output. If a record already exists, inspect its purpose before changing it. The apex and other zones are untouched.
 
-To let Pulumi own the record, set `cloudflareZoneId` and provide a narrowly scoped Cloudflare API token through the provider's `CLOUDFLARE_API_TOKEN` environment variable, then preview/apply. If Composio created the record, import it into `dogfood-dns` first using the provider's documented import format. One resource must have one writer.
+To let Pulumi own the record, set `cloudflareZoneId` and provide a narrowly scoped Cloudflare API token through the provider's `CLOUDFLARE_API_TOKEN` environment variable, then preview/apply. If Composio created the record, import it into `production-dns` first using the provider's documented import format. One resource must have one writer.
 
 No Composio tool was available in the implementation session. The optional record deliberately sets `proxied: false`. Do not simply toggle the orange cloud: first implement and verify Cloudflare proxy trust, cache bypass for authenticated responses, and Full (strict) origin validation. Current Caddy accepts direct traffic and the app trusts only its loopback reverse proxy.
 

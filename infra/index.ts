@@ -6,7 +6,7 @@ import { bootstrap } from './userdata';
 import { rollingService } from './rolling';
 
 const cfg = new pulumi.Config();
-const hostname = cfg.get('hostname') ?? 'dogfood.ajent.social';
+const hostname = cfg.get('hostname') ?? 'ajent.social';
 if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(hostname)) throw new Error('hostname must be a lowercase DNS name');
 const canonicalHostname = cfg.get('canonicalHostname');
 const certificateArn = cfg.get('certificateArn');
@@ -64,7 +64,7 @@ if(imageDigest){
         {Effect:'Allow',Action:['ecr:GetAuthorizationToken'],Resource:'*'},
         {Effect:'Allow',Action:['ecr:BatchGetImage','ecr:GetDownloadUrlForLayer','ecr:BatchCheckLayerAvailability'],Resource:r},
         {Effect:'Allow',Action:['logs:CreateLogStream','logs:PutLogEvents'],Resource:`${l}:*`},
-        {Effect:'Allow',Action:['cloudwatch:PutMetricData'],Resource:'*',Condition:{StringEquals:{'cloudwatch:namespace':'Ajent/Dogfood'}}},
+        {Effect:'Allow',Action:['cloudwatch:PutMetricData'],Resource:'*',Condition:{StringEquals:{'cloudwatch:namespace':'Ajent/Production'}}},
     ]}))});
     const profile = new aws.iam.InstanceProfile('host',{role:role.name,tags});
     const ami = aws.ssm.getParameterOutput({name:'/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64'});
@@ -79,9 +79,9 @@ if(imageDigest){
     new aws.cloudwatch.MetricAlarm('host-status',{namespace:'AWS/EC2',metricName:'StatusCheckFailed',dimensions:{InstanceId:host.id},statistic:'Maximum',period:60,evaluationPeriods:2,threshold:1,comparisonOperator:'GreaterThanOrEqualToThreshold',treatMissingData:'breaching',alarmActions:[alerts.arn],tags});
     }
     for(const [name,metric,threshold,comparison] of [['http-health','Healthy',1,'LessThanThreshold'],['host-disk','DiskUsedPercent',85,'GreaterThanThreshold']] as const)
-        new aws.cloudwatch.MetricAlarm(name,{namespace:'Ajent/Dogfood',metricName:metric,dimensions:{Stack:stack},statistic:metric==='DiskUsedPercent'?'Maximum':'Minimum',period:60,evaluationPeriods:3,threshold,comparisonOperator:comparison,treatMissingData:'breaching',alarmActions:[alerts.arn],okActions:[alerts.arn],tags});
+        new aws.cloudwatch.MetricAlarm(name,{namespace:'Ajent/Production',metricName:metric,dimensions:{Stack:stack},statistic:metric==='DiskUsedPercent'?'Maximum':'Minimum',period:60,evaluationPeriods:3,threshold,comparisonOperator:comparison,treatMissingData:'breaching',alarmActions:[alerts.arn],okActions:[alerts.arn],tags});
     const zone = cfg.get('cloudflareZoneId');
-    if(zone && (edge || address)) new cloudflare.DnsRecord('dogfood-dns',{zoneId:zone,name:hostname,type:edge?'CNAME':'A',content:edge?edge.loadBalancer.dnsName:address!.publicIp,ttl:300,proxied:false,comment:'Ajent service; DNS-only'});
+    if(zone && (edge || address)) new cloudflare.DnsRecord('production-dns',{zoneId:zone,name:hostname,type:edge?'CNAME':'A',content:edge?edge.loadBalancer.dnsName:address!.publicIp,ttl:300,proxied:false,comment:'Ajent service; DNS-only'});
 }
 export const serviceUrl = `https://${hostname}`;
 export const repositoryUrl = repository.repositoryUrl;

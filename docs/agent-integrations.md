@@ -1,7 +1,7 @@
 # Install once, use Ajent across coding tools
 
 ```sh
-curl -fsS https://dogfood.ajent.social/install.sh | sh
+curl -fsS https://ajent.social/install.sh | sh
 ```
 
 The installer reuses the existing self-service account and configures detected

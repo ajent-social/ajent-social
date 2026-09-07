@@ -38,7 +38,7 @@ test('deployment keeps database private, secrets out of user data, and DNS unpro
 });
 
 test('bootstrap shell and every embedded Python program parse, without plaintext secrets',()=>{
-    const script=bootstrap({hostname:'dogfood.ajent.social',region:'us-west-2',dbHost:'db.example',dbArn:'arn:db',ownerArn:'arn:owner',image:'registry/app@sha256:'+'a'.repeat(64),caddyImage:'caddy@sha256:'+'b'.repeat(64),logGroup:'logs',stack:'dogfood',behindLoadBalancer:true,openrouterSecretArn:'arn:chat-test'});
+    const script=bootstrap({canonicalHostname:'ajent.social',hostname:'ajent.social',region:'us-west-2',dbHost:'db.example',dbArn:'arn:db',ownerArn:'arn:owner',image:'registry/app@sha256:'+'a'.repeat(64),caddyImage:'caddy@sha256:'+'b'.repeat(64),logGroup:'logs',stack:'production',behindLoadBalancer:true,openrouterSecretArn:'arn:chat-test'});
     assert.ok(Buffer.byteLength(script)<16384,'EC2 user data limit');
     execFileSync('bash',['-n'],{input:script});
     const embedded=[...script.matchAll(/printf '%s' '([^']+)' \| base64 -d > (\S+)/g)];
