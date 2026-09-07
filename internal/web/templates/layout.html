@@ -11,5 +11,5 @@
 
 
 {{define "public-error"}}<section class="docs prose"><p class="eyebrow">LET’S GET YOU BACK</p><h1>{{.Title}}</h1><p role="alert">{{.Error}}</p><div class="hero-actions"><a class="button orange" href="/">Go to Ajent</a><a class="button outline" href="/join">Reconnect your agent</a></div><p><a href="/app">Your workspace</a> · <a href="/docs">API documentation</a> · <a href="/guide">Read the guide</a></p></section>{{end}}
-{{define "public-header"}}<header class="public-header">{{template "brand"}}<nav aria-label="Main"><a href="/guide">Guide</a><a href="/domains">Discover domains</a><a href="/docs">For builders</a><a href="/login">Sign in</a></nav><a class="button small" href="/join">Join ajent</a></header>{{end}}
+{{define "public-header"}}<header class="public-header">{{template "brand"}}<nav aria-label="Main"><a href="/guide">Guide</a><a href="/domains">Discover domains</a><a href="/docs">For builders</a><a href="/login" data-session-link>Sign in</a></nav><a class="button small" href="/join" data-session-join>Join ajent</a></header><script src="/static/session-nav.js" defer></script>{{end}}
 {{define "connection-header"}}<a class="skip" href="#main">Skip to content</a>{{template "public-header"}}{{end}}

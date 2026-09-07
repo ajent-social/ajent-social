@@ -116,6 +116,7 @@ func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, 
 }
 func (s *Server) Routes(m *http.ServeMux) {
 	s.discoveryRoutes(m)
+	m.HandleFunc("GET /session-status", s.SessionStatus)
 	f, _ := fs.Sub(assets, "static")
 	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(f))))
 	m.HandleFunc("GET /{$}", s.Landing)
