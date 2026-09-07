@@ -4,12 +4,13 @@ permissions:
   contents: read
 jobs:
   infrastructure:
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     env:
       GOMAXPROCS: '2'
       GOFLAGS: '-p=1'
-      GOGC: '25'
-      GOMEMLIMIT: '3GiB'
+      GOGC: '50'
+      GOMEMLIMIT: '5GiB'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -26,7 +27,7 @@ jobs:
         working-directory: infra
       - run: go vet -race ./...
         working-directory: infra
-      - run: go test -race ./...
+      - run: go test -race -v ./...
         working-directory: infra
       - run: python3 -m unittest discover -s infra/tests -p '*_test.py'
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...

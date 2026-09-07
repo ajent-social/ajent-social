@@ -65,6 +65,16 @@ func (m *infraMocks) NewResource(a pulumi.MockResourceArgs) (string, resource.Pr
 	for key, value := range map[string]any{"arn": "arn:aws:test::123:" + a.Name, "address": "database.test", "repositoryUrl": "123.dkr.ecr.us-west-2.amazonaws.com/ajent", "publicIp": "192.0.2.1", "result": "fake-secret-for-test", "name": a.Name, "latestVersion": 1, "arnSuffix": a.Name, "identifier": a.Name, "dnsName": "edge.example", "domainValidationOptions": []any{}} {
 		state[resource.PropertyKey(key)] = resource.NewPropertyValue(value)
 	}
+	// Model the engine's handling of SDK-requested secret outputs. The Go mock
+	// monitor does not apply AdditionalSecretOutputs itself.
+	if a.RegisterRPC != nil {
+		for _, name := range a.RegisterRPC.GetAdditionalSecretOutputs() {
+			key := resource.PropertyKey(name)
+			if value, ok := state[key]; ok && !value.IsSecret() {
+				state[key] = resource.MakeSecret(value)
+			}
+		}
+	}
 	return a.Name + "_id", state, nil
 }
 
@@ -192,6 +202,47 @@ func TestConfigurationValidation(t *testing.T) {
 			err := s.validate()
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("validation error=%v; want error=%v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoadSettings(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		extra   map[string]string
+		wantErr bool
+	}{
+		{"defaults", nil, false},
+		{"rolling flags", map[string]string{"rollingService": "true", "retireLegacyHost": "true"}, false},
+		{"empty hostname", map[string]string{"hostname": ""}, true},
+		{"invalid boolean", map[string]string{"rollingService": "1"}, true},
+		{"empty boolean", map[string]string{"rollingService": ""}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			values := map[string]string{"aws:region": "us-west-2"}
+			for k, v := range tc.extra {
+				values["ajent-infra:"+k] = v
+			}
+			mocks := &infraMocks{protected: map[string]bool{}, secretInputs: map[string]bool{}}
+			err := pulumi.RunErr(func(ctx *pulumi.Context) error {
+				s, err := loadSettings(ctx)
+				if tc.wantErr {
+					if err == nil {
+						t.Error("invalid config accepted")
+					}
+					return nil
+				}
+				if err != nil {
+					return err
+				}
+				if s.Hostname != "dogfood.ajent.social" || s.Region != "us-west-2" || s.Stack != "test" {
+					t.Errorf("unexpected defaults: %+v", s)
+				}
+				return nil
+			}, pulumi.WithMocks("ajent-infra", "test", mocks), func(info *pulumi.RunInfo) { info.Config = values })
+			if err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

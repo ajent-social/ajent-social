@@ -103,9 +103,16 @@ fallback. See `docs/ai-chat.md` for quotas, model settings, and data boundaries.
 
 ## Go program and language migration
 
-Run Pulumi from this directory; `Pulumi.yaml` selects the Go runtime. The nested
+Run Pulumi from this directory on the authenticated CI runner; `Pulumi.yaml` selects the Go runtime. The nested
 `go.mod`/`go.sum` pin AWS, Cloudflare, Random and Pulumi SDK versions independently
 from the application. Node/npm are no longer needed for infrastructure checks.
+
+On the shared mini, **do not run Go infrastructure builds, tests or previews**:
+the generated AWS/Cloudflare SDKs exceed its memory budget. Use the infrastructure
+CI job; it limits compiler concurrency and memory and preserves dependency caches.
+The commands in this document are CI-runner commands. `scripts/deploy.sh` requires
+`CI=true`; an authenticated deployment runner and the existing lease are required
+before applying. Do not export CI locally to bypass this restriction.
 Host bootstrap helpers remain Python programs embedded by Go; their output is
 byte-for-byte compatible with the former TypeScript generator.
 
@@ -115,9 +122,22 @@ rolling-update dependencies and stack output names are preserved. Regression
 fixtures in `testdata/` compare all resource inputs in foundation, legacy,
 transition and rolling modes against the original TypeScript program.
 
-For the runtime switch, first finish the existing resource imports and canonical
-stack configuration/lease work. Rebase this migration onto that state, retain the
+For the runtime switch, first finish the existing resource imports, canonical
+stack configuration/lease work, and the separately owned apex-domain cutover. Rebase this migration onto that state, retain the
 same stack and configuration, and record TypeScript and Go previews against the
 same state. Go must show zero changes/replacements and the same resource URNs.
 The first Go apply must be a no-op under the deployment lease. Do not combine the
 runtime migration with an image update, provider upgrade or resource refactor.
+
+Capture both previews in private files on the authenticated CI runner, using
+`--refresh=false --json --show-sames --expect-no-changes` against the same settled
+stack state. Then run:
+
+```sh
+python3 scripts/check-infra-migration.py typescript-preview.json go-preview.json
+```
+
+The checker requires complete unchanged-resource reports and compares URNs,
+provider references and protection flags. Do not publish raw preview JSON: it
+contains stack configuration and resource metadata. Keep only the summary in the
+PR. A provisional pre-cutover preview does not satisfy the final migration gate.

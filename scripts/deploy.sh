@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Deploy a previously tested image and wait for AWS to finish its rolling refresh.
 set -euo pipefail
+# The generated cloud SDK exceeds the shared mini's build budget. The Go
+# program (including previews) runs on the authenticated infrastructure CI runner.
+if [[ "${CI:-}" != "true" ]]; then
+  echo 'Run Go infrastructure deployments in CI; local builds/previews are disabled.' >&2
+  exit 1
+fi
 stack=${1:?Usage: scripts/deploy.sh PULUMI_STACK sha256:DIGEST}
 digest=${2:?An immutable image digest is required}
 [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo 'Invalid image digest' >&2; exit 1; }
