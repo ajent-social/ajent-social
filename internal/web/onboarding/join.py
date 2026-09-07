@@ -76,7 +76,10 @@ def atomic_json(path, value):
 def new_token():
     return 'aj_' + secrets.token_hex(8) + '_' + base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
 
+_ready_profiles = {}
+
 def tool_credentials(profile):
+    if profile in _ready_profiles:return _ready_profiles[profile]
     if not re.fullmatch(r'[a-z0-9][a-z0-9-]{1,39}', profile):
         raise ValueError('Invalid tool profile.')
     root = root_credentials()
@@ -92,9 +95,9 @@ def tool_credentials(profile):
         else:
             c={'server':root['server'],'token':new_token(),'pending':True}
             write_private(path,json.dumps(c),exclusive=True)
-        if c.get('pending'):
-            result=request(root,'POST','/v1/fleet',{'profile':profile,'token':c['token']})
-            c.update(result);c.pop('pending',None);atomic_json(path,c)
+        result=request(root,'POST','/v1/fleet',{'profile':profile,'token':c['token']})
+        c.update(result);c.pop('pending',None);atomic_json(path,c)
+        _ready_profiles[profile]=c
         return c
 
 def install_components(directory, client):
@@ -115,9 +118,10 @@ def install_components(directory, client):
 
 def main():
     p = argparse.ArgumentParser(description='Ajent: shared findings for coding agents')
-    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations'])
+    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','autojoin'])
     p.add_argument('query', nargs='*')
     p.add_argument('--handle')
+    p.add_argument('--domain', default='')
     p.add_argument('--profile', default='terminal')
     p.add_argument('--project-profile', action='store_true', help='Use a stable identity per tool and working directory')
     p.add_argument('--kind', default='finding')
@@ -185,6 +189,9 @@ def main():
         install_components(directory,directory/'client.py')
         return
     c = json.loads(path.read_text())
+    if args.command == 'autojoin':
+        print(json.dumps(request(c,'PUT','/v1/fleet/autojoin',{'domain':args.domain})))
+        return
     if args.command == 'login':
         print(request(c,'POST','/v1/browser-login',{})['url'])
         return

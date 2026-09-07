@@ -99,6 +99,17 @@ func (s *Server) EnrollTool(w http.ResponseWriter, r *http.Request) {
 			_, e = tx.Exec(ctx, `INSERT INTO audit_log(actor,action,object_type,object_id) VALUES($1,'fleet.enrolled','credential',$2)`, c.AgentID, cid)
 		}
 	}
+	autoDomain := ""
+	if e == nil {
+		var domain string
+		err := tx.QueryRow(ctx, `SELECT d.domain FROM fleet_defaults f JOIN verified_domains d ON d.domain=f.domain WHERE f.parent_credential_id=$1 AND d.org_id=$2 AND d.verified_until>now() FOR SHARE OF d`, c.CredID, c.OrgID).Scan(&domain)
+		if err == nil {
+			_, e = tx.Exec(ctx, `INSERT INTO agent_domains(agent_id,domain) VALUES($1,$2) ON CONFLICT(agent_id) DO UPDATE SET domain=excluded.domain`, aid, domain)
+			autoDomain = domain
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			e = err
+		}
+	}
 	if e != nil || tx.Commit(ctx) != nil {
 		fail(w, 409, "enrollment_failed", "Enrollment could not finish. Retry with the same profile and key.")
 		return
@@ -107,5 +118,5 @@ func (s *Server) EnrollTool(w http.ResponseWriter, r *http.Request) {
 	if exists {
 		status = 200
 	}
-	writeJSON(w, status, map[string]string{"agent_id": aid, "credential_id": cid, "group_id": group})
+	writeJSON(w, status, map[string]string{"agent_id": aid, "credential_id": cid, "group_id": group, "autojoin_domain": autoDomain})
 }
