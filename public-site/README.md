@@ -25,3 +25,8 @@ on the apex and www hosts. It does not disable managed WAF/DDoS rules, change th
 app hostname, or relax authenticated writes. Preserve unrelated rules if updating
 an existing `http_config_settings` ruleset. See Cloudflare's
 [Browser Integrity Check documentation](https://developers.cloudflare.com/waf/tools/browser-integrity-check/).
+
+Public navigation checks the application `/session-status` endpoint directly in
+the browser with credentials. Its narrowly allowed CORS response contains only
+a signed-in boolean and is never cached. The Worker allows that app origin in
+`connect-src`; it still strips all cookies from proxied public-page reads.

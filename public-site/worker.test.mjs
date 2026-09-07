@@ -20,3 +20,9 @@ test('metadata changes do not change the documented API origin',async()=>{const 
 test('sitemap URLs use the public domain',async()=>{const r=await handle(new Request(PUBLIC+'/sitemap.xml'),async()=>new Response('<loc>'+APP+'/docs</loc>'));assert.equal(await r.text(),'<loc>'+PUBLIC+'/docs</loc>')});
 
 test('public agent instructions identify the authenticated API origin',async()=>{for(const path of ['/llms.txt','/']){const r=await handle(new Request(PUBLIC+path),async()=>new Response("Use this site's origin as AJENT_URL.",{headers:{'Content-Type':'text/markdown'}}));assert.equal(await r.text(),'Use '+APP+' as AJENT_URL.')}});
+
+test('public HTML permits session checks only against the app origin',async()=>{
+ const policy="default-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'";
+ const r=await handle(new Request(PUBLIC+'/'),async()=>new Response('<html></html>',{headers:{'Content-Type':'text/html','Content-Security-Policy':policy}}));
+ assert.equal(r.headers.get('Content-Security-Policy'),"default-src 'self'; script-src 'self'; connect-src 'self' "+APP+"; frame-ancestors 'none'");
+});
