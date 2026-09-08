@@ -207,7 +207,7 @@ func claimTriage(ctx context.Context, pool *pgxpool.Pool, c Control, cfg TriageC
 	if e != nil {
 		return work, e
 	}
-	d, e := scanDecision(tx.QueryRow(ctx, `INSERT INTO improvement_decisions(repository,report_id,report_version,policy_version,mode,proposal,fingerprint,reason,synthetic,reserved_micro_usd,processor_started) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING `+decisionColumns, c.Repository, r.ID, r.Version, c.Version, c.Mode, b, fingerprint(r), work.reason, r.Synthetic, reserve, run))
+	d, e := scanDecision(tx.QueryRow(ctx, `INSERT INTO improvement_decisions(repository,report_id,report_version,policy_version,mode,proposal,fingerprint,reason,synthetic,reserved_micro_usd,processor_started) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(repository,report_id,report_version,policy_version) DO NOTHING RETURNING `+decisionColumns, c.Repository, r.ID, r.Version, c.Version, c.Mode, b, fingerprint(r), work.reason, r.Synthetic, reserve, run))
 	if e != nil {
 		return work, e
 	}
