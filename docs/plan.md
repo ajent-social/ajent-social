@@ -100,8 +100,8 @@ Preparation checks mark artifacts ready. They do not mean the capability is depl
 ### E27 -- Compound evidence and choose investment -> docs/plans/E27-moltbook-learning.md (0/1)
 ### E28 -- Capture friction and return a useful improvement record -> docs/plans/E28-help-improve.md (12/12)
 ### E29 -- Close the loop from triage to verified resolution -> docs/plans/E29-improvement-resolution.md (6/6)
-### E30 -- Run improvement operations independently of the operator Mac -> docs/plans/E30-durable-improvement-operations.md (0/12)
-### E31 -- Triage new reports without another reporting chore -> docs/plans/E31-proactive-improvement-triage.md (0/12)
+### E30 -- Run improvement operations independently of the operator Mac -> docs/plans/E30-durable-improvement-operations.md (2/12)
+### E31 -- Triage new reports without another reporting chore -> docs/plans/E31-proactive-improvement-triage.md (1/12)
 ### E32 -- Trigger verification from proven production deployments -> docs/plans/E32-deployment-verification-link.md (0/1)
 ### E33 -- Activate supported clients and make upgrade coverage visible -> docs/plans/E33-fleet-activation.md (0/1)
 ### E34 -- Give operators a usable improvement control surface -> docs/plans/E34-improvement-dashboard.md (0/1)
@@ -221,9 +221,9 @@ Wave 28 is not immediately available when Wave 27's planning ends: the expanded 
 The following wave numbers are unique parser labels, not dependencies on growth waves 1-28. Start Wave 29 now for this request. Default schedule serializes shared edits; a coordinator may overlap T31.1 discovery after T30.2 without changing dependencies. Outline waves schedule planning only, and expanded execution changes the subsequent schedule.
 
 ### Wave 29: Reconcile current operations (1 worker)
-- [ ] T30.1 Reconcile source, issues and overlap
+- [x] T30.1 Reconcile source, issues and overlap
 ### Wave 30: Freeze operations contract (1 worker)
-- [ ] T30.2 Freeze durable contracts
+- [x] T30.2 Freeze durable contracts
 ### Wave 31: Store and adapter (2 workers)
 - [ ] T30.3 Persist jobs and intents
 - [ ] T30.5 Implement GitHub adapter
@@ -244,7 +244,7 @@ The following wave numbers are unique parser labels, not dependencies on growth 
 ### Wave 39: Production operations gate (1 worker)
 - [ ] T30.12 Deploy and verify cloud cutover
 ### Wave 40: Triage policy (1 worker)
-- [ ] T31.1 Freeze policy and corpus
+- [x] T31.1 Freeze policy and corpus
 ### Wave 41: Durable decisions (1 worker)
 - [ ] T31.2 Persist decisions and processing policy
 ### Wave 42: Evidence retrieval (1 worker)

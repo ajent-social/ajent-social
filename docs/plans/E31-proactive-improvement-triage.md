@@ -10,7 +10,7 @@ Engineering and operations, 2026 09 08. UC-O03 (P0) adds proactive evidence revi
 
 ## Work breakdown
 
-- [ ] T31.1 Freeze bounded triage policy and evaluation cases  Owner: product/api  Est: 90m  verifies: [UC-O03, UC-O04]  blocked-by: [T30.2]  lane: agent
+- [x] T31.1 Freeze bounded triage policy and evaluation cases  Owner: product/api  Est: 90m  verifies: [UC-O03, UC-O04]  blocked-by: [T30.2]  lane: agent
   Area: docs/contracts/improvement-triage.md, versioned evaluation fixtures. Define a 30-case controlled corpus covering valid bugs/features, expected denials, missing intent, duplicate suggestions, cross-workspace privacy, malicious instructions, withdrawn context and provider failure. Record expected actions before implementation. Auto-action initially limited to eligible new -> triaged with normal/low priority and exact same-repository issue linking; access/delivery-loss gets high-priority private review. Never auto-decline, merge, ship or verify. Acceptance: every case has an evidence-backed expected action, escalation reason and allowed fields.
   acc: [versioned triage fixtures enumerate allowed automatic transitions and mandatory review cases with expected outputs]
 - [ ] T31.2 Add durable triage decisions and processing policy  Owner: api  Est: 90m  verifies: [UC-O03, UC-O04]  blocked-by: [T31.1, T30.3]
@@ -53,3 +53,5 @@ Triage waves: 1-12, one worker per corresponding T31 task in order; start T31.1 
 Estimate: 16 hours plus 30 percent reserve, approximately 21 hours; observation up to seven days in shadow plus 24 hours canary, with partial samples reported honestly. Compare manual review effort and first-disposition latency, not report volume. A successful triage decision is not a reproduced bug or verified fix. E32/E33/E34 expand after this gate using actual review and operations needs.
 
 Progress: 2026 09 08 planned T31.1-T31.12; implementation and runtime activation not started.
+
+Execution 2026 09 08: discovery/contracts completed in docs/reviews/improvement-operations-discovery.md and docs/contracts/. Implementation and live gates remain open.

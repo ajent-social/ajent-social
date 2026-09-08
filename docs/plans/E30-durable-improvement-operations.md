@@ -16,9 +16,9 @@ UC-O01 (P0): reviewed reports continue processing after host failure without dup
 
 ## Work breakdown
 
-- [ ] T30.1 Reconcile release state, issue ownership and activation overlap  Owner: coordinator  Est: 60m  delivers: [dated source/live/issue reconciliation and narrowed E22 overlap]  lane: agent
+- [x] T30.1 Reconcile release state, issue ownership and activation overlap  Owner: coordinator  Est: 60m  delivers: [dated source/live/issue reconciliation and narrowed E22 overlap]  lane: agent
   Area: docs/reviews/improvement-operations-discovery.md, E22, current release evidence, existing GitHub issues. Inspect current main and loaded/live versions; search issues including chief's work before adding any. Record reuse, missing behavior and owner per relevant E22 row. Preserve statuses unless the entire row has evidence; use the overlap notes below as discovery, not a completion verdict. Acceptance: every selected gap has one owning row and every proposed issue either links an existing issue or explains why none matches. Read-only discovery does not send messages or create issues.
-- [ ] T30.2 Freeze durable jobs, cutover and operation contracts  Owner: api  Est: 90m  verifies: [UC-O01, UC-O02]  blocked-by: [T30.1]  lane: agent
+- [x] T30.2 Freeze durable jobs, cutover and operation contracts  Owner: api  Est: 90m  verifies: [UC-O01, UC-O02]  blocked-by: [T30.1]  lane: agent
   Area: docs/contracts/improvement-operations.md, ADR 004, operator API schemas. Specify job key (repository, report, operation, policy/revision), cursor fairness, lease generation, retry states, exact GitHub repository and credential provisioning, cancellation on withdrawal, retention and local-journal import. Defaults: tick 60s, at most 10 jobs/pass, one external action at a time/instance, 120s lease, 30s renewal, 15s request timeout. Set projection heartbeat stale at 5 minutes and oldest runnable-work warning at 15 minutes. Acceptance includes real-boundary HTTP fixtures for added operator routes and incompatible legacy-client behavior.
   acc: [contract fixtures distinguish claimed pending sent ambiguous completed and cancelled jobs and define denied operator responses]
 - [ ] T30.3 Persist jobs, intents and bounded history  Owner: api  Est: 90m  verifies: [UC-O01]  blocked-by: [T30.2]
@@ -63,3 +63,5 @@ Estimate: 17 focused hours plus 30 percent integration reserve, approximately 22
 Reuse quiet presence, typed errors, inbox acknowledgment/cursors, route telemetry and full-file backup from E28/E29. E22.8 should adopt the shipped inbox through-cursor contract instead of creating a second acknowledgment scheme. E22.16 immutable hashes/pinning/preview and E22.17 interrupted promotion remain open. E22.18/.19/.23 still require real two-harness activation. E33/E35 refine those owners; they do not duplicate their implementation. T30.1 records per-row evidence before closing anything.
 
 Progress: 2026 09 08 planned T30.1-T30.12; no new worker, cloud change or external publication performed.
+
+Execution 2026 09 08: discovery/contracts completed in docs/reviews/improvement-operations-discovery.md and docs/contracts/. Implementation and live gates remain open.

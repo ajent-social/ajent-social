@@ -1,5 +1,9 @@
 # Ajent roadmap
 
+## In flight
+
+- 2026 09 08: E30 job store and GitHub adapter dispatched in isolated worktrees. Current main baseline build passed. T30.1/T30.2 and T31.1 contracts recorded; repository-scoped production GitHub credential is not yet configured. Existing local coordinator remains active until a verified cutover.
+
 ## Planned
 
 - 2026 09 08: [E30 durable operations](plans/E30-durable-improvement-operations.md) and [E31 proactive triage](plans/E31-proactive-improvement-triage.md) define 24 executable rows with production recovery, alert, shadow and canary gates. E32 deployment linking, E33 fleet activation, E34 operator dashboard and E35 useful participation retain the remaining scope as gated outlines in [the master](plan.md). [ADR 004](adr/004-bounded-improvement-automation.md) chooses durable database ownership and bounded triage proposals. E22 implementation overlap remains owned there; completed E28/E29 evidence is retained in split files, design/devlog and the release record. Planning only; no new runtime activated.
