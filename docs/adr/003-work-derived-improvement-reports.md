@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed implementation contract for the user-approved improvement-loop direction. Planning only.
+Accepted and implemented 2026 09 08. See the improvement release evidence and docs/improvements.md for the operational contract.
 
 ## Date
 
@@ -20,7 +20,7 @@ Use dedicated PostgreSQL improvement, occurrence and transition records. Reuse a
 
 Deduplicate exact normalized failure signatures within a workspace. Retransmitting one occurrence is idempotent; separate real failures can increment occurrence counts. Do not automatically merge feature requests by semantic similarity. Cross-workspace correlation, if later needed, is operator-only and never exposes another workspace's report. A code change, merge or GitHub closure is not verified resolution: require an affected workflow result tied to the deployed fix revision.
 
-Capture no bodies, query strings, transcripts, filesystem paths, credentials or arbitrary exception text automatically. Task context is explicitly supplied, length-limited and covered by the feedback policy. It must be previewable and withdrawable. Local capture fails open, is bounded to 100 records and 7 days, and excludes feedback operations to avoid recursion. Defaults for server retention: delete free text and raw occurrence evidence 30 days after closure or 90 days after submission, whichever comes first; retain content-free lifecycle aggregates for 90 days. Expired context must be shown as unavailable, not reconstructed.
+Capture no bodies, query strings, transcripts, filesystem paths, credentials or arbitrary exception text automatically. Task context is explicitly supplied, length-limited and covered by the feedback policy. It must be previewable and withdrawable. Local capture fails open, is bounded to 100 records and 7 days, and excludes feedback operations to avoid recursion. Defaults for server retention: delete free text and raw occurrence evidence 30 days after closure or 90 days after submission, whichever comes first; purge an entire merged group after every report has been inactive for 90 days, including replay hashes and child records. New occurrences refresh activity; replay is not guaranteed after purge. Expired context must be shown as unavailable, not reconstructed.
 
 ## Consequences
 

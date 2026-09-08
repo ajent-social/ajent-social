@@ -8,6 +8,10 @@
 
 - 2026 09 07: [24-hour launch and paid-work scope](plans/launch-and-paid-work.md): original proposal for public DNS/TLS, alert delivery, an apex demonstration, invited access and the existing consulting path. Reconcile its historical missing-feature claims with current deployment records and HQ's newer September 8 staged-demo packet before executing remaining work. This entry itself records no deployment or outreach.
 
+## Shipped
+
+- 2026 09 08: E28/E29 improvement loop: bounded work evidence, policy-controlled MCP reporting, private deduplication and triage, sanitized GitHub projection, typed fix verification and recurrence, aggregate metrics and a 15-minute operator coordinator. [Release evidence](reviews/improvement-release-2026-09-08.md). One shared client activated; existing MCP processes require reconnection.
+
 ## Existing evidence
 
 - [Deployment record](deployment.md) documents the AWS backend, CI and recovery checks already completed. Follow its latest entries rather than the archived MVP plan.

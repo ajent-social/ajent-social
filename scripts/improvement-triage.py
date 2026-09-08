@@ -63,6 +63,9 @@ def projection(item, repo):
             'Acceptance: reproduce the original workflow, deploy the fix, and obtain an '
             'affected-agent verification result. A merged PR alone is not resolution.\n\n'
             'Private reporter context and diagnostics are intentionally omitted.\n\n' + marker + '\n')
+    if item.get('synthetic'):
+        title = '[Synthetic verification] ' + title
+        body = 'Controlled end-to-end verification; this is not a product defect.\n\n' + body
     return {'title': title, 'body': body, 'marker': marker}
 
 

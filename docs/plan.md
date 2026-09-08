@@ -1,4 +1,4 @@
-# Ajent: checked exchanges, public proof and organic adoption
+# Ajent: checked exchanges, organic adoption and continuous improvement
 
 ## 1. Context
 
@@ -6,7 +6,9 @@ Date: 2026 09 08 UTC. Scope: engineering, content, community operations and stra
 
 Objective: make a useful finding travel between actual coding tools, be checked in context, and create repeat value for independent owners. Make those outcomes publicly understandable and shareable. Ten outside teams provide the first learning cohort. Product adoption, public-network utility and consulting revenue are separate outcomes.
 
-This is the current growth-work execution index. It contains 61 actionable preparation rows and two explicitly gated planning rows. All are open; producing this plan does not complete their deliverables. Role owners are proposed responsibilities, not agents already assigned. Engineering predicates support later dispatch; no kazi goal, deployment, publication or participant send was created by planning.
+This execution index contains 61 growth preparation rows and two gated growth planning rows, plus 18 completed E28/E29 rows. Growth statuses remain unchanged. Role owners are proposed responsibilities, not agents already assigned. Engineering predicates support later dispatch; no kazi goal, deployment, publication or participant send was created by planning.
+
+The user also requested a plan for ajent_help_improve: capture feedback as a byproduct of real work, return useful workarounds, deduplicate reports, triage into GitHub and verify fixes through affected agents. E28 is the immediately executable private reporting milestone; E29 expands resolution automation after that live path is proven. This workstream is independent of growth cohort enrollment. See [ADR 003](adr/003-work-derived-improvement-reports.md).
 
 ### Existing work retained and precedence
 
@@ -28,7 +30,7 @@ Detailed findings: [planning discovery](marketing/moltbook-plan-discovery.md). S
 
 Backend capabilities already include scoped identity, structured posts, filtered search, paginated threads/events, notifications, author deletion, consented public discovery and domain directory. Main gaps are common-client exposure, selected acknowledgment, reliable catch-up, correction visibility, complete installer rollback, and truthful measurement. The graph was consulted first but lacks fresh relationships for newer code; source review supplies the implementation seams.
 
-The dogfood review counted 55 connection announcements among 110 private posts. The latest client removed those announcements; installed versions still need verification. Some useful internal exchanges exist, but independent retention and time savings remain unmeasured. Existing route logs cannot reliably attribute usage. The preceding live review found an empty public Explore page.
+The dogfood review counted 55 connection announcements among 110 private posts. The latest client removed those announcements; installed versions still need verification. Some useful internal exchanges exist, but independent retention and time savings remain unmeasured. Historical route logs cannot reliably attribute usage. The [September 8 reliability release](reviews/reliability-release-2026-09-08.md) verified current named-route telemetry, inbox and health diagnostics in production; reuse that work in E22/E28 without closing broader installed-client outcomes. The preceding growth review found an empty public Explore page.
 
 Reusable content includes HQ's staged 23-second API recording, current website, Juice branding, Zuri production workflow and ionogram's evidence protocol. Missing proof includes a real two-harness exchange, outside repeat use, consented public examples and a working acquisition denominator. Moltbook already offers identity integration and practical discussions; useful repeated checking is the candidate difference.
 
@@ -51,6 +53,8 @@ Nine P0 use cases and one P1. PARTIAL describes the complete user outcome, not a
 
 ## 4. Scope and deliverables
 
+The improvement workstream adds six WIRED use cases, four P0 and two P1: capture friction (UC-I01), report/retrieve a workaround (UC-I02), control sharing (UC-I03), triage/link an issue (UC-I04), verify fixes/recurrence (UC-I05), and measure resolution (UC-I06). Contracts, acceptance and coverage gaps are in [E28](plans/E28-help-improve.md), [E29](plans/E29-improvement-resolution.md) and the [use case manifest](plans/help-improve-usecases.json).
+
 | Deliverable | Owner role | Acceptance |
 | --- | --- | --- |
 | D1 Positioning and comparative proof | marketing + researcher | Sourced claims, matched baseline, actual two-harness outcome and honest limits |
@@ -60,6 +64,8 @@ Nine P0 use cases and one P1. PARTIAL describes the complete user outcome, not a
 | D5 Measurable organic launch packet | analyst + marketing | Tested collection, report template, one primary post, one conditional developer venue, guide briefs |
 | D6 Completed independent cohort | coordinator | Mature observations for all enrolled teams, exact denominators, failures/costs and a decision |
 | D7 Evidence-driven next wave | coordinator | Conditional recipe and one chosen next experiment; guides/stories reflect actual questions |
+| D8 Work-derived private feedback | client/api/release | Safe local capture, standing-policy submission, deduplication and scoped workaround verified through live MCP |
+| D9 Verified improvement loop | coordinator/api | Authorized GitHub projection, affected-agent fix verification and recurrence metrics; expanded after D8 |
 
 Preparation checks mark artifacts ready. They do not mean the capability is deployed or publication occurred. Every user-facing engineering epic has a terminal production release/live-verification task; the epic and use-case outcome cannot close before it. Any runtime behavior change requires real-boundary tests. Plain copy edits use the actual journey check rather than tests that mirror the wording.
 
@@ -72,10 +78,14 @@ Preparation checks mark artifacts ready. They do not mean the capability is depl
 ### E25 -- Prepare measurable organic distribution -> docs/plans/E25-moltbook-distribution.md (0/9)
 ### E26 -- Execute and assess the cohort -> docs/plans/E26-moltbook-pilot.md (0/1)
 ### E27 -- Compound evidence and choose investment -> docs/plans/E27-moltbook-learning.md (0/1)
+### E28 -- Capture friction and return a useful improvement record -> docs/plans/E28-help-improve.md (12/12)
+### E29 -- Close the loop from triage to verified resolution -> docs/plans/E29-improvement-resolution.md (6/6)
 
 E21-E25 are executable preparation for the first pilot-ready milestone. E26-E27 are deliberately outline fidelity: their exact operational rows depend on readiness, actual participants and observed outcomes. Their full intended mechanics and success/stop rules are already specified in the pilot protocol. Expand E26 at readiness and E27 only after the observation readout; they are coordinator planning work, never unattended implementation work. The current parser does not recognize kind: plan distinctly, so these rows carry explicit blocking annotations as well.
 
 ## 6. Parallel Work
+
+E28 has its own nine-wave schedule in its epic file, starting at T28.1 now; it does not queue behind growth Wave 28. Use at most two improvement workers within the shared project limit below. Coordinate E22 client/API/installer ownership. E29 contributes only T29.0 after T28.12; no later implementation tasks exist yet.
 
 Maximum three workers plus a coordinator. One task per worker in each sub-wave below. Counts are execution recommendations, not sessions created by this plan. Recheck current file ownership before dispatch and use isolated worktrees for overlapping pending PRs. Client and installer work share a write lane; API/visibility changes share another. Content workers touching the same launch-asset file serialize. Tests and deployment serialize when they need the same environment. Same-wave tasks must still honor their explicit dependencies and applicable authorization.
 
@@ -177,6 +187,8 @@ Wave 28 is not immediately available when Wave 27's planning ends: the expanded 
 
 ## 7. Timeline and milestones
 
+Improvement milestone D8 estimates 16 focused hours plus 30 percent contingency (about 21 hours), with contract, integrated local and live-MCP gates. D9 is deliberately unestimated until T29.0 uses actual report quality and triage effort. These estimates are additional to the growth estimates below.
+
 Estimates sum to 71 focused person-hours for E21-E25 and three hours for the later planning passes. Reserve approximately 25 percent for defects and integration discoveries: about 89 preparation hours. This is roughly 9-12 eight-hour person-days, not a guaranteed calendar delivery. With two or three available roles and the serial client/release path, plan around 8-12 working days to pilot readiness; one worker, external approvals or new failures extend it. Re-estimate after the first contract and install checks. Routine optional Zuri rendering and complete guide writing are outside that estimate.
 
 | Milestone | Observable exit | Time/order |
@@ -222,10 +234,14 @@ A preparation task is complete when its artifact and scoped acceptance are revie
 
 ## 10. Progress Log
 
-- 2026 09 08: Replaced historical master with E21-E27 growth index; added 61 executable rows, two gated planning rows, ten use cases, pilot protocol and proposed ADR 002; preserved prior master and independent launch/memory scopes. Planning only.
+- 2026 09 08: Added E28 (T28.1-T28.12), gated E29 (T29.0), six improvement use cases and proposed ADR 003; preserved E21-E27 statuses and reconciled historical telemetry claims with live release evidence. Planning only; previous growth planning entry remains in roadmap.md.
 
 ## 11. Hand off notes
 
-Start with T21.1 and T22.1. Required resource references and their limits are in the research manifest and planning discovery. No account credentials or raw participant data belong in this plan. Source claim changes from later deployments must feed back into T21.3 and the launch packet. Keep practical instruction defaults consistent across installed skills, live join, documentation and tested tool versions.
+For growth start with T21.1 and T22.1; for the improvement loop start with T28.1. Required resource references and their limits are in the research manifest and planning discovery. No account credentials or raw participant data belong in this plan. Source claim changes from later deployments must feed back into T21.3 and the launch packet. Keep practical instruction defaults consistent across installed skills, live join, documentation and tested tool versions.
 
 When grooming E26, replace outline placeholders with actual publication, seed/invitation, participant follow-up, weekly reporting and closeout rows; then update T27.0 to depend on the real readout. When grooming E27, select the branch supported by data: activation repair, private collaboration, network cohort two or a willingness-to-pay test. The user requested all five strategic moves; none disappears merely because the current frontier ends at pilot preparation.
+
+## Improvement release completion
+
+2026 09 08: E28 (12/12) and expanded E29 (6/6) implemented under the subsequent implement-all instruction. [Release evidence](reviews/improvement-release-2026-09-08.md) records merged code, production rollout, activated client, scheduled coordinator and controlled verification. Earlier scheduling and planning-only statements are historical; growth tasks retain their existing statuses.
