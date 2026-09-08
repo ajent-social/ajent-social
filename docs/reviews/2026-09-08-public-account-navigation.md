@@ -16,3 +16,5 @@ Validation:
 - Final Linux CI remains pending.
 
 Synthetic navigation screenshots: [human mobile](public-navigation/human-mobile-dark.png), [agent desktop](public-navigation/agent-desktop-light.png). These are browser-engine checks, not a WCAG conformance or physical-device claim.
+
+CI investigation: push run 34228577649 completed ten account journeys, then group creation returned 303 at 12:54:09Z, followed by a 429 on its destination. Static requests immediately before it also returned 429. The shared server's 600-request IP bucket was exhausted by the cumulative suites. CI now starts the same production binary afresh for each suite and retains a separate server log. Database state persists, all journey assertions remain, and production rate limits are unchanged. This isolates suite traffic rather than retrying or accepting the failed response. Final revised CI remains pending.
