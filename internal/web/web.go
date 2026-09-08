@@ -566,20 +566,20 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 	if v == nil {
 		return
 	}
+	back := appReturnPath(r.FormValue("back"))
 	action := r.PathValue("action")
 	id := r.FormValue("id")
 	switch action {
 	case "delete", "follow", "unfollow", "save", "unsave", "join", "member", "block", "unblock", "report", "revoke", "moderate":
 		if !validUUID(id) {
-			http.Error(w, "Invalid identifier.", 400)
+			s.actionError(w, r, v, back, "Invalid identifier.", 400)
 			return
 		}
 	}
 	if action == "member" && !validUUID(r.FormValue("agent_id")) {
-		http.Error(w, "Invalid agent identifier.", 400)
+		s.actionError(w, r, v, back, "Invalid agent identifier.", 400)
 		return
 	}
-	back := appReturnPath(r.FormValue("back"))
 	method, path := "POST", ""
 	var payload any
 	switch action {
@@ -631,38 +631,38 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 		payload = map[string]string{"post_id": id, "reason": r.FormValue("reason"), "detail": r.FormValue("detail")}
 	case "agent":
 		if !v.Owner {
-			http.Error(w, "Owner access required.", 403)
+			s.actionError(w, r, v, back, "Owner access required.", 403)
 			return
 		}
 		path = "/v1/agents"
 		payload = map[string]any{"org_id": v.Credential.OrgID, "handle": r.FormValue("handle"), "name": r.FormValue("name"), "public_posting": r.FormValue("public_posting") == "on", "scopes": []string{"network:read", "posts:write", "social:write", "groups:manage"}}
 	case "revoke":
 		if !v.Owner || id == v.Credential.CredID {
-			http.Error(w, "Cannot revoke this owner session credential.", 403)
+			s.actionError(w, r, v, back, "Cannot revoke this owner session credential.", 403)
 			return
 		}
 		var owned bool
 		s.API.DB.Pool.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM credentials cr JOIN agents a ON a.id=cr.agent_id WHERE cr.id::text=$1 AND a.org_id=$2)`, id, v.Credential.OrgID).Scan(&owned)
 		if !owned {
-			http.NotFound(w, r)
+			s.actionError(w, r, v, back, "This action or resource is unavailable.", http.StatusNotFound)
 			return
 		}
 		method = "DELETE"
 		path = "/v1/credentials/" + id
 	case "moderate":
 		if !v.Owner || !validUUID(id) {
-			http.Error(w, "Owner access required.", 403)
+			s.actionError(w, r, v, back, "Owner access required.", 403)
 			return
 		}
 		tx, e := s.API.DB.Pool.Begin(r.Context())
 		if e != nil {
-			http.Error(w, "Database unavailable.", 500)
+			s.actionError(w, r, v, back, "Database unavailable.", 500)
 			return
 		}
 		defer tx.Rollback(r.Context())
 		decision := r.FormValue("decision")
 		if decision != "hide" && decision != "dismiss" {
-			http.Error(w, "Choose hide or dismiss.", 400)
+			s.actionError(w, r, v, back, "Choose hide or dismiss.", 400)
 			return
 		}
 		if decision == "hide" {
@@ -675,13 +675,13 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 			_, e = tx.Exec(r.Context(), `INSERT INTO audit_log(actor,action,object_type,object_id,detail) VALUES($1,'report.reviewed','report',$2,jsonb_build_object('decision',$3::text))`, v.Credential.AgentID, id, decision)
 		}
 		if e != nil || tx.Commit(r.Context()) != nil {
-			http.Error(w, "Could not save review.", 500)
+			s.actionError(w, r, v, back, "Could not save review.", 500)
 			return
 		}
 		redirect(w, r, "/app/settings?notice=Review+saved")
 		return
 	default:
-		http.NotFound(w, r)
+		s.actionError(w, r, v, back, "This action or resource is unavailable.", http.StatusNotFound)
 		return
 	}
 	b, status := s.call(r, v, method, path, payload)
@@ -690,16 +690,7 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 		if detail == "" {
 			detail = "This change could not be saved. Please try again."
 		}
-		if r.Header.Get("HX-Request") == "true" {
-			http.Error(w, detail, status)
-			return
-		}
-		p := s.base(r, v)
-		p.View = "error"
-		p.Title = "Let’s try that again."
-		p.Error = detail
-		p.ReturnPath = back
-		s.renderStatus(w, p, status)
+		s.actionError(w, r, v, back, detail, status)
 		return
 	}
 	if action == "agent" {
@@ -714,6 +705,19 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 	}
 	redirect(w, r, back)
 }
+func (s *Server) actionError(w http.ResponseWriter, r *http.Request, v *Session, back, detail string, status int) {
+	if r.Header.Get("HX-Request") == "true" {
+		http.Error(w, detail, status)
+		return
+	}
+	p := s.base(r, v)
+	p.View = "error"
+	p.Title = "Let’s try that again."
+	p.Error = detail
+	p.ReturnPath = appReturnPath(back)
+	s.renderStatus(w, p, status)
+}
+
 func validUUID(s string) bool { _, e := uuid.Parse(s); return e == nil }
 
 // appReturnPath keeps action recovery within the application, including search
