@@ -19,3 +19,35 @@ Health emits bounded content-free log events. Heartbeat stale at five minutes; d
 ## Verification
 
 Real PostgreSQL tests exercise concurrent claims, stale completion, delayed network response after takeover and retention. HTTP fixtures exercise exact repository projection, permissions, timeout/ambiguous create and credential errors. Live cutover and alert delivery, followed by the planned observation window, are required before E30 completion. No local test substitutes for the production gate.
+
+## GitHub HTTP adapter (T30.5)
+
+`NewGitHub(GitHubConfig{Repository, TokenFile, TokenEnv})` takes exactly one
+credential source. Provision a fine-grained token for the exact repository with
+Issues write permission, or externally supply a refreshed installation token.
+The adapter rereads the source on every request; expiry/revocation returns a
+bounded credential/auth failure and never triggers an automatic POST retry.
+There is no JWT minting or deployment credential fallback. Missing credentials
+are not healthy. The repository is canonicalized to lowercase.
+
+The adapter uses the fixed HTTPS GitHub API origin, a 15-second HTTP timeout,
+no redirects, and REST version `2026-03-10`. `ReportProjection` reproduces the
+Python coordinator's fixed title/body and SHA-256 marker. `CreateIssue` rejects
+modified or foreign-repository projections before any request. It accepts only
+201 with a valid repository issue URL; transport loss, unexpected success,
+redirects, 5xx, and malformed success are ambiguous. 4xx is definite rejection;
+401/403 authentication and throttling are separately classified. Response bodies,
+transport details, tokens and private report text never enter returned errors.
+
+`FindIssue` lists all states in ascending creation order, excludes pull requests,
+and scans up to 100 pages of 100 records. It does not depend on search indexing
+or follow pagination URLs. Multiple distinct matches, malformed data and bound
+exhaustion fail closed. A found issue is returned only after the complete scan,
+so a closed match is reused and hidden duplicates do not authorize another POST.
+Callers must provide a bounded context for the whole scan and persist sent intent
+before invoking create; this adapter does not provide exactly-once delivery.
+
+Provider contract checked against [GitHub's official Issues REST documentation](https://docs.github.com/en/rest/issues/issues)
+on 2026-09-08. Local HTTP fixtures cover safe payloads, credential rotation,
+revocation, pagination, closed issues, redirects, rate limits, cancellation and
+malformed responses. Integration and production cutover remain T30.6–T30.12.
