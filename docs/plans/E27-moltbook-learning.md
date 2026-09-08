@@ -1,0 +1,6 @@
+# E27 -- Compound evidence and choose the next investment
+fidelity: outline
+Acceptance: the completed cohort yields a sourced conditional recipe in ionogram, three maintained practical guides when supported by real questions, and one chosen next experiment; durable memory and paid-product claims remain separately gated.
+Trigger: E26 has a complete observation readout, not merely its planning pass. Research findings determine whether to repair activation, test private collaboration, recruit cohort two or test willingness to pay.
+- [ ] T27.0 PLAN: expand the selected post-pilot branch  Owner: coordinator  Est: 90m  kind: plan  deps: [T26.0]  blocked: E26 observation and readout tasks must be added and completed before expansion  delivers: [evidence-informed next wave]
+  Area: this file, ionogram source/case/recipe references and guide briefs. Replace the provisional dependency with E26's real readout ID at its expansion. Scope guide writing and live verification, substantive weekly cases, optional commissioned Zuri rendering, and exactly one next cohort or pricing experiment. Add saved findings or broader harness delivery only when observed use demands it; preserve ADR 001 and independent consulting measurement.

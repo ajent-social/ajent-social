@@ -9,10 +9,9 @@ const cfg = new pulumi.Config();
 const hostname = cfg.get('hostname') ?? 'ajent.social';
 if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(hostname)) throw new Error('hostname must be a lowercase DNS name');
 const canonicalHostname = cfg.get('canonicalHostname');
+const certificateArn = cfg.get('certificateArn');
 if (canonicalHostname && canonicalHostname !== 'ajent.social') throw new Error('canonicalHostname must be ajent.social for this cutover');
 const legacyOrigin = canonicalHostname ? `https://${hostname}` : undefined;
-const certificateArn = cfg.get('certificateArn');
-const openrouterSecretArn = cfg.get('openrouterSecretArn');
 const imageDigest = cfg.get('imageDigest');
 if(cfg.getBoolean('retireLegacyHost') && !cfg.getBoolean('rollingService')) throw new Error('retireLegacyHost requires rollingService');
 if (imageDigest && !/^sha256:[a-f0-9]{64}$/.test(imageDigest)) throw new Error('imageDigest must be sha256:<64 hex characters>');
@@ -47,6 +46,7 @@ const db = new aws.rds.Instance('database',{
 const repository = new aws.ecr.Repository('application-images',{imageTagMutability:'IMMUTABLE',imageScanningConfiguration:{scanOnPush:true},forceDelete:false,tags});
 const logs = new aws.cloudwatch.LogGroup('application-logs',{retentionInDays:30,tags});
 const alerts = new aws.sns.Topic('alerts',{tags});
+const openrouterSecretArn = cfg.get('openrouterSecretArn');
 const alertEmail = cfg.get('alertEmail');
 if(alertEmail) new aws.sns.TopicSubscription('operator',{topic:alerts.arn,protocol:'email',endpoint:alertEmail});
 for (const [name,metric,threshold,comparison] of [
@@ -60,7 +60,7 @@ if(imageDigest){
     const role = new aws.iam.Role('host',{assumeRolePolicy:aws.iam.assumeRolePolicyForPrincipal({Service:'ec2.amazonaws.com'}),tags});
     const ssm = new aws.iam.RolePolicyAttachment('ssm',{role:role.name,policyArn:'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'});
     const policy = new aws.iam.RolePolicy('runtime',{role:role.id,policy:pulumi.all([dbSecret.arn,ownerSecret.arn,repository.arn,logs.arn]).apply(([d,o,r,l])=>JSON.stringify({Version:'2012-10-17',Statement:[
-        {Effect:'Allow',Action:['secretsmanager:GetSecretValue'],Resource:[d,o]},
+        {Effect:'Allow',Action:['secretsmanager:GetSecretValue'],Resource:[d,o,...(openrouterSecretArn ? [openrouterSecretArn] : [])]},
         {Effect:'Allow',Action:['ecr:GetAuthorizationToken'],Resource:'*'},
         {Effect:'Allow',Action:['ecr:BatchGetImage','ecr:GetDownloadUrlForLayer','ecr:BatchCheckLayerAvailability'],Resource:r},
         {Effect:'Allow',Action:['logs:CreateLogStream','logs:PutLogEvents'],Resource:`${l}:*`},
@@ -73,7 +73,7 @@ if(imageDigest){
     host = new aws.ec2.Instance('application-host',{ami:ami.value,instanceType:'t4g.small',subnetId:publicSubnet.id,vpcSecurityGroupIds:[appSG.id],iamInstanceProfile:profile.name,
         associatePublicIpAddress:true,metadataOptions:{httpTokens:'required',httpEndpoint:'enabled',httpPutResponseHopLimit:2},
         rootBlockDevice:{encrypted:true,volumeType:'gp3',volumeSize:20},userDataReplaceOnChange:true,
-        userData:pulumi.all([db.address,dbSecret.arn,ownerSecret.arn,repository.repositoryUrl,logs.name]).apply(([dbHost,dbArn,ownerArn,repo,logGroup])=>bootstrap({hostname,region,dbHost,dbArn,ownerArn,image:`${repo}@${imageDigest}`,caddyImage:caddyImage!,logGroup,stack})),tags,
+        userData:pulumi.all([db.address,dbSecret.arn,ownerSecret.arn,repository.repositoryUrl,logs.name]).apply(([dbHost,dbArn,ownerArn,repo,logGroup])=>bootstrap({openrouterSecretArn,hostname,region,dbHost,dbArn,ownerArn,image:`${repo}@${imageDigest}`,caddyImage:caddyImage!,logGroup,stack})),tags,
     },{dependsOn:[policy,ssm,dbSecretVersion,ownerSecretVersion,gateway,route]});
     address = new aws.ec2.Eip('application-address',{domain:'vpc',instance:host.id,tags});
     new aws.cloudwatch.MetricAlarm('host-status',{namespace:'AWS/EC2',metricName:'StatusCheckFailed',dimensions:{InstanceId:host.id},statistic:'Maximum',period:60,evaluationPeriods:2,threshold:1,comparisonOperator:'GreaterThanOrEqualToThreshold',treatMissingData:'breaching',alarmActions:[alerts.arn],tags});

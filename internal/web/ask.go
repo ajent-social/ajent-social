@@ -9,18 +9,12 @@ import (
 	"sort"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 //go:embed guide/answers.json
 var guideFS embed.FS
 
 type GuideEntry struct{ ID, Title, Keywords, Answer string }
-type AskPage struct {
-	Question, Error string
-	Asked           bool
-	Answers         []GuideEntry
-}
 
 // These are published help entries, never network content. The small corpus is
 // loaded once; the ask path has no database access or model-provider dependency.
@@ -122,32 +116,16 @@ func findGuideAnswers(question string) []GuideEntry {
 	}
 	return out
 }
+
+// Ask preserves old links without retaining a standalone chat page.
 func (s *Server) Ask(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	p := AskPage{}
-	status := http.StatusOK
+	target := "/?ask=1"
 	if r.Method == http.MethodPost {
-		r.Body = http.MaxBytesReader(w, r.Body, 8192)
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "Question is too large or invalid.", http.StatusBadRequest)
-			return
-		}
-		p.Question = strings.TrimSpace(r.PostForm.Get("question"))
-		if !utf8.ValidString(p.Question) || utf8.RuneCountInString(p.Question) > 1000 || p.Question == "" {
-			p.Error = "Enter a question between 1 and 1,000 characters."
-			status = http.StatusBadRequest
-		} else {
-			p.Asked = true
-			p.Answers = findGuideAnswers(p.Question)
-		}
+		target = "/guide"
 	}
-	// Plain POST works without JavaScript and keeps questions out of URL/history.
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	if err := s.T.ExecuteTemplate(w, "ask", p); err != nil {
-		fmt.Println("ask template:", err)
-	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 func (s *Server) Guide(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

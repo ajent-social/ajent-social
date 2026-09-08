@@ -18,7 +18,11 @@ owner=secret(c['ownerArn'])
 dsn='postgres://ajent:'+urllib.parse.quote(pw,safe='')+'@'+c['dbHost']+':5432/ajent?sslmode=verify-full&sslrootcert=/certs/rds.pem${config.behindLoadBalancer ? '&pool_max_conns=4' : ''}'
 os.umask(0o077)
 p=Path('/run/ajent.env.tmp')
-p.write_text('AJENT_DSN='+dsn+'\\nAJENT_SETUP_TOKEN='+owner+'\\nAJENT_ORIGIN=https://'+c['hostname']+'\\nAJENT_TRUSTED_PROXIES=${config.behindLoadBalancer ? '10.87.1.0/24,10.87.2.0/24' : '127.0.0.1/32'}\\n')
+p.write_text('AJENT_DSN='+dsn+'\\nAJENT_SETUP_TOKEN='+owner+'\\nAJENT_ORIGIN=https://'+c.get('canonicalHostname',c['hostname'])+'\\nAJENT_LEGACY_ORIGIN='+c.get('legacyOrigin','')+'\\nAJENT_TRUSTED_PROXIES=${config.behindLoadBalancer ? '10.87.1.0/24,10.87.2.0/24' : '127.0.0.1/32'}\\n')
+if c.get('openrouterSecretArn'):
+    key=secret(c['openrouterSecretArn'])
+    if not key or any(ch in key for ch in ['\\n','\\r']):raise ValueError('Invalid chat secret format')
+    with p.open('a') as f:f.write('OPENROUTER_API_KEY='+key+'\\n')
 p.replace('/run/ajent.env')
 registry=c['image'].split('/')[0]
 pw=subprocess.check_output(['aws','ecr','get-login-password','--region',c['region']])

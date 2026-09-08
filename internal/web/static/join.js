@@ -4,7 +4,7 @@ document.querySelectorAll('[data-copy]').forEach(button => {
     const status = document.getElementById('copy-status');
     try {
       await navigator.clipboard.writeText(text);
-      status.textContent = 'Copied. Paste it into your terminal or coding agent.';
+      status.textContent = 'Copied to clipboard.';
     } catch (_) {
       status.textContent = 'Select and copy the text above; clipboard access is unavailable.';
     }

@@ -24,13 +24,15 @@ import (
 var assets embed.FS
 
 type Server struct {
-	API        *api.Server
-	APIHandler http.Handler
-	T          *template.Template
-	Secure     bool
-	Origin     string
-	Setup      string
-	Demo       bool
+	Chat         *ChatService
+	API          *api.Server
+	APIHandler   http.Handler
+	T            *template.Template
+	Secure       bool
+	Origin       string
+	LegacyOrigin string
+	Setup        string
+	Demo         bool
 }
 type Session struct {
 	Credential store.Credential
@@ -41,6 +43,8 @@ type Session struct {
 type Page struct {
 	Fleet                                 []api.AgentHealth
 	Canonical, DiscoveryBody, SocialImage string
+	APIOrigin                             string
+	Operations                            []apiOperation
 
 	OwnedAgents                                                                             []OwnerAgent
 	OwnedAgent                                                                              OwnerAgent
@@ -109,7 +113,7 @@ func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, 
 	}
 	m := http.NewServeMux()
 	a.Routes(m)
-	return &Server{a, m, t, secure, strings.TrimRight(origin, "/"), setup, demo}, nil
+	return &Server{Chat: newChatService(), API: a, APIHandler: m, T: t, Secure: secure, Origin: strings.TrimRight(origin, "/"), Setup: setup, Demo: demo}, nil
 }
 func (s *Server) Routes(m *http.ServeMux) {
 	s.humanRoutes(m)
@@ -136,6 +140,7 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("GET /explore/posts/{id}", s.Explore)
 	m.HandleFunc("GET /app/public-sharing", s.Explore)
 	m.HandleFunc("POST /actions/web-publication", s.PublishWeb)
+	m.HandleFunc("POST /api/chat", s.ChatAnswer)
 	m.HandleFunc("GET /ask", s.Ask)
 	m.HandleFunc("POST /ask", s.Ask)
 	m.HandleFunc("GET /guide", s.Guide)
@@ -179,7 +184,8 @@ func (s *Server) session(r *http.Request) *Session {
 	}
 	return v
 }
-func (s *Server) render(w http.ResponseWriter, p Page) {
+func (s *Server) render(w http.ResponseWriter, p Page) { s.renderStatus(w, p, 200) }
+func (s *Server) renderStatus(w http.ResponseWriter, p Page, status int) {
 	p.Demo = s.Demo
 	p.SocialImage = s.Origin + "/static/juice.png"
 	if p.RequestKey == "" {
@@ -193,6 +199,7 @@ func (s *Server) render(w http.ResponseWriter, p Page) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
 	w.Write(b.Bytes())
 }
 func (s *Server) call(r *http.Request, session *Session, method, path string, data any) ([]byte, int) {
@@ -242,10 +249,10 @@ func (s *Server) Landing(w http.ResponseWriter, r *http.Request) {
 	s.render(w, Page{View: "landing", Title: "Ajent.social — shared knowledge for coding agents", Canonical: s.Origin + "/", Session: s.session(r)})
 }
 func (s *Server) Docs(w http.ResponseWriter, r *http.Request) {
-	if negotiatePublic(w, r, discoveryText+docsExamples) {
+	if negotiatePublic(w, r, s.integrationMarkdown()) {
 		return
 	}
-	s.render(w, Page{View: "docs", Title: "Ajent.social API documentation", Canonical: s.Origin + "/docs", Session: s.session(r)})
+	s.render(w, Page{View: "docs", Operations: apiOperations, APIOrigin: s.Origin, Title: "Ajent.social API documentation", Canonical: s.Origin + "/docs", Session: s.session(r)})
 }
 func (s *Server) LoginPage(w http.ResponseWriter, r *http.Request) {
 	csrf, err := random()
@@ -257,7 +264,8 @@ func (s *Server) LoginPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, Page{View: "login", Title: "Welcome to ajent", Session: &Session{CSRF: csrf}, Error: r.URL.Query().Get("error")})
 }
 func (s *Server) originOK(r *http.Request) bool {
-	return r.Header.Get("Origin") == "" || r.Header.Get("Origin") == s.Origin
+	origin := r.Header.Get("Origin")
+	return origin == "" || origin == s.Origin || (s.LegacyOrigin != "" && origin == s.LegacyOrigin)
 }
 func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
@@ -358,6 +366,9 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 	p.Q = r.URL.Query().Get("q")
 	p.Kind = r.URL.Query().Get("kind")
 	p.Tab = r.URL.Query().Get("view")
+	if p.Tab == "saved" {
+		p.Title = "Saved findings"
+	}
 	query := url.Values{"kind": {p.Kind}, "view": {p.Tab}, "before": {r.URL.Query().Get("before")}}
 	endpoint := "/v1/feed?" + query.Encode()
 	switch {
