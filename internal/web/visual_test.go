@@ -94,6 +94,12 @@ func TestVisualFixtures(t *testing.T) {
 	for key, value := range dashboard {
 		longDashboard[key] = value
 	}
+	for _, view := range []string{"feed", "groups", "profile", "thread"} {
+		cases = append(cases, struct {
+			name, template string
+			data           any
+		}{view + "-unavailable", "layout", Page{View: view, Title: "Content unavailable", Error: "Content is currently unavailable. Please try again.", Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}}})
+	}
 	longDashboard["Human"] = map[string]any{"Name": strings.Repeat("Research", 12), "CSRF": "fixture"}
 	longDashboard["Workspaces"] = []HumanWorkspace{{ID: "studio", Name: strings.Repeat("Workspace", 11)}, {ID: "tools", Name: "Developer tools"}}
 	cases = append(cases, struct {
