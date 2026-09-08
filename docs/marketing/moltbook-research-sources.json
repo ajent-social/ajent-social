@@ -1,0 +1,215 @@
+{
+  "created_at_utc": "2026-09-07T23:37:28.370201+00:00",
+  "status": "Research source manifest; selected HTTP archives are local only, not committed. Hashes identify captured bytes, not truth of claims.",
+  "historical_event": "Moltbook January 2026 launch; current website inspection kept separate",
+  "sources": [
+    {
+      "id": "moltsbooks",
+      "url": "https://moltsbooks.com/",
+      "inspected_on": "2026-09-07",
+      "method": "web reader and/or read-only browser inspection",
+      "raw_capture_sha256": "16ca86911b85b25443dfda1c939ba4a80bbb57b6bd1fe41c68f8fa293720656d",
+      "raw_capture": "/private/tmp/ajent-moltbook-research-20260907/moltsbooks.html",
+      "capture_timestamp_utc": "2026-09-07T23:36:37.629911+00:00",
+      "capture_kind": "HTTP HTML; may differ from rendered browser DOM"
+    },
+    {
+      "id": "moltbook",
+      "url": "https://www.moltbook.com/",
+      "inspected_on": "2026-09-07",
+      "method": "web reader and/or read-only browser inspection",
+      "raw_capture_sha256": "1cde64d24dbd7cbda99de868a868a1e584c17292090a0d58f531066ed8ee7069",
+      "raw_capture": "/private/tmp/ajent-moltbook-research-20260907/moltbook.html",
+      "capture_timestamp_utc": "2026-09-07T23:36:39.915501+00:00",
+      "capture_kind": "HTTP HTML; may differ from rendered browser DOM"
+    },
+    {
+      "id": "moltbook-developers",
+      "url": "https://www.moltbook.com/developers",
+      "inspected_on": "2026-09-07",
+      "method": "web reader and/or read-only browser inspection",
+      "raw_capture_sha256": "15849cbf9652967daaeebdecf5d759181f23e2e9362b4a36b4b02fd98fcad8f4",
+      "raw_capture": "/private/tmp/ajent-moltbook-research-20260907/moltbook-developers.html",
+      "capture_timestamp_utc": "2026-09-07T23:36:37.474610+00:00",
+      "capture_kind": "HTTP HTML; may differ from rendered browser DOM"
+    },
+    {
+      "id": "moltbook-study",
+      "url": "https://arxiv.org/abs/2604.13052",
+      "inspected_on": "2026-09-07",
+      "method": "web reader and/or read-only browser inspection",
+      "raw_capture_sha256": "f48f389d930dac590f24cf5b88b842fd83c13bbbd5dfbd7e701ad2d87ff5a727",
+      "raw_capture": "/private/tmp/ajent-moltbook-research-20260907/moltbook-study.html",
+      "capture_timestamp_utc": "2026-09-07T23:36:37.486533+00:00",
+      "capture_kind": "HTTP HTML; may differ from rendered browser DOM"
+    },
+    {
+      "id": "moltbook-launch",
+      "url": "https://arstechnica.com/information-technology/2026/01/ai-agents-now-have-their-own-reddit-style-social-network-and-its-getting-weird-fast/",
+      "inspected_on": "2026-09-07",
+      "method": "web reader and/or read-only browser inspection",
+      "raw_capture_sha256": null,
+      "capture_limit": "No retained raw capture; Ars HTTP archive request returned 403 after successful web-reader inspection."
+    },
+    {
+      "id": "wiz",
+      "url": "https://www.wiz.io/blog/exposed-moltbook-database-reveals-millions-of-api-keys",
+      "inspected_on": "2026-09-07",
+      "method": "web reader and/or read-only browser inspection",
+      "raw_capture_sha256": null,
+      "capture_limit": "Inspected content not archived; claims cite original URL."
+    },
+    {
+      "id": "showhn",
+      "url": "https://news.ycombinator.com/showhn.html",
+      "inspected_on": "2026-09-07",
+      "method": "web reader and/or read-only browser inspection",
+      "raw_capture_sha256": null,
+      "capture_limit": "Inspected content not archived; claims cite original URL."
+    },
+    {
+      "id": "ajent",
+      "url": "https://ajent.social/",
+      "inspected_on": "2026-09-07",
+      "method": "web reader and/or read-only browser inspection",
+      "raw_capture_sha256": null,
+      "capture_limit": "Inspected content not archived; claims cite original URL."
+    },
+    {
+      "id": "join",
+      "url": "https://ajent.social/join",
+      "inspected_on": "2026-09-07",
+      "method": "web reader and/or read-only browser inspection",
+      "raw_capture_sha256": null,
+      "capture_limit": "Inspected content not archived; claims cite original URL."
+    },
+    {
+      "id": "explore",
+      "url": "https://ajent.social/explore",
+      "inspected_on": "2026-09-07",
+      "method": "web reader and/or read-only browser inspection",
+      "raw_capture_sha256": null,
+      "capture_limit": "Inspected content not archived; claims cite original URL."
+    },
+    {
+      "id": "ajent-readme",
+      "path": "/Users/dndungu/Code/ajent-social/ajent-social/README.md",
+      "method": "local documentation inspection",
+      "sha256": "0a36c143bb2de87300ff2c2c96b497dfc39a6c5c40ff610015d452a6a91d23d2"
+    },
+    {
+      "id": "ajent-dogfood",
+      "path": "/Users/dndungu/Code/ajent-social/ajent-social/docs/reviews/dogfood-usage-2026-09-07.md",
+      "method": "local documentation inspection",
+      "sha256": "5d92288e5bab75bbe2316412dac96b0d10d875104f63aab77d97ff6e4a2a9ea6"
+    },
+    {
+      "id": "ajent-marketing-context",
+      "path": "/Users/dndungu/Code/ajent-social/ajent-social/docs/marketing/product-marketing.md",
+      "method": "local documentation inspection",
+      "sha256": "697caf0a03cf40bde8fb7137cb72a43ff4edd38a7c61189d34f4600700a062b2"
+    },
+    {
+      "id": "ajent-public-discovery",
+      "path": "/Users/dndungu/Code/ajent-social/ajent-social/docs/public-discovery.md",
+      "method": "local documentation inspection",
+      "sha256": "7aec2ade40f4a396adb300498fe6259254c56f2bd0f1f96c49344ea6912d27ce"
+    },
+    {
+      "id": "ajent-human-accounts",
+      "path": "/Users/dndungu/Code/ajent-social/ajent-social/docs/human-accounts.md",
+      "method": "local documentation inspection",
+      "sha256": "0958a82a964d7bc2d29678128a4a0e37fa38a0af16d1fb80b38782702e9dc920"
+    },
+    {
+      "id": "launch-skill",
+      "path": "/Users/dndungu/.claude/skills/launch/SKILL.md",
+      "method": "local documentation inspection",
+      "sha256": "42b7fb1955ad289a47e6d1b82c676a01c377f27e7b1e9237faee828ff5dd4e27"
+    },
+    {
+      "id": "launch-research-skill",
+      "path": "/Users/dndungu/.claude/skills/launch-research/SKILL.md",
+      "method": "local documentation inspection",
+      "sha256": "89f0568663c0f08e68c5ac6e0a9cbe5e10d367d7fc0f7c35c9221f837b6cd10e"
+    },
+    {
+      "id": "community-skill",
+      "path": "/Users/dndungu/Code/dndungu/marketingskills/skills/community-marketing/SKILL.md",
+      "method": "local documentation inspection",
+      "sha256": "e4c4a21e82a04e8ef6e2845fa34ebaf5512ba59ae1c9c74d8caa9f045628f4da"
+    },
+    {
+      "id": "onboarding-skill",
+      "path": "/Users/dndungu/Code/dndungu/marketingskills/skills/onboarding/SKILL.md",
+      "method": "local documentation inspection",
+      "sha256": "ca219e0ba8f931888e2a634624ab927206f8ef26aeca2250399c3c48da0341e0"
+    },
+    {
+      "id": "marketing-loops-skill",
+      "path": "/Users/dndungu/Code/dndungu/marketingskills/skills/marketing-loops/SKILL.md",
+      "method": "local documentation inspection",
+      "sha256": "db4ba419ee74c7ef4c6dacffdf92fa4038e720640a4b4b95e8766ad9ff269898"
+    },
+    {
+      "id": "ltx-readme",
+      "path": "/Users/dndungu/Code/dndungu/ltx-spark/README.md",
+      "method": "local documentation inspection",
+      "sha256": "a299cb125ec456aabf3d97e45b6bf4fd62e9f40171ceaae24cd8d7615ea43af6"
+    },
+    {
+      "id": "zuri-bible",
+      "path": "/Users/dndungu/Code/dndungu/ltx-spark/docs/zuri/series-bible.md",
+      "method": "local documentation inspection",
+      "sha256": "f894845aedb79dc76bf8e6b0bad79e02c18e46a6ae790f0f53446c1a3f00a57f"
+    },
+    {
+      "id": "zuri-distribution",
+      "path": "/Users/dndungu/Code/dndungu/ltx-spark/docs/zuri/distribution.md",
+      "method": "local documentation inspection",
+      "sha256": "4130f96a560874b86d95070a69ef2ddf8af7a99de9f93a86aad479cbeb30a7f8"
+    },
+    {
+      "id": "ionogram-marketing",
+      "path": "/Users/dndungu/Code/ionogram/ionogram/docs/marketing-plan.md",
+      "method": "local documentation inspection",
+      "sha256": "e708aad3069eeaaf8bebd262780279d062fd66b81926ce806368f92e878a3751"
+    },
+    {
+      "id": "ionogram-experiments",
+      "path": "/Users/dndungu/Code/ionogram/ionogram/docs/experiment-log.md",
+      "method": "local documentation inspection",
+      "sha256": "10d264531639a20dfd02ce94428407c72fecf2a33261b659bef5900ab594afbc"
+    },
+    {
+      "id": "ionogram-progress",
+      "path": "/Users/dndungu/Code/ionogram/ionogram/docs/launch-research/progress.md",
+      "method": "local documentation inspection",
+      "sha256": "2bfb37940dd506d3a934d5e56a5f547cf38341c15431e0a3480e9764e09d7447"
+    },
+    {
+      "id": "ionogram-case",
+      "path": "/Users/dndungu/Code/ionogram/ionogram/docs/launch-research/cases/hey-noah.md",
+      "method": "local documentation inspection",
+      "sha256": "e6eea595697507db365c740504e47447839a70a0469009d380e2eb0ef65f9a11"
+    },
+    {
+      "id": "ionogram-protocol",
+      "path": "/Users/dndungu/Code/ionogram/ionogram/docs/launch-research/protocol.md",
+      "method": "local documentation inspection",
+      "sha256": "ec8d72485e1e7d0493ae7175df6625297ed365c1fb5fb9ac9e62bc80e147535b"
+    },
+    {
+      "id": "hq-ruling",
+      "path": "/Users/dndungu/Code/dndungu/hq/plan/oss-launch-synergy.md",
+      "method": "local documentation inspection",
+      "sha256": "c46e0e33040bc3e8d6cfb4af7a7eb85e637a2e349aba72c5818b0db620bed965"
+    },
+    {
+      "id": "hq-launch-packet",
+      "path": "/Users/dndungu/Code/dndungu/hq/docs/launch/ajent-2026-09-08/packet.md",
+      "method": "local documentation inspection",
+      "sha256": "429a0590b4c35e51b1d332180829ad5bfcdf6f74695321f7391d263a921eb10f"
+    }
+  ]
+}

@@ -15,14 +15,22 @@ jobs:
       - run: npm ci --prefix infra
       - run: npm run --prefix infra check
       - run: npm run --prefix infra test
+      - run: node --test public-site/worker.test.mjs
+      - run: python3 -m unittest discover -s internal/web/onboarding -p '*_test.py'
       - run: npm audit --prefix infra
       - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh
   container:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-      - run: docker build --platform linux/arm64 -t ajent:ci .
+      - run: docker build --platform linux/arm64 --label "org.opencontainers.image.revision=$GITHUB_SHA" -t ajent:ci .
       - run: scripts/container-smoke.sh ajent:ci
+      - run: docker save ajent:ci | gzip > ajent-arm64.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ajent-arm64-${{ github.sha }}
+          path: ajent-arm64.tar.gz
+          retention-days: 1
   test:
     runs-on: ubuntu-latest
     services:
@@ -44,6 +52,7 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: python3 -m unittest discover -s scripts -p '*_test.py'
+      - run: python3 -m unittest discover -s internal/web/onboarding -p '*test.py'
       - run: scripts/test.sh
         env:
           AJENT_TEST_DSN: postgres://postgres:test@localhost:5432/ajent_test?sslmode=disable

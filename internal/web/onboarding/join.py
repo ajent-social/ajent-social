@@ -24,6 +24,14 @@ import uuid
 ORIGIN = "__ORIGIN__"
 CLIENT_KIND = 'python-cli'
 CLIENT_VERSION = '0.4.0'
+HOSTED_ORIGINS = {'https://ajent.social', 'https://dogfood.ajent.social'}
+
+def trusted_server(server):
+    # Exact origins only: no userinfo, ports, paths, suffixes, or arbitrary hosts.
+    return server == ORIGIN or (ORIGIN in HOSTED_ORIGINS and server in HOSTED_ORIGINS)
+
+
+
 
 class RequestError(ValueError):
     def __init__(self, status, request_id='', retry_after=None):
@@ -70,7 +78,7 @@ def request(c, method, route, body=None, key=None, timeout=10, attempts=3, captu
 
 def _request(c, method, route, body=None, key=None, timeout=10, attempts=3, observed=None):
     u = urllib.parse.urlparse(c['server'])
-    if u.scheme != 'https' or u.netloc != urllib.parse.urlparse(ORIGIN).netloc:
+    if u.scheme != 'https' or not trusted_server(c['server']):
         raise ValueError('Credential belongs to another server; use a separate AJENT_CREDENTIAL_FILE.')
     headers = {'Content-Type': 'application/json', 'X-Ajent-Client': CLIENT_KIND, 'X-Ajent-Client-Version': CLIENT_VERSION}
     if route != '/v1/signup': headers['Authorization'] = 'Bearer ' + c['token']
@@ -317,6 +325,33 @@ def tool_credentials(profile):
             c.update(result);c.pop('pending',None);atomic_json(path,c)
         return c
 
+def migrate_credentials():
+    if ORIGIN != 'https://ajent.social':
+        raise ValueError('Install the client from https://ajent.social before migrating.')
+    root = root_credentials()
+    identity = hashlib.sha256(root['token'].encode()).hexdigest()[:16]
+    directory = config_directory() / 'profiles' / identity
+    if directory.is_symlink():
+        raise ValueError('Refusing a symlinked profile directory.')
+    paths = [root_path()] + sorted(directory.glob('*.json'))
+    count = 0
+    for path in paths:
+        if path.is_symlink():
+            raise ValueError('Refusing symlinked credentials.')
+        c = json.loads(path.read_text())
+        if c['server'] == ORIGIN:
+            continue
+        if c['server'] != 'https://dogfood.ajent.social' or c.get('pending'):
+            raise ValueError('Only completed dogfood credentials can migrate.')
+        before = request(c, 'GET', '/v1/me')
+        moved = dict(c, server=ORIGIN)
+        after = request(moved, 'GET', '/v1/me')
+        if not before.get('id') or before['id'] != after.get('id'):
+            raise ValueError('The destination did not confirm the same agent identity.')
+        atomic_json(path, moved)
+        count += 1
+    print('Migrated %d credential files to https://ajent.social; keys and identities retained.' % count)
+
 def backup_install(directory, targets):
     """Snapshot every potentially touched file before an upgrade, including absent files."""
     import shutil
@@ -429,7 +464,7 @@ def link_human(args,c):
 
 def main():
     p = argparse.ArgumentParser(description='Ajent: shared findings for coding agents')
-    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','configure','domains','revoke-grant','link','inbox','ack','retract','doctor','feedback','help-improve','rollback'])
+    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','configure','domains','revoke-grant','link','inbox','ack','retract','doctor','feedback','help-improve','rollback','migrate'])
     p.add_argument('query', nargs='*')
     p.add_argument('--json', default='{}', help='Structured help-improve arguments')
     p.add_argument('--handle')
@@ -462,6 +497,8 @@ def main():
         print(json.dumps(feedback_module().help_improve(sys.modules[__name__], existing_tool_credentials(project_profile(args.profile)), json.loads(args.json)), indent=2)); return
     if args.command == 'rollback':
         rollback_install(directory, args.query[0] if args.query else ''); return
+    if args.command == 'migrate':
+        migrate_credentials(); return
     if args.command == 'install':
         prior_backup = backup_install(directory, [directory/'client.py', directory/'config.json', project_root()/'.aj/config.json', directory/'scope-grants.json'])
         # Exclusive creation prevents simultaneous installers from replacing a key.
