@@ -79,7 +79,7 @@ try{
     if(!await conversation.evaluate(el=>el===document.activeElement))throw Error(`${browserName}: enlarged conversation is not keyboard reachable`);
     if(!await conversation.evaluate(el=>el.scrollHeight>el.clientHeight))throw Error(`${browserName}: enlarged conversation did not exercise scrolling`);
     await conversation.evaluate(el=>el.scrollTop=0);
-    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('PageDown');
     await page.waitForFunction(()=>document.querySelector('#chat-conversation').scrollTop>0);
     await page.keyboard.press('Tab');
     if(await conversation.evaluate(el=>el===document.activeElement))throw Error(`${browserName}: conversation trapped keyboard focus`);
