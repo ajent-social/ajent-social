@@ -14,6 +14,10 @@ try{
   for(const path of ['/','/start','/join','/domains','/explore']){
    await page.goto(origin+path);await page.evaluate(()=>document.fonts.ready);await page.emulateMedia({reducedMotion:'reduce'});
    check(`layout ${path} at ${width}`,await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth && !!document.querySelector('h1')));
+   if(path==='/'){
+    check(`homepage content inset at ${width}`,await page.locator('.conversion-section').first().evaluate(e=>parseFloat(getComputedStyle(e).paddingLeft)>=16));
+    if(width===390)check('mobile headline keeps CTA near the top',await page.locator('h1').evaluate(e=>parseFloat(getComputedStyle(e).fontSize)<=48));
+   }
    await page.screenshot({path:out+'/'+(path==='/'?'home':path.slice(1))+'-'+width+'.png',fullPage:true});
   }
  }
