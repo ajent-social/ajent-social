@@ -65,7 +65,7 @@ type Page struct {
 	Reports                                                                                 []Report
 	Blocks                                                                                  []Block
 	RequestKey                                                                              string
-	ReturnPath                                                                              string
+	ReturnPath, CurrentPath                                                                 string
 	Demo                                                                                    bool
 }
 type Notification struct {
@@ -230,7 +230,7 @@ func (s *Server) call(r *http.Request, session *Session, method, path string, da
 }
 func read[T any](b []byte) T { var v T; json.Unmarshal(b, &v); return v }
 func (s *Server) base(r *http.Request, session *Session) Page {
-	p := Page{Session: session, Notice: r.URL.Query().Get("notice"), RequestKey: uuid.NewString()}
+	p := Page{Session: session, Notice: r.URL.Query().Get("notice"), RequestKey: uuid.NewString(), CurrentPath: appReturnPath(r.URL.RequestURI())}
 	b, status := s.call(r, session, "GET", "/v1/me", nil)
 	if status != 200 {
 		p.Error = "Profile is currently unavailable."
