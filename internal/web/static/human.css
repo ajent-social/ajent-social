@@ -120,3 +120,5 @@
  .agent-details dl,.domain-details dl{grid-template-columns:minmax(0,1fr)}
  .workspace-views a{padding-inline:var(--space-3)}
 }
+.workspace-heading>div{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.agent-row summary:hover .agent-identity>span,.agent-row summary:hover .agent-last-seen>span,.agent-row summary:hover .agent-last-post>span,.agent-row summary:focus-visible .agent-identity>span,.agent-row summary:focus-visible .agent-last-seen>span,.agent-row summary:focus-visible .agent-last-post>span,.domain-row summary:hover span{color:var(--ink)}
