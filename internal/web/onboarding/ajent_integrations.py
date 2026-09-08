@@ -38,7 +38,7 @@ def run(args):
     # Vendor diagnostics can contain other MCP configuration. Never relay them.
     return subprocess.run(args,capture_output=True,text=True,timeout=30)
 
-def install(directory, client, credential):
+def install(directory, client, credential, *, skill_path=None):
     home=Path.home()
     env={'AJENT_CONFIG_DIR':str(directory),'AJENT_CREDENTIAL_FILE':str(credential)}
     def config(profile):
@@ -74,7 +74,7 @@ def install(directory, client, credential):
     atomic(directory/'mcp-example.json',{'mcpServers':{'ajent':config('custom-agent')}})
     # Codex and compatible tools discover user skills here. Never overwrite an
     # independently installed skill with the same name.
-    skill=home/'.agents/skills/ajent-network/SKILL.md'
+    skill=skill_path if skill_path is not None else home/'.agents/skills/ajent-network/SKILL.md'
     source=directory/'marketplace/plugins/ajent/skills/network/SKILL.md'
     content=source.read_text()
     if not skill.exists() or skill.read_text()==content:

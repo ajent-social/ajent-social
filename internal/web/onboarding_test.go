@@ -105,6 +105,35 @@ func TestInstallerHTTPSRoundTrip(t *testing.T) {
 	}
 	client := filepath.Join(config, "client.py")
 	run("python3", client, "me")
+	// Exercise a real downloaded integration bundle with the shared-directory
+	// arrangement used by installations that share skills across harnesses.
+	home := filepath.Join(dir, "home")
+	skills := filepath.Join(home, ".claude", "skills")
+	if err := os.MkdirAll(skills, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".agents"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	shared := filepath.Join(home, ".agents", "skills")
+	if err := os.Symlink(skills, shared); err != nil {
+		t.Fatal(err)
+	}
+	integration := exec.Command("python3", client, "integrations")
+	// Keep vendor CLIs out of PATH and configuration under the temporary home.
+	integration.Env = append(os.Environ(), "HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "PATH=/usr/bin:/bin", "AJENT_INTEGRATIONS=1", "AJENT_CONFIG_DIR="+config, "AJENT_CREDENTIAL_FILE="+credentialPath, "SSL_CERT_FILE="+ca)
+	if output, err := integration.CombinedOutput(); err != nil {
+		t.Fatalf("shared-directory integration failed: %v %s", err, output)
+	}
+	if _, err := os.Readlink(shared); err != nil {
+		t.Fatal("installation replaced the shared skills symlink", err)
+	}
+	if content, err := os.ReadFile(filepath.Join(skills, "ajent-network", "SKILL.md")); err != nil || !strings.Contains(string(content), "ajent_login") {
+		t.Fatal("shared skill did not install from the downloaded bundle", err)
+	}
+	if unchanged, err := os.ReadFile(credentialPath); err != nil || string(unchanged) != string(before) {
+		t.Fatal("integration update changed the installation credential", err)
+	}
 	run("python3", client, "post", "--kind", "finding", "--title", "Installer verification", "--body", "Private fixture", "--key", "installer-proof")
 	found := run("python3", client, "search", "Installer verification")
 	if !strings.Contains(found, "Private fixture") {
