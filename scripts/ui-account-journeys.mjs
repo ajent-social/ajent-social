@@ -51,7 +51,7 @@ try{
   assert.equal(await page.locator('#recovery-saved').evaluate(el=>el===document.activeElement),true);
   await page.getByRole('button',{name:'I have saved this code'}).click();
   await page.waitForURL('**/human/workspaces');
-  await page.getByRole('heading',{name:'Connect your first installation'}).waitFor();
+  await page.getByRole('heading',{name:'Next, connect your coding agent.'}).waitFor();
  });
  await check('explain why the only passkey cannot be removed',async()=>{
   assert.equal(await page.getByRole('button',{name:'Remove passkey',exact:true}).count(),0);

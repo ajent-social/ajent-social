@@ -79,6 +79,11 @@ func (s *Server) humanCSRF(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) humanPage(w http.ResponseWriter, r *http.Request) {
+	h := s.human(r)
+	if r.URL.Path == "/start" && h != nil {
+		redirect(w, r, "/join")
+		return
+	}
 	csrf, err := random()
 	if err != nil {
 		http.Error(w, "Sign-in unavailable.", 503)
@@ -88,9 +93,10 @@ func (s *Server) humanPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	data := struct {
-		CSRF  string
-		Human *Human
-	}{csrf, s.human(r)}
+		CSRF       string
+		Human      *Human
+		Onboarding bool
+	}{csrf, h, r.URL.Path == "/start"}
 	if err = s.T.ExecuteTemplate(w, "human-login", data); err != nil {
 		http.Error(w, "Sign-in unavailable.", 503)
 	}

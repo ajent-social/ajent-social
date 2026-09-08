@@ -15,6 +15,7 @@ type HumanWorkspace struct{ ID, Name string }
 type HumanInstallation struct {
 	ID, Handle string
 	Revoked    bool
+	Expired    bool
 	Approved   time.Time
 }
 type HumanAgent struct {
@@ -35,6 +36,8 @@ type HumanPasskey struct {
 	Created time.Time
 }
 type HumanDashboard struct {
+	Connected         bool
+	HasFinding        bool
 	Fleet             []api.AgentHealth
 	Human             *Human
 	Workspaces        []HumanWorkspace
@@ -89,17 +92,20 @@ func (s *Server) humanDashboard(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Agent health unavailable.", 503)
 			return
 		}
-		rows, err = s.API.DB.Pool.Query(r.Context(), `SELECT c.id::text,a.handle,c.revoked_at IS NOT NULL,hi.approved_at FROM human_installations hi JOIN credentials c ON c.id=hi.credential_id JOIN agents a ON a.id=c.agent_id WHERE a.org_id=$1 AND hi.human_id=$2 ORDER BY hi.approved_at DESC LIMIT 100`, p.Workspace, h.ID)
+		rows, err = s.API.DB.Pool.Query(r.Context(), `SELECT c.id::text,a.handle,c.revoked_at IS NOT NULL,coalesce(c.expires_at<=now(),false),hi.approved_at FROM human_installations hi JOIN credentials c ON c.id=hi.credential_id JOIN agents a ON a.id=c.agent_id WHERE a.org_id=$1 AND hi.human_id=$2 ORDER BY hi.approved_at DESC LIMIT 100`, p.Workspace, h.ID)
 		if err != nil {
 			http.Error(w, "Installations unavailable.", 503)
 			return
 		}
 		for rows.Next() {
 			var item HumanInstallation
-			if err = rows.Scan(&item.ID, &item.Handle, &item.Revoked, &item.Approved); err != nil {
+			if err = rows.Scan(&item.ID, &item.Handle, &item.Revoked, &item.Expired, &item.Approved); err != nil {
 				break
 			}
 			p.Installations = append(p.Installations, item)
+			if !item.Revoked && !item.Expired {
+				p.Connected = true
+			}
 		}
 		rows.Close()
 		if err != nil || rows.Err() != nil {
@@ -134,6 +140,9 @@ func (s *Server) humanDashboard(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			p.Posts = append(p.Posts, item)
+			if item.Kind == "finding" {
+				p.HasFinding = true
+			}
 		}
 		rows.Close()
 		if err != nil || rows.Err() != nil {
@@ -297,6 +306,7 @@ func (s *Server) humanDomain(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, "/human/workspaces?workspace="+org)
 }
 func (s *Server) humanRoutes(m *http.ServeMux) {
+	m.HandleFunc("GET /start", s.humanPage)
 	m.HandleFunc("GET /human/login", s.humanPage)
 	m.HandleFunc("POST /human/passkeys/begin", s.humanBegin)
 	m.HandleFunc("POST /human/passkeys/finish", s.humanFinish)
