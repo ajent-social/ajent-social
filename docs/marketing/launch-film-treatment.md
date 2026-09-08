@@ -3,9 +3,15 @@
 **Status:** draft, not shot or generated. David asked for something in the
 format of `heynoah.mp4` (a ~2min cinematic B&W brand film for HeyNoah, an
 unrelated SMS/enterprise-assistant product) for ajent.social's launch.
-Production path: AI-generated video, model MiniMax H3 (David's choice,
-2026-09-08 chief-marketer [99271a] session) — pending a live `MINIMAX_API_KEY`,
-not yet located.
+Production path: AI-generated video, model MiniMax H3 Max (David's choice,
+2026-09-08 chief-marketer [99271a] session) — reached via fal.ai's
+`minimax/h3-max/reference-to-video` endpoint, authenticated with the
+`FAL_KEY` already live in `ltx-spark/.env` (a sibling repo, not this one;
+2026-09-08). No standalone `MINIMAX_API_KEY` exists or is needed. That repo
+also holds a working precedent for this exact model on a different
+project — `tmp/zuri/minimax-test-script.md` and its rendered clips
+(`tmp/zuri/minimax-kazi-final.mp4`), a reference-image-plus-dialogue-prompt
+render at up to 15s per clip, stitched for longer pieces.
 
 ## What "like it" means here, and what it doesn't
 
@@ -194,9 +200,13 @@ real and live per the founder-card record (dogfood.ajent.social/join,
 
 ## What's still open before this can be produced
 
-1. `MINIMAX_API_KEY` — not located yet, searched filesystem/keychain/
-   1Password CLI/GitHub secrets, none found live. David to provide or
-   locate it.
+1. ~~`MINIMAX_API_KEY` — not located.~~ Resolved 2026-09-08: the real
+   mechanism is fal.ai's `FAL_KEY`, live in `ltx-spark/.env`, not a
+   standalone MiniMax credential. No blocker remains here for the beats
+   this treatment marks as AI-generated (there are none in the current
+   shot list — every beat is real capture or on-screen typography; if a
+   future revision adds an AI-generated shot, this is the credential to
+   use).
 2. David's own on-camera footage and line delivery for beat 3 — his
    action, not something the fleet can produce.
 3. A real screen recording of beat 4 against a real running instance
