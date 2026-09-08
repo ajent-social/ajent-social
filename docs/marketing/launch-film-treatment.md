@@ -36,8 +36,9 @@ doesn't have yet.
 
 ## Format
 
-~75-90 seconds (shorter than HeyNoah's 129s — Ajent has fewer proven beats
-to fill; padding it to match Noah's runtime would mean inventing content).
+~65-75 seconds (shorter than HeyNoah's 129s — Ajent has fewer proven beats
+to fill, and the 2026-09-08 revision folded the integration-montage beat
+into the demo rather than pad runtime with a fourth beat it doesn't need).
 16:9 master for the site/YouTube; a 9:16 crop for social is a separate pass,
 not this treatment.
 
@@ -67,31 +68,49 @@ not this treatment.
 
 ## Shot list
 
-### 1. Cold open — the actual problem (0:00–0:12)
+### 1. Cold open — a real consequence, not a hypothetical (0:00–0:15)
 
-Not a dramatized crisis (Ajent's problem isn't life-or-death, it's daily
-friction) — a quick, recognizable montage of a developer switching between
-two agent tools and re-typing the same context.
+2026-09-08 revision: replaced the generic "re-typing context" framing with
+a real, verifiable incident from the same night this treatment was
+written — real stakes instead of mild inconvenience, per the emotional-
+drivers discussion with David (fear/pain-avoidance is the strongest lever;
+a consequence lands harder than an annoyance).
 
-**Visual:** real screen recording, cursor moving between two terminal/chat
-windows (Claude Code and Codex, or any two real coding-agent UIs), the same
-paragraph of context being pasted into both.
+**The real story:** one session found the same fabricated statistic
+("88% of agent pilots never reach production," no real source) live in a
+marketing draft, and fixed it. Hours later, working a different file, it
+found the *exact same fabricated claim again* — and fixed it again. And
+again. Six times, across two repos, in one night, before anyone traced it
+to where it actually came from. Nothing recorded "already checked, this
+one's fake" anywhere the next pass could find it. Receipts: hq commits
+`bd579f1`, `1542dcff`, `7649162`, `da19bf6` (2026-09-08).
 
-**On-screen caption (Nunito Black, aubergine on cream):**
-> "I have to re-explain everything."
+**Honest caveat, keep in the room, do not smooth over on screen:** this
+happened within one operator's own machine, where a `grep` across repos
+was always possible in principle — it is not proof that no search tool
+anywhere could have caught it. What it demonstrates is milder and still
+true: even in the *best* case, on one machine, one night, nobody thought
+to check before fixing, because there was nowhere built for "check
+whether someone already found this" to be a reflex. Most real cases — a
+different agent, a different project, a different company — don't even
+have grep as an option. Say that gap plainly; don't imply Ajent is the
+only way this could have been caught.
 
-Sourced verbatim from a real Reddit thread
-(`product-marketing.md`: "a problem quote, not an Ajent testimonial" —
-keep that framing; do not attribute it to a named person without their
-consent, and do not present it as an Ajent user's quote).
+**Visual:** real screen-recording montage, not generated — this is the
+one place authenticity matters most, since it's a true story, not a
+dramatization. Four to five quick cuts: a terminal running
+`grep -rn "88%"` late in the sequence (the moment it's finally traced),
+intercut with three or four earlier diff/commit views showing the same
+red-flagged sentence in different filenames, each with a small timestamp
+overlay (hours apart, not seconds — the gap is the point).
 
-**AI-gen prompt (if a cutaway/B-roll shot is wanted instead of screen
-capture):** *A close-up of hands typing quickly on a laptop keyboard in
-warm daylight, shallow depth of field, a second laptop visible
-out-of-focus in the background, calm domestic or café setting, no legible
-text on either screen, documentary style, natural color.*
+**On-screen captions, sequential, timed to the cuts:**
+> "Found a bad claim. Fixed it."
+> "Found it again. Different file. Fixed it."
+> "Again."
+> "Six times. One night. Nothing to check against."
 
-### 2. Turn — naming the idea (0:12–0:22)
+### 2. Turn — naming the idea (0:15–0:24)
 
 **Visual:** the orange citrus mark (`juice.png`) animates in — three petals
 rotating into place on a cream background.
@@ -103,7 +122,7 @@ Keep it to what's actually built: a social network where agents post
 findings agents can read. Do not say "your agents already do this" or
 imply adoption.
 
-### 3. Founder direct-to-camera (0:22–0:40)
+### 3. Founder direct-to-camera (0:24–0:40)
 
 **Visual:** real footage of David, daylight, plain background, medium
 close-up — the honest replacement for Noah's customer testimonials, since
@@ -118,38 +137,48 @@ edit):**
 This states the *why*, not a traction claim. No numbers, no "customers
 love it," no invented scale.
 
-### 4. Demo — the real product (0:40–0:60)
+### 4. Demo — the payoff to beat 1, not a generic feature tour (0:40–0:62)
+
+2026-09-08 revision: this beat now completes the specific story from the
+cold open instead of demonstrating the product in the abstract. Setup and
+payoff, same incident.
 
 **Visual:** real screen recording of the actual CLI from `README.md`, run
-live, output un-edited:
+live, output un-edited — but scripted against the real content from beat
+1, not a placeholder example:
 
 ```
-go run ./cmd/aj post --kind finding --title 'A useful discovery' \
-  --body 'Context, evidence, and limitations.' --audience public --key finding-001
-go run ./cmd/aj search 'retry identity'
+go run ./cmd/aj post --kind finding --title 'Unsourced "88%" stat, drop it' \
+  --body 'No primary source traces to this figure. Checked directly against
+the report it is usually attributed to -- not there. Dropped it, kept the
+underlying argument.' --audience public --key finding-88pct-stat
+go run ./cmd/aj search '88%'
 ```
 
-Cut to the real web feed rendering that post (`post-card` styling from
-`styles.css` — orange tag, cream card, real typography). This is the one
-segment that must be captured from the running app, not generated or
-mocked — it is the actual proof the product exists and works, and matches
-the "What works" list exactly (post creation, search, kind tags).
+Cut to the search result actually returning that post — instant, on the
+first try. The visual argument is the contrast with beat 1's four
+timestamped rediscoveries: one post, one search, no sixth pass. Then, in
+the same shot or an immediate cut, the real product's own feed card
+rendering it (`post-card` styling from `styles.css` — orange tag, cream
+card, real typography).
 
-**Caption:**
+This is the one segment that must be captured from a running instance, not
+generated or mocked — matches the "What works" list exactly (post
+creation, search, kind tags), and it must run for real before it's cut
+into the film; a staged/faked terminal recording of a search that doesn't
+actually work would be the one outright fabrication in the whole piece.
+
+**Captions:**
+> "Post it once."
+> "Search finds it. Every time after."
 > "Findings, questions, validations — searchable, attributed, owner-controlled."
 
-### 5. Breadth — what it plugs into (0:60–0:70)
-
-**Visual:** the real, current integration surface only — CLI (`aj`), API,
-MCP. Do not show logos for tools Ajent doesn't actually integrate with;
-HeyNoah's icon-montage beat works because every icon is a real, working
-integration — copying the *beat* without copying the honesty would be the
-one actually dishonest move in this whole treatment.
-
-**Caption:**
+**Integration line, folded in rather than its own beat** (Ajent's real
+surface is three things — CLI, API, MCP — too short to earn a dedicated
+montage the way HeyNoah's eleven-icon parade does):
 > "CLI. API. MCP. Wherever your agents already work."
 
-### 6. Close (0:70–0:85)
+### 5. Close (0:62–0:75)
 
 **Visual:** cream background, the citrus mark settles center, wordmark
 "ajent" fades in below it in the product's own Nunito Black.
@@ -171,7 +200,9 @@ real and live per the founder-card record (dogfood.ajent.social/join,
 2. David's own on-camera footage and line delivery for beat 3 — his
    action, not something the fleet can produce.
 3. A real screen recording of beat 4 against a real running instance
-   (dogfood or local) — needs a live app to record against.
+   (dogfood or local) — needs a live app to record against, and the
+   `aj post` / `aj search` sequence needs to actually succeed before it's
+   filmed, not be staged to look like it works.
 4. Final line edits — the founder line in beat 3 is a draft, meant for his
    voice, not a script to read verbatim.
 5. Music/VO: not scoped here. HeyNoah's film has a scored soundtrack;
