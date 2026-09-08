@@ -25,11 +25,18 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def api(credential, method, route, body=None):
-    origin = credential['server'].rstrip('/')
-    u = urllib.parse.urlsplit(origin)
-    if u.scheme != 'https' or not u.netloc or u.username or u.password or u.path or u.query or u.fragment:
+def canonical_origin(server):
+    u = urllib.parse.urlsplit(server.rstrip('/'))
+    if u.scheme != 'https' or not u.hostname or u.username or u.password or u.path or u.query or u.fragment:
         raise ValueError('Credential server must be an HTTPS origin')
+    host = u.hostname.lower()
+    if ':' in host: host = '[' + host + ']'
+    if u.port and u.port != 443: host += ':' + str(u.port)
+    return 'https://' + host
+
+
+def api(credential, method, route, body=None):
+    origin = canonical_origin(credential['server'])
     request = urllib.request.Request(origin + route,
         data=json.dumps(body).encode() if body is not None else None,
         headers={'Authorization': 'Bearer ' + credential['token'],
@@ -46,7 +53,7 @@ def projection(item, repo):
     identity = item['id']
     if not re.fullmatch(r'[a-f0-9-]{36}', identity):
         raise ValueError('Invalid report identity')
-    marker = '<!-- ajent-improvement:' + hashlib.sha256((repo + ':' + identity).encode()).hexdigest() + ' -->'
+    marker = '<!-- ajent-improvement:' + hashlib.sha256((repo.lower() + ':' + identity).encode()).hexdigest() + ' -->'
     # Avoid posting even allowlisted route/error strings from a remote response.
     # Operators inspect details through the private Ajent report interface.
     operation = {'/v1/me': 'identity lookup', '/v1/feed': 'feed retrieval', '/v1/search': 'search', '/v1/posts': 'publication', '/v1/posts/{id}': 'post access', '/v1/inbox': 'inbox retrieval', '/v1/inbox/ack': 'inbox acknowledgment', '/v1/reliability': 'diagnostics', '/v1/groups/{id}/posts': 'workspace feed retrieval'}.get(item.get('route'), 'workflow')
@@ -129,7 +136,7 @@ def sync_one(c, repo, item, apply, state_dir):
         return {'action': 'already_linked', 'issue_url': item['issue_url']}
     if not apply:
         return {'action': 'draft', 'projection': p}
-    key = hashlib.sha256((repo + ':' + item['id']).encode()).hexdigest()
+    key = hashlib.sha256((repo.lower() + ':' + item['id']).encode()).hexdigest()
     journal = state_dir / (key + '.json')
     if journal.is_symlink():
         raise ValueError('Refusing symlinked journal')
@@ -158,16 +165,21 @@ def main():
     parser.add_argument('--apply', action='store_true', help='Publish the sanitized projection and link it; default is dry run')
     parser.add_argument('--state-dir', type=Path, default=Path.home() / '.aj' / 'triage-state')
     parser.add_argument('--report-id', help='Only this canonical report UUID')
+    parser.add_argument('--include-synthetic', action='store_true', help='Explicit controlled verification only; requires --report-id')
     args = parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', args.repo):
         parser.error('Use an exact owner/repository')
+    if args.include_synthetic and not args.report_id:
+        parser.error('--include-synthetic requires a single --report-id')
     c = json.loads(args.credential.read_text())
-    key = hashlib.sha256((c['server'] + ':' + args.repo).encode()).hexdigest()
+    key = hashlib.sha256((canonical_origin(c['server']) + ':' + args.repo.lower()).encode()).hexdigest()
     with coordinator_lock(args.state_dir, key):
         after = ''
         while True:
             page = api(c, 'GET', '/v1/improvements' + ('?cursor=' + urllib.parse.quote(after) if after else ''))
             for item in page['items']:
+                if item.get('synthetic') and not args.include_synthetic:
+                    continue
                 if args.report_id and item['id'] != args.report_id:
                     continue
                 if item['status'] not in ('triaged', 'planned', 'shipped_awaiting_verification'):

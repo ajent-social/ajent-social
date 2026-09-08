@@ -55,6 +55,9 @@ def state(directory, wait=True):
             with os.fdopen(out, 'w') as stream:
                 json.dump(value, stream); stream.flush(); os.fsync(stream.fileno())
             os.replace(tmp, path)
+            directory_fd = os.open(directory, os.O_RDONLY)
+            try: os.fsync(directory_fd)
+            finally: os.close(directory_fd)
         finally:
             if os.path.exists(tmp): os.unlink(tmp)
     finally:
@@ -120,7 +123,7 @@ def help_improve(client, credentials, args):
             outcome = args.get('outcome')
             if outcome not in ('reproduced', 'not_reproduced', 'unable_to_verify', 'deferred', 'dismissed'): raise ValueError('Invalid verification outcome.')
             with state(directory) as value:
-                if not value.get('policy') or value['policy'].get('revoked'): return {'submission_state': 'local_draft', 'next_action': 'Set installation feedback policy to send verification.'}
+                if value.get('policy', {}).get('version') != 1 or value.get('policy', {}).get('revoked', True): return {'submission_state': 'local_draft', 'next_action': 'Set installation feedback policy to send verification.'}
             with state(directory) as value:
                 operation = next((r for r in value['records'] if r.get('scope') == scope and r.get('verify_report') == args['report_id'] and r.get('verification_payload', {}).get('deployed_revision') == args.get('deployed_revision') and 'result' not in r), None)
                 if operation is None:
@@ -131,6 +134,8 @@ def help_improve(client, credentials, args):
                 payload = dict(operation['verification_payload'])
                 if payload['outcome'] != outcome or ('verification_evidence' in args and payload['evidence'] != args['verification_evidence']) or ('verification_id' in args and payload['verification_id'] != args['verification_id']):
                     return {'submission_state': 'queued_original', 'verification_id': payload['verification_id'], 'next_action': 'An earlier verification is pending. Retry its original outcome and evidence before submitting a different result.'}
+            with state(directory) as value:
+                if value.get('policy', {}).get('version') != 1 or value.get('policy', {}).get('revoked', True): return {'submission_state': 'local_draft'}
             try: result = client.request(credentials, 'POST', path + '/verify', payload, payload['verification_id'])
             except client.RequestError as error: return {'submission_state': 'queued', 'verification_id': payload['verification_id'], **error.diagnostic()}
             with state(directory) as value:
@@ -142,8 +147,8 @@ def help_improve(client, credentials, args):
     if category not in ('bug', 'feature', 'friction'): raise ValueError('Invalid category.')
     context = {key: args.get(key, '') for key in FIELDS}
     if any(not isinstance(v, str) or len(v) > 1000 for v in context.values()): raise ValueError('Context fields must be strings up to 1000 characters.')
-    minutes = args.get('workaround_minutes', 0)
-    if type(minutes) is not int or not 0 <= minutes <= 10080: raise ValueError('Invalid workaround minutes.')
+    minutes = args.get('workaround_minutes')
+    if minutes is not None and (type(minutes) is not int or not 0 <= minutes <= 10080): raise ValueError('Invalid workaround minutes.')
     if category == 'feature' and (not context['attempted_job'] or not context['expected']): raise ValueError('Feature requests require attempted_job and expected missing capability.')
     with state(directory) as value:
         ident = args.get('evidence_id')
@@ -167,7 +172,7 @@ def help_improve(client, credentials, args):
     try:
         # Check revocation again immediately before sending after capability lookup.
         with state(directory) as value:
-            if value.get('policy', {}).get('revoked', True): return {'submission_state': 'local_draft'}
+            if value.get('policy', {}).get('version') != 1 or value.get('policy', {}).get('revoked', True): return {'submission_state': 'local_draft'}
         result = client.request(credentials, 'POST', '/v1/improvements', payload, payload['occurrence_id'])
     except client.RequestError as error:
         return {'submission_state': 'queued', 'evidence_id': payload['occurrence_id'], **error.diagnostic()}

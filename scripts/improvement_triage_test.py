@@ -47,3 +47,8 @@ class ImprovementTriageTest(unittest.TestCase):
     def test_projection_marker_stable(self):
         a=m.projection(self.item,'example/project');self.item['version']=8
         self.assertEqual(a['marker'],m.projection(self.item,'example/project')['marker'])
+
+    def test_origin_lock_identity_is_canonical(self):
+        self.assertEqual(m.canonical_origin('https://EXAMPLE.test:443/'),m.canonical_origin('https://example.test'))
+    def test_origin_rejects_credentials(self):
+        with self.assertRaises(ValueError):m.canonical_origin('https://user:secret@example.test')

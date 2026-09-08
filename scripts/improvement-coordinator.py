@@ -14,7 +14,7 @@ triage = importlib.util.module_from_spec(spec); spec.loader.exec_module(triage)
 def run(credential, repo, directory, apply=False):
     directory.mkdir(parents=True, mode=0o700, exist_ok=True)
     credential_value = json.loads(credential.read_text())
-    key = triage.hashlib.sha256((credential_value['server'] + ':' + repo).encode()).hexdigest()
+    key = triage.hashlib.sha256((triage.canonical_origin(credential_value['server']) + ':' + repo.lower()).encode()).hexdigest()
     summary = {'sampled_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                'state': 'running', 'actions': {}, 'apply': apply}
     with triage.coordinator_lock(directory, key):
