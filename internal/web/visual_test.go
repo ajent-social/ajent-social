@@ -109,6 +109,15 @@ func TestVisualFixtures(t *testing.T) {
 		"Grants":  []map[string]any{{"ID": "grant", "Domain": longAgent.VerifiedDomain, "Scope": "project:" + strings.Repeat("b", 64)}},
 		"Agents":  []map[string]any{{"ID": "agent", "Handle": longAgent.Handle, "Domain": longAgent.VerifiedDomain}},
 	}})
+	cases = append(cases, struct {
+		name, template string
+		data           any
+	}{"action-error", "layout", Page{View: "error", Title: "Let’s try that again.", Error: "This change could not be saved. Return to the page and choose another action.", ReturnPath: "/app/groups/00000000-0000-0000-0000-000000000001", Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}}})
+	cases = append(cases, struct {
+		name, template string
+		data           any
+	}{"feed-request-error", "layout", Page{View: "feed", Title: "Your feed", Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}}})
+
 	output := os.Getenv("AJENT_VISUAL_OUTPUT")
 	if output != "" {
 		if err := os.MkdirAll(output, 0700); err != nil {

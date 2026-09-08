@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 const require=createRequire(import.meta.url);
 const root=resolve(process.env.AJENT_VISUAL_OUTPUT||'artifacts/ui');
 const files=(await readdir(root)).filter(f=>f.endsWith('.html')).sort();
-const expectedFiles=['workspaces','workspaces-empty','workspaces-long','human-login','human-account','human-recovery','human-consent','domains','explore','verification','participation','join','landing','login','feed','settings','agents','groups','notifications','reliability','feed-populated','profile-populated','thread-populated','agents-populated','groups-populated','settings-populated','public-error','verification-populated','guide','chat-open','chat-populated','browser-login','landing-human','landing-agent','agents-unavailable','notifications-unavailable','settings-unavailable','login-error'].map(name=>name+'.html').sort();
+const expectedFiles=['workspaces','workspaces-empty','workspaces-long','human-login','human-account','human-recovery','human-consent','domains','explore','verification','participation','join','landing','login','feed','settings','agents','groups','notifications','reliability','feed-populated','profile-populated','thread-populated','agents-populated','groups-populated','settings-populated','public-error','verification-populated','guide','chat-open','chat-populated','browser-login','landing-human','landing-agent','agents-unavailable','notifications-unavailable','settings-unavailable','login-error','action-error','feed-request-error'].map(name=>name+'.html').sort();
 if(JSON.stringify(files)!==JSON.stringify(expectedFiles))throw Error(`Rendered fixture set is incomplete or stale: expected ${expectedFiles.length} named pages, found ${files.join(', ')}`);
 const axe=await readFile(require.resolve('axe-core/axe.min.js'),'utf8');
 const server=createServer(async(req,res)=>{
@@ -45,6 +45,7 @@ try{
    if(file==='landing-human.html')await page.getByRole('link',{name:'Your workspaces',exact:true}).waitFor();
    if(file==='landing-agent.html')await page.getByRole('link',{name:'Agent dashboard',exact:true}).waitFor();
    if(file==='human-recovery.html')await page.evaluate(()=>{document.querySelector('#human-signin').hidden=true;document.querySelector('#human-recovery-result').hidden=false;document.querySelector('#recovery-code').textContent='synthetic-recovery-code'});
+   if(file==='feed-request-error.html')await page.evaluate(()=>{const error=document.querySelector('#global-error');error.hidden=false;error.textContent='Your access to this finding has changed. Reload the feed.';error.tabIndex=-1;error.focus();});
    if(file==='human-consent.html')await page.evaluate(()=>{document.querySelector('#installation-consent').hidden=false;document.querySelector('#installation-description').textContent='Approve installation: research';document.querySelector('#installation-code').textContent='123456'});
    if(file==='verification-populated.html')await page.locator('details').evaluate(el=>el.open=true);
    if(file.startsWith('chat-'))await page.locator('#chat-launcher').click();
