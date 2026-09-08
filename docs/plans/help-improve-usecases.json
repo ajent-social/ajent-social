@@ -1,13 +1,133 @@
 {
   "date_utc": "2026-09-08",
   "scope": "work-derived-improvement-feedback",
-  "plans": ["docs/plans/E28-help-improve.md", "docs/plans/E29-improvement-resolution.md"],
+  "plans": [
+    "docs/plans/E28-help-improve.md",
+    "docs/plans/E29-improvement-resolution.md"
+  ],
   "usecases": [
-    {"id":"UC-I01","domain":"client","name":"Capture friction without interrupting work","actor":"coding_agent","preconditions":["Ajent client installed"],"interfaces":["client request wrapper"],"expected_outcome":"One bounded safe occurrence per logical failure, retained across restart","priority":"P0","wiring_status":"PLANNED","coverage":{"has_tests":false}},
-    {"id":"UC-I02","domain":"improvements","name":"Report once and retrieve a workaround","actor":"coding_agent","preconditions":["Feedback policy enabled","Scoped agent credential"],"interfaces":["MCP ajent_help_improve report/status","POST /v1/improvements","GET /v1/improvements/{id}"],"expected_outcome":"Durable deduplicated receipt with safe actionable status despite retries","priority":"P0","wiring_status":"PLANNED","coverage":{"has_tests":false}},
-    {"id":"UC-I03","domain":"authorization","name":"Control feedback sharing and withdrawal","actor":"installation_owner","preconditions":["Existing installation"],"interfaces":["CLI feedback policy/preview/clear","DELETE /v1/improvements/{id}"],"expected_outcome":"Explicit policy, private drafts when disabled, scoped reads and withdrawable context","priority":"P0","wiring_status":"PLANNED","coverage":{"has_tests":false}},
-    {"id":"UC-I04","domain":"triage","name":"Triage evidence and link a real issue","actor":"authorized_product_triager","preconditions":["Product triage capability","Publication authority for projected issue"],"interfaces":["Operator improvement API/CLI","GitHub projection"],"expected_outcome":"One prioritized actionable issue with reporter-safe status and no private evidence leak","priority":"P1","wiring_status":"PLANNED","coverage":{"has_tests":false}},
-    {"id":"UC-I05","domain":"inbox","name":"Verify a deployed fix and report recurrence","actor":"affected_coding_agent","preconditions":["Deployed fix linked to report","Authorized verification receipt"],"interfaces":["MCP ajent_inbox","MCP ajent_help_improve verify"],"expected_outcome":"Original task retried and outcome tied to release; recurrence returns to triage","priority":"P0","wiring_status":"PLANNED","coverage":{"has_tests":false}},
-    {"id":"UC-I06","domain":"observability","name":"Measure resolution instead of reporting activity","actor":"operator","preconditions":["Observed report and eligible-operation window"],"interfaces":["Aggregate reporting script","Structured telemetry"],"expected_outcome":"Recurrence, verified resolution latency and coverage with honest denominators","priority":"P1","wiring_status":"PLANNED","coverage":{"has_tests":false}}
+    {
+      "id": "UC-I01",
+      "domain": "client",
+      "name": "Capture friction without interrupting work",
+      "actor": "coding_agent",
+      "preconditions": [
+        "Ajent client installed"
+      ],
+      "interfaces": [
+        "client request wrapper"
+      ],
+      "expected_outcome": "One bounded safe occurrence per logical failure, retained across restart",
+      "priority": "P0",
+      "wiring_status": "WIRED",
+      "coverage": {
+        "has_tests": true,
+        "evidence": "docs/reviews/improvement-release-2026-09-08.md"
+      }
+    },
+    {
+      "id": "UC-I02",
+      "domain": "improvements",
+      "name": "Report once and retrieve a workaround",
+      "actor": "coding_agent",
+      "preconditions": [
+        "Feedback policy enabled",
+        "Scoped agent credential"
+      ],
+      "interfaces": [
+        "MCP ajent_help_improve report/status",
+        "POST /v1/improvements",
+        "GET /v1/improvements/{id}"
+      ],
+      "expected_outcome": "Durable deduplicated receipt with safe actionable status despite retries",
+      "priority": "P0",
+      "wiring_status": "WIRED",
+      "coverage": {
+        "has_tests": true,
+        "evidence": "docs/reviews/improvement-release-2026-09-08.md"
+      }
+    },
+    {
+      "id": "UC-I03",
+      "domain": "authorization",
+      "name": "Control feedback sharing and withdrawal",
+      "actor": "installation_owner",
+      "preconditions": [
+        "Existing installation"
+      ],
+      "interfaces": [
+        "CLI feedback policy/preview/clear",
+        "DELETE /v1/improvements/{id}"
+      ],
+      "expected_outcome": "Explicit policy, private drafts when disabled, scoped reads and withdrawable context",
+      "priority": "P0",
+      "wiring_status": "WIRED",
+      "coverage": {
+        "has_tests": true,
+        "evidence": "docs/reviews/improvement-release-2026-09-08.md"
+      }
+    },
+    {
+      "id": "UC-I04",
+      "domain": "triage",
+      "name": "Triage evidence and link a real issue",
+      "actor": "authorized_product_triager",
+      "preconditions": [
+        "Product triage capability",
+        "Publication authority for projected issue"
+      ],
+      "interfaces": [
+        "Operator improvement API/CLI",
+        "GitHub projection"
+      ],
+      "expected_outcome": "One prioritized actionable issue with reporter-safe status and no private evidence leak",
+      "priority": "P1",
+      "wiring_status": "WIRED",
+      "coverage": {
+        "has_tests": true,
+        "evidence": "docs/reviews/improvement-release-2026-09-08.md"
+      }
+    },
+    {
+      "id": "UC-I05",
+      "domain": "inbox",
+      "name": "Verify a deployed fix and report recurrence",
+      "actor": "affected_coding_agent",
+      "preconditions": [
+        "Deployed fix linked to report",
+        "Authorized verification receipt"
+      ],
+      "interfaces": [
+        "MCP ajent_inbox",
+        "MCP ajent_help_improve verify"
+      ],
+      "expected_outcome": "Original task retried and outcome tied to release; recurrence returns to triage",
+      "priority": "P0",
+      "wiring_status": "WIRED",
+      "coverage": {
+        "has_tests": true,
+        "evidence": "docs/reviews/improvement-release-2026-09-08.md"
+      }
+    },
+    {
+      "id": "UC-I06",
+      "domain": "observability",
+      "name": "Measure resolution instead of reporting activity",
+      "actor": "operator",
+      "preconditions": [
+        "Observed report and eligible-operation window"
+      ],
+      "interfaces": [
+        "Aggregate reporting script",
+        "Structured telemetry"
+      ],
+      "expected_outcome": "Recurrence, verified resolution latency and coverage with honest denominators",
+      "priority": "P1",
+      "wiring_status": "WIRED",
+      "coverage": {
+        "has_tests": true,
+        "evidence": "docs/reviews/improvement-release-2026-09-08.md"
+      }
+    }
   ]
 }

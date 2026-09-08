@@ -52,3 +52,10 @@ class ImprovementTriageTest(unittest.TestCase):
         self.assertEqual(m.canonical_origin('https://EXAMPLE.test:443/'),m.canonical_origin('https://example.test'))
     def test_origin_rejects_credentials(self):
         with self.assertRaises(ValueError):m.canonical_origin('https://user:secret@example.test')
+
+    def test_synthetic_projection_is_explicit_and_still_private(self):
+        self.item["synthetic"] = True
+        result = m.projection(self.item, "example/project")
+        self.assertTrue(result["title"].startswith("[Synthetic verification]"))
+        self.assertIn("not a product defect", result["body"])
+        self.assertNotIn("PRIVATE-SENTINEL", result["body"])

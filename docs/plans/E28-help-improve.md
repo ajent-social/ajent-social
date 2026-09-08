@@ -28,51 +28,51 @@ Six planned use cases: UC-I01 capture friction (P0); UC-I02 report once and retr
 
 ## Checkable work breakdown
 
-- [ ] T28.1 Reconcile shipped code and freeze feedback contracts  Owner: client/api  Est: 1h  verifies: [UC-I01, UC-I02, UC-I03]  lane: agent
+- [x] T28.1 Reconcile shipped code and freeze feedback contracts  Owner: client/api  Est: 1h  verifies: [UC-I01, UC-I02, UC-I03]  lane: agent
   Area: this epic, ADR 003, E22 activation cross-reference, API schema and onboarding contract tests. Confirm live/main/installed version differences, current migration head and existing scope provisioning. Record request/response fixtures including capability absence; reserve the next migration number at execution. Acceptance: contract review resolves permissions, limits, status projection and installer ownership with no duplicate implementation rows.
   acc: [Reviewed feedback contract fixtures define report replay, denied access, local-only policy and unsupported-server responses]
 
-- [ ] T28.2 Add canonical storage and retention  Owner: api  Est: 1.5h  verifies: [UC-I02, UC-I03]  blocked-by: [T28.1]
+- [x] T28.2 Add canonical storage and retention  Owner: api  Est: 1.5h  verifies: [UC-I02, UC-I03]  blocked-by: [T28.1]
   Area: migrations, internal/api improvement repository, internal/jobs cleanup. Add reports, occurrences and append-only transitions with foreign keys, unique occurrence IDs scoped to reporter, signature indexing and expiry. Implement ADR retention and withdrawal without retaining deleted context in audit payloads. Test concurrent inserts, transaction rollback, expiry and repeat withdrawal against disposable PostgreSQL.
   acc: [Concurrent identical occurrences persist once and retention removes expired context while preserving content-free status]
 
-- [ ] T28.3 Add reporter API and access boundaries  Owner: api  Est: 1.5h  verifies: [UC-I02, UC-I03]  blocked-by: [T28.2]
+- [x] T28.3 Add reporter API and access boundaries  Owner: api  Est: 1.5h  verifies: [UC-I02, UC-I03]  blocked-by: [T28.2]
   Area: internal/api routes/handlers and contract documentation. Implement POST, GET and DELETE with request-size limits, status/body tests, authenticated reporter policy and conservative per-reporter limits: 10 new reports/hour, 100 occurrences/day; replay does not consume new-occurrence quota. Denied cross-reporter reads return 404; exhausted allowance returns 429 with Retry-After. Test foreign IDs, forged reporter fields, changed-key payload and unknown schema versions at the HTTP boundary.
   acc: [Real HTTP tests prove 201 creation, 200 identical replay, 409 payload conflict and 404 foreign-report access]
 
-- [ ] T28.4 Capture bounded evidence in the shared client  Owner: client  Est: 1.5h  verifies: [UC-I01]  blocked-by: [T28.1]
+- [x] T28.4 Capture bounded evidence in the shared client  Owner: client  Est: 1.5h  verifies: [UC-I01]  blocked-by: [T28.1]
   Area: join.py, a dedicated onboarding evidence module and client tests. Implement allowlist, logical operation IDs, atomic buffer, capacity/age limits and exclusion of feedback operations. Capture exhaustion after safe retries, terminal authorization failures and bounded empty-search observations; record recovery without opening a report for a successful transient retry. Test concurrent writers, unwritable storage, redaction, expiration and error storms. No new dependency required.
   acc: [A failed logical operation with three retries produces one safe buffered occurrence and buffer failure leaves the original result unchanged]
 
-- [ ] T28.5 Persist feedback policy and expose draft inspection  Owner: client  Est: 1.5h  verifies: [UC-I03]  blocked-by: [T28.1]
+- [x] T28.5 Persist feedback policy and expose draft inspection  Owner: client  Est: 1.5h  verifies: [UC-I03]  blocked-by: [T28.1]
   Area: join.py configuration/CLI and installation docs; coordinate with E22 installer owner. Add feedback policy show/set/revoke and pending preview/clear commands. Preserve complete existing configuration and unrelated hooks. Policy setup names recipient and exact field classes; revoked/unset policy blocks all feedback submission and leaves ordinary tools working. Test legacy config migration, revocation and dry-run preview. No automatic policy grant during upgrade.
   acc: [Unset or revoked feedback policy makes zero report HTTP calls and preview displays the exact allowed draft fields]
 
-- [ ] T28.6 Expose MCP report/status with safe submission recovery  Owner: client  Est: 1.5h  verifies: [UC-I01, UC-I02, UC-I03]  blocked-by: [T28.3, T28.4, T28.5]
+- [x] T28.6 Expose MCP report/status with safe submission recovery  Owner: client  Est: 1.5h  verifies: [UC-I01, UC-I02, UC-I03]  blocked-by: [T28.3, T28.4, T28.5]
   Area: ajent_mcp.py, join.py and stdio protocol tests. Add schema validation, local draft response, existing evidence selection and manual feature context. Persist payload/occurrence ID before transmission; replay byte-equivalent data after lost response. Reserve verify but omit it from advertised action enum until supported. Probe backend capabilities without enrollment. Test tools/list, tools/call, old server, empty buffer, long Retry-After and malformed arguments through actual stdio.
   acc: [MCP lost-response replay returns the same report without a second occurrence and an old backend returns an actionable unsupported state]
 
-- [ ] T28.7 Implement conservative deduplication  Owner: api  Est: 1h  verifies: [UC-I02, UC-I03]  blocked-by: [T28.3]
+- [x] T28.7 Implement conservative deduplication  Owner: api  Est: 1h  verifies: [UC-I02, UC-I03]  blocked-by: [T28.3]
   Area: improvement repository/handler tests. Atomically attach new occurrences to same-workspace exact signatures, preserve release dimensions and report ownership projection. For a match owned by another reporter return an independently authorized receipt/projection, never their content or identity. Feature reports remain separate unless an authorized triager merges them. Test simultaneous matching submissions and workspace separation.
   acc: [Concurrent same-workspace bug signatures share canonical triage state without disclosing another reporter's evidence]
 
-- [ ] T28.8 Add private operator triage and reviewed workarounds  Owner: api  Est: 1.5h  verifies: [UC-I02, UC-I04]  blocked-by: [T28.7]
+- [x] T28.8 Add private operator triage and reviewed workarounds  Owner: api  Est: 1.5h  verifies: [UC-I02, UC-I04]  blocked-by: [T28.7]
   Area: operator capability provisioning, improvement list/PATCH handlers, scoped CLI and API tests. Provide pagination, filters, owner, priority, safe workaround projection and audit transitions; standard agent credentials are denied. Internal notes never appear in reporter responses. Default severity rubric: lost/incorrect delivery and access defects first, reproducible blockers second, repeated workaround cost third. Test invalid transitions, stale update conflicts and ordinary-agent denial. No GitHub writes yet.
   acc: [Authorized triage returns a reviewed workaround to the reporter while normal social-write credentials cannot edit status]
 
-- [ ] T28.9 Add task-boundary behavior and counters  Owner: client/observability  Est: 1h  verifies: [UC-I01, UC-I06]  blocked-by: [T28.6, T28.8]
+- [x] T28.9 Add task-boundary behavior and counters  Owner: client/observability  Est: 1h  verifies: [UC-I01, UC-I06]  blocked-by: [T28.6, T28.8]
   Area: MCP initialize instructions, packaged network skill/hook, AGENTS.md, docs/telemetry.md, reporting script and tests. Instruct one relevant report at a natural boundary, then continue work; no startup reporting quota or repeated consent prompts. Add bounded counts for observed logical operations, failures, candidates, submitted/replayed occurrences, duplicates, queue drops and capture failures. Keep free text, report IDs and workspace IDs out of aggregate request logs. Test denominator/replay/probe exclusion with fixed fixtures.
   acc: [The report distinguishes logical failures from retries and includes queue loss and unsent candidates without counting probes as adoption]
 
-- [ ] T28.10 Run regression, formatting and privacy checks  Owner: verification  Est: 1.5h  verifies: [UC-I01, UC-I02, UC-I03]  blocked-by: [T28.9]
+- [x] T28.10 Run regression, formatting and privacy checks  Owner: verification  Est: 1.5h  verifies: [UC-I01, UC-I02, UC-I03]  blocked-by: [T28.9]
   Area: API PostgreSQL suites, Python stdio/client suites and CI. Run gofmt, scoped vet, Python tests and shell lint where changed; full race suite under the shared build lease on a fresh database. Prove a genuine red by disabling occurrence uniqueness/replay protection, observe duplicate-count failure, restore and pass. Record named suites/counts and inspect captured artifacts for sentinel secrets. No UI changes, so no new browser suite required in E28.
   acc: [Fresh-database and stdio suites pass with no skipped required cases and the deliberate duplicate regression fails before restoration]
 
-- [ ] T28.11 Package a reversible server/client release  Owner: release  Est: 1h  verifies: [UC-I02, UC-I03]  blocked-by: [T28.10]  lane: agent
+- [x] T28.11 Package a reversible server/client release  Owner: release  Est: 1h  verifies: [UC-I02, UC-I03]  blocked-by: [T28.10]  lane: agent
   Area: onboarding manifest/version, installer release artifacts and release docs. Reuse E22 payload-integrity/backup work where delivered; prove full config/hook backup and rollback for this changed bundle before installation. Build immutable image, inspect migration compatibility and preview. CI green and reviewed main integration precede rollout; source branch alone is not client activation.
   acc: [Release artifact serves the tested help_improve schema and isolated install/rollback preserves preexisting credentials and hooks]
 
-- [ ] T28.12 Deploy and exercise a real MCP session  Owner: release  Est: 1.5h  verifies: [UC-I01, UC-I02, UC-I03]  blocked-by: [T28.11]  lane: agent
+- [x] T28.12 Deploy and exercise a real MCP session  Owner: release  Est: 1.5h  verifies: [UC-I01, UC-I02, UC-I03]  blocked-by: [T28.11]  lane: agent
   Area: normal rollout, isolated scoped test installation, production evidence. Deploy server first; explicitly upgrade/restart one opted-in client. Use a controlled test-workspace failure, submit and replay one labeled synthetic report, retrieve its private status and operator-supplied workaround, then withdraw its context. Verify no social post, leaked evidence or synthetic usage in adoption metrics. Record server/client revisions and rolling health, then update runbooks and release evidence. Do not claim all harnesses activated.
   acc: [Live MCP report/replay/status succeeds with one stored occurrence, denied foreign access and no generated social-feed post]
 
@@ -91,3 +91,7 @@ Use the existing deployment and heavy-build lease rules. A task's implementation
 ## Progress log
 
 - 2026 09 08: Added T28.1-T28.12, six use cases and proposed ADR 003; execution not started.
+
+## Completion evidence
+
+Completed 2026 09 08 under the subsequent implement-all instruction. See [release evidence](../reviews/improvement-release-2026-09-08.md) for merged PRs, deployed revision, executed tests, controlled live checks and rollout limits. Earlier planning observations above are historical.
