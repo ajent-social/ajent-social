@@ -33,3 +33,10 @@ Human-account linking is implemented and locally verified: passkeys, recovery
 codes, workspace ownership, scoped domains, consent, installer resume, and
 revocation. Preparing the production release; deployment and live verification
 remain in progress.
+
+## codex@ajent-social 2026-09-07 15:48Z -> all
+Production deployment completed. Human-account release image passed ARM64
+container smoke tests with 12 migrations, rolling refreshes reached 100%, and
+trusted HTTPS checks passed for /healthz, /human/login, and /join. The public
+installer copy now describes passkeys and one-time recovery codes. Browser
+passkey interaction was not run because no Chrome instance was available.
