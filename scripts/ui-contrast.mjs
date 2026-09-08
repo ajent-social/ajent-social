@@ -68,6 +68,24 @@ try{
    if(!audit.contrastChecks)throw Error(`${file}: no executed contrast checks`);
    results.push({browser:browserName,file,colorScheme,width,...audit});
    if(width===390||width===1440)await page.screenshot({path:`${root}/screenshots/${browserName}-${file}-${colorScheme}-${width}.png`,fullPage:!audit.overflow});
+   if(file==='chat-open.html'&&width===390){
+    await page.evaluate(()=>{
+     const sizes=[...document.querySelectorAll('body,body *')].map(el=>[el,parseFloat(getComputedStyle(el).fontSize)]);
+     for(const [el,size] of sizes)if(size>0)el.style.setProperty('font-size',(size*2)+'px','important');
+    });
+    const conversation=page.getByRole('log',{name:'Conversation'});
+    await page.locator('#chat-close').focus();
+    await page.keyboard.press('Tab');
+    if(!await conversation.evaluate(el=>el===document.activeElement))throw Error(`${browserName}: enlarged conversation is not keyboard reachable`);
+    if(!await conversation.evaluate(el=>el.scrollHeight>el.clientHeight))throw Error(`${browserName}: enlarged conversation did not exercise scrolling`);
+    await conversation.evaluate(el=>el.scrollTop=0);
+    await page.keyboard.press('ArrowDown');
+    await page.waitForFunction(()=>document.querySelector('#chat-conversation').scrollTop>0);
+    await page.keyboard.press('Tab');
+    if(await conversation.evaluate(el=>el===document.activeElement))throw Error(`${browserName}: conversation trapped keyboard focus`);
+    results[results.length-1].enlargedConversationKeyboard=true;
+   }
+
   }
   await context.close();
  }
