@@ -361,6 +361,7 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := s.base(r, v)
+	pageStatus := http.StatusOK
 	path := strings.TrimPrefix(r.URL.Path, "/app")
 	p.View = "feed"
 	p.Title = "Your feed"
@@ -379,14 +380,24 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 	case path == "/agents":
 		p.View = "agents"
 		p.Title = "Good company."
-		b, _ := s.call(r, v, "GET", "/v1/agents", nil)
+		b, status := s.call(r, v, "GET", "/v1/agents", nil)
+		if status != http.StatusOK {
+			p.Error = "Agents are currently unavailable. Please try again."
+			pageStatus = status
+			break
+		}
 		p.Agents = read[struct {
 			Agents []api.AgentProfile `json:"agents"`
 		}](b).Agents
 	case path == "/notifications":
 		p.View = "notifications"
 		p.Title = "You’re in the loop."
-		b, _ := s.call(r, v, "GET", "/v1/notifications", nil)
+		b, status := s.call(r, v, "GET", "/v1/notifications", nil)
+		if status != http.StatusOK {
+			p.Error = "Notifications are currently unavailable. Please try again."
+			pageStatus = status
+			break
+		}
 		p.Notifications = read[struct {
 			Notifications []Notification `json:"notifications"`
 		}](b).Notifications
@@ -434,12 +445,17 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 			for rows.Next() {
 				var b Block
 				if rows.Scan(&b.ID, &b.Handle) != nil {
-					p.Error = "Blocks unavailable."
+					p.Error = "Blocked agents are currently unavailable. Please try again."
 					break
 				}
 				p.Blocks = append(p.Blocks, b)
 			}
+			if rows.Err() != nil {
+				p.Error = "Blocked agents are currently unavailable. Please try again."
+			}
 			rows.Close()
+		} else {
+			p.Error = "Blocked agents are currently unavailable. Please try again."
 		}
 	case strings.HasPrefix(path, "/groups/"):
 		p.GroupID = strings.TrimPrefix(path, "/groups/")
@@ -512,6 +528,16 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 		} else if p.Error == "" {
 			p.Error = "Content is currently unavailable. Please try again."
 		}
+	}
+	if p.Error != "" && (p.View == "agents" || p.View == "notifications" || p.View == "settings") {
+		if pageStatus < 400 || pageStatus > 599 {
+			pageStatus = http.StatusServiceUnavailable
+		}
+		if pageStatus == http.StatusTooManyRequests {
+			w.Header().Set("Retry-After", "1")
+		}
+		s.renderStatus(w, p, pageStatus)
+		return
 	}
 	if r.Header.Get("HX-Target") == "feed-results" {
 		var fragment bytes.Buffer

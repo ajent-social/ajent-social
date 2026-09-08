@@ -30,9 +30,16 @@
  const status=document.getElementById('human-status');
  const csrf=root.dataset.csrf;
  const pendingKey='ajent-pending-installation';
- if(location.pathname==='/human/link' && location.hash.length>1){
+ let pendingToken='',pendingStored=false;
+ try{pendingToken=sessionStorage.getItem(pendingKey)||'';pendingStored=!!pendingToken;}catch{}
+ if(!/^[A-Za-z0-9_-]{43}$/.test(pendingToken)){pendingToken='';pendingStored=false;}
+ function clearPending(){pendingToken='';pendingStored=false;try{sessionStorage.removeItem(pendingKey);}catch{}}
+ if(['/human/link','/human/login'].includes(location.pathname) && location.hash.length>1){
   const token=location.hash.slice(1);
-  if(/^[A-Za-z0-9_-]{43}$/.test(token))sessionStorage.setItem(pendingKey,token);
+  if(/^[A-Za-z0-9_-]{43}$/.test(token)){
+   pendingToken=token;pendingStored=false;
+   try{sessionStorage.setItem(pendingKey,token);pendingStored=true;}catch{}
+  }
   history.replaceState(null,'',location.pathname);
  }
  const decode=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
@@ -41,7 +48,10 @@
   const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(body)});
   if(!response.ok){const error=Error(await response.text());error.status=response.status;throw error;}return response.json();
  }
- const destination=()=>sessionStorage.getItem(pendingKey)?'/human/link':'/human/workspaces';
+ // The fragment is never sent to the server. The query forces a page load when
+ // returning to this same link page; capture above immediately removes both.
+ const resume=path=>path+(pendingToken&&!pendingStored?'?resume=1#'+pendingToken:'');
+ const destination=()=>pendingToken?resume('/human/link'):'/human/workspaces';
  function completed(result){
   status.textContent='Signed in successfully.';
   if(result.recovery_code){
@@ -49,7 +59,7 @@
    document.getElementById('human-recovery-result').hidden=false;
    document.getElementById('recovery-saved').focus();
    document.getElementById('recovery-code').textContent=result.recovery_code;
-   document.getElementById('recovery-saved').onclick=()=>location.assign(result.redirect==='/human/login'?result.redirect:destination());
+   document.getElementById('recovery-saved').onclick=()=>location.assign(result.redirect==='/human/login'?resume(result.redirect):destination());
   }else location.assign(destination());
  }
  let busy=false;
@@ -97,7 +107,7 @@
   try{completed(await request('/human/recover',{Code:field.value.trim()}));field.value='';}catch(error){failed(error,error.status===401?field:null);}finally{setBusy(false);}
  });
  async function preview(){
-  const token=sessionStorage.getItem(pendingKey);if(!token||root.dataset.signedIn!=='yes')return;
+  const token=pendingToken;if(!token||root.dataset.signedIn!=='yes')return;
   const result=await request('/human/link/preview',{Token:token});
   const form=document.getElementById('installation-form');
   form.elements.csrf.value=result.csrf;form.elements.token.value=token;
@@ -120,10 +130,10 @@
    try{
     const response=await fetch(form.getAttribute('action'),{method:'POST',body:new URLSearchParams(new FormData(form))});
     if(!response.ok)throw Error(await response.text());
-    sessionStorage.removeItem(pendingKey);location.assign(response.url);
+    clearPending();location.assign(response.url);
    }catch(error){status.textContent=error.message;}finally{button.disabled=false;}
   };
  }
- document.getElementById('cancel-link').onclick=()=>sessionStorage.removeItem(pendingKey);
+ document.getElementById('cancel-link').onclick=clearPending;
  preview().catch(error=>{status.textContent=error.message;});
 })();
