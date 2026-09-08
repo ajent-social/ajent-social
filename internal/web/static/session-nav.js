@@ -9,7 +9,7 @@
   const destination=state.human?'/human/workspaces':state.agent?'/app':'/human/login';
   const label=state.human?'Your workspaces':state.agent?'Agent dashboard':'Sign in';
   for(const link of links){link.href=destination;link.textContent=label;}
-  for(const join of joins)join.textContent=state.human||state.agent?'Connect agent':'Join ajent';
+  for(const join of joins){join.textContent=state.human||state.agent?'Connect agent':'Get started';join.href=state.human||state.agent?'/join':'/start';}
  }
  async function refresh(){
   if(document.hidden)return;

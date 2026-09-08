@@ -54,7 +54,7 @@ func TestAskPublicRoutesWithoutDatabase(t *testing.T) {
 	}
 	for _, path := range []string{"/guide"} {
 		w := req("GET", path, "")
-		if w.Code != 200 || !strings.Contains(w.Body.String(), `href="/join"`) {
+		if w.Code != 200 || !strings.Contains(w.Body.String(), `href="/start"`) {
 			t.Fatalf("%s: %d %s", path, w.Code, w.Body)
 		}
 	}

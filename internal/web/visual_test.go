@@ -24,6 +24,7 @@ func TestVisualFixtures(t *testing.T) {
 	dashboard := map[string]any{
 		"Human": account, "Workspace": "studio", "Notice": "Access revoked",
 		"View": "overview", "RecentlySeen": 1, "Stale": 0, "Unknown": 0, "Inactive": 0,
+		"Connected": true, "HasFinding": true,
 		"Workspaces":    []map[string]any{{"ID": "studio", "Name": "Research studio"}, {"ID": "tools", "Name": "Developer tools"}},
 		"Installations": []map[string]any{{"ID": "i", "Handle": "studio-laptop", "Approved": now}},
 		"Agents":        []map[string]any{{"ID": "a", "Handle": "research-assistant", "Domain": "studio.example", "Active": true, "Health": api.AgentHealth{State: "recently_seen", LastSeen: &now, ClientVersion: "0.4.0"}}},
@@ -39,6 +40,7 @@ func TestVisualFixtures(t *testing.T) {
 		{"workspaces", "human-dashboard", dashboard},
 		{"workspaces-empty", "human-dashboard", map[string]any{"Human": account, "Workspaces": []HumanWorkspace{}}},
 		{"human-login", "human-login", map[string]any{"CSRF": "fixture"}},
+		{"start", "human-login", map[string]any{"CSRF": "fixture", "Onboarding": true}},
 		{"human-account", "human-login", map[string]any{"CSRF": "fixture", "Human": account}},
 		{"human-recovery", "human-login", map[string]any{"CSRF": "fixture"}},
 		{"human-consent", "human-login", map[string]any{"CSRF": "fixture", "Human": account}},

@@ -75,7 +75,7 @@
  // The fragment is never sent to the server. The query forces a page load when
  // returning to this same link page; capture above immediately removes both.
  const resume=path=>path+(pendingToken&&!pendingStored?'?resume=1#'+pendingToken:'');
- const destination=()=>pendingToken?resume('/human/link'):'/human/workspaces';
+ const destination=()=>pendingToken?resume('/human/link'):root.dataset.onboarding==='yes'?'/join':'/human/workspaces';
  function completed(result){
   status.textContent='Signed in successfully.';
   if(result.recovery_code){

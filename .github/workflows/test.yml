@@ -48,7 +48,7 @@ jobs:
           go build -o artifacts/ajentd ./cmd/ajentd
           # Each suite represents a separate session. Do not let fast, uncached
           # asset loads from earlier suites consume the next suite's IP budget.
-          for suite in account feed help storage pointer; do
+          for suite in account feed help storage pointer conversion; do
             mkdir -p "artifacts/$suite-journeys"
             artifacts/ajentd -addr 127.0.0.1:55440 > "artifacts/$suite-journeys/server.log" 2>&1 &
             server_pid=$!
@@ -86,6 +86,7 @@ jobs:
             artifacts/help-journeys
             artifacts/storage-journeys
             artifacts/pointer-journeys
+            artifacts/conversion-journeys
   container:
     runs-on: ubuntu-24.04-arm
     steps:
