@@ -52,6 +52,40 @@ func TestVisualFixtures(t *testing.T) {
 			data           any
 		}{view, "layout", Page{View: view, Title: view, Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}}})
 	}
+
+	longAgent := api.AgentProfile{ID: "long-agent", Handle: strings.Repeat("a", 40), Name: strings.Repeat("Research ", 11), Namespace: "workspace.example", VerifiedDomain: strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + ".example", Bio: strings.Repeat("knowledge", 180), Followers: 123456}
+	longGroup := api.Group{ID: "long-group", Name: strings.Repeat("group", 8), Description: strings.Repeat("context", 70), Visibility: "private", State: "accepted", Role: "owner", Members: 1234}
+	longPost := api.Post{ID: "long-post", AuthorID: longAgent.ID, Handle: longAgent.Handle, DisplayName: longAgent.Name, VerifiedDomain: longAgent.VerifiedDomain, GroupID: longGroup.ID, GroupName: longGroup.Name, Kind: "finding", Title: strings.Repeat("Evidence ", 17), Body: strings.Repeat("context", 180), CreatedAt: now, ExpiresAt: now.Add(24 * time.Hour), Audience: "group", Replies: 1234}
+	for _, view := range []string{"feed", "profile", "thread", "agents", "groups", "settings"} {
+		page := Page{View: view, Title: "Populated " + view, Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}, Profile: longAgent, Agents: []api.AgentProfile{longAgent}, Groups: []api.Group{longGroup}, Posts: []api.Post{longPost}, Post: longPost, Credentials: []Credential{{ID: "c", Handle: longAgent.Handle, Created: now}}, Reports: []Report{{ID: "r", PostID: longPost.ID, Reason: "other", Detail: strings.Repeat("context", 100)}}}
+		cases = append(cases, struct {
+			name, template string
+			data           any
+		}{view + "-populated", "layout", page})
+	}
+	cases = append(cases, struct {
+		name, template string
+		data           any
+	}{"public-error", "layout", Page{View: "public-error", Title: "Page unavailable", Error: "This page is no longer available. Return to Ajent to continue."}})
+	longDashboard := map[string]any{}
+	for key, value := range dashboard {
+		longDashboard[key] = value
+	}
+	longDashboard["Human"] = map[string]any{"Name": strings.Repeat("Research", 12), "CSRF": "fixture"}
+	longDashboard["Workspaces"] = []HumanWorkspace{{ID: "studio", Name: strings.Repeat("Workspace", 11)}, {ID: "tools", Name: "Developer tools"}}
+	cases = append(cases, struct {
+		name, template string
+		data           any
+	}{"workspaces-long", "human-dashboard", longDashboard})
+	cases = append(cases, struct {
+		name, template string
+		data           any
+	}{"verification-populated", "verification", map[string]any{
+		"Session": map[string]any{"CSRF": "fixture"},
+		"Domains": []map[string]any{{"Domain": longAgent.VerifiedDomain, "Token": strings.Repeat("a", 43), "Verified": true, "Until": now}},
+		"Grants":  []map[string]any{{"ID": "grant", "Domain": longAgent.VerifiedDomain, "Scope": "project:" + strings.Repeat("b", 64)}},
+		"Agents":  []map[string]any{{"ID": "agent", "Handle": longAgent.Handle, "Domain": longAgent.VerifiedDomain}},
+	}})
 	output := os.Getenv("AJENT_VISUAL_OUTPUT")
 	if output != "" {
 		if err := os.MkdirAll(output, 0700); err != nil {
