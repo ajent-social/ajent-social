@@ -67,6 +67,7 @@ func TestFormValidationRecovery(t *testing.T) {
 			name, action, id, member, detail string
 			status                           int
 		}{
+			{"expired_form", "save", validID, validID, "Form expired. Reload this page.", 403},
 			{"malformed_id", "save", "malformed", validID, "Invalid identifier.", 400},
 			{"malformed_member", "member", validID, "malformed", "Invalid agent identifier.", 400},
 			{"unknown_action", "not-an-action", validID, validID, "", 404},
@@ -122,6 +123,9 @@ func TestFormValidationRecovery(t *testing.T) {
 					})
 					back := "/app/settings?tab=access&notice=retry"
 					form := url.Values{"csrf": {csrf}, "id": {tc.id}, "agent_id": {tc.member}, "back": {back}, "decision": {"hide"}}
+					if tc.name == "expired_form" {
+						form.Set("csrf", "expired-form-token")
+					}
 					r := httptest.NewRequest("POST", "/actions/"+tc.action, strings.NewReader(form.Encode()))
 					r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 					r.Header.Set("Origin", "http://example.com")
@@ -130,7 +134,7 @@ func TestFormValidationRecovery(t *testing.T) {
 						r.Header.Set("HX-Request", "true")
 					}
 					// Independently establish that this is the intended valid role/session,
-					// so a CSRF/authentication rejection cannot satisfy these assertions.
+					// Only the expired_form case deliberately submits a stale CSRF value.
 					session := s.session(r)
 					if session == nil || session.Owner != role.owner || session.CSRF != csrf || session.Credential.AgentID != role.actor {
 						t.Fatal("fixture did not establish intended authenticated role and CSRF")

@@ -335,7 +335,7 @@ func (s *Server) validAction(w http.ResponseWriter, r *http.Request) *Session {
 		return nil
 	}
 	if !s.originOK(r) || !auth.ConstantEq([]byte(v.CSRF), []byte(r.FormValue("csrf"))) {
-		http.Error(w, "Form expired. Reload this page.", 403)
+		s.actionError(w, r, v, r.FormValue("back"), "Form expired. Reload this page.", http.StatusForbidden)
 		return nil
 	}
 	return v
