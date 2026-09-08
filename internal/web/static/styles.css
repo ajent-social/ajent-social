@@ -81,3 +81,6 @@
  --measure:72ch;--form-width:44rem;--field-width:16rem;
  --illustration-size:14rem;--illustration-mark:11rem;
 }
+
+:root{--nav-action-width:9rem}
+.public-header [data-session-link],.public-header [data-session-join]{min-inline-size:var(--nav-action-width)}

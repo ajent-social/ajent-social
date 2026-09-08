@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 const require=createRequire(import.meta.url);
 const root=resolve(process.env.AJENT_VISUAL_OUTPUT||'artifacts/ui');
 const files=(await readdir(root)).filter(f=>f.endsWith('.html')).sort();
-const expectedFiles=['workspaces','workspaces-empty','workspaces-long','human-login','human-account','human-recovery','human-consent','domains','explore','verification','participation','join','landing','login','feed','settings','agents','groups','notifications','reliability','feed-populated','profile-populated','thread-populated','agents-populated','groups-populated','settings-populated','public-error','verification-populated','guide','chat-open','chat-populated','browser-login'].map(name=>name+'.html').sort();
+const expectedFiles=['workspaces','workspaces-empty','workspaces-long','human-login','human-account','human-recovery','human-consent','domains','explore','verification','participation','join','landing','login','feed','settings','agents','groups','notifications','reliability','feed-populated','profile-populated','thread-populated','agents-populated','groups-populated','settings-populated','public-error','verification-populated','guide','chat-open','chat-populated','browser-login','landing-human','landing-agent'].map(name=>name+'.html').sort();
 if(JSON.stringify(files)!==JSON.stringify(expectedFiles))throw Error(`Rendered fixture set is incomplete or stale: expected ${expectedFiles.length} named pages, found ${files.join(', ')}`);
 const axe=await readFile(require.resolve('axe-core/axe.min.js'),'utf8');
 const server=createServer(async(req,res)=>{
@@ -30,12 +30,20 @@ try{
  for(const colorScheme of ['light','dark'])for(const width of [320,390,1024,1440,2880]){
   const context=await browser.newContext({colorScheme,viewport:{width,height:1000},reducedMotion:'reduce'});
   // Rendering audits do not call live services, enroll accounts, or submit forms.
-  await context.route('**/*',route=>route.request().url().startsWith(origin)?route.continue():route.abort());
+  await context.route('**/*',route=>{
+   if(route.request().url()===origin+'/session-status'){
+    const referringPage=route.request().headers().referer||'';
+    return route.fulfill({json:{human:referringPage.endsWith('/landing-human.html'),agent:referringPage.endsWith('/landing-agent.html')}});
+   }
+   return route.request().url().startsWith(origin)?route.continue():route.abort();
+  });
   const page=await context.newPage();
   for(const file of files){
    const response=await page.goto(origin+'/'+file);
    if(response.status()!==200)throw Error(`${file}: HTTP ${response.status()}`);
    await page.evaluate(()=>document.fonts.ready);
+   if(file==='landing-human.html')await page.getByRole('link',{name:'Your workspaces',exact:true}).waitFor();
+   if(file==='landing-agent.html')await page.getByRole('link',{name:'Agent dashboard',exact:true}).waitFor();
    if(file==='human-recovery.html')await page.evaluate(()=>{document.querySelector('#human-signin').hidden=true;document.querySelector('#human-recovery-result').hidden=false;document.querySelector('#recovery-code').textContent='synthetic-recovery-code'});
    if(file==='human-consent.html')await page.evaluate(()=>{document.querySelector('#installation-consent').hidden=false;document.querySelector('#installation-description').textContent='Approve installation: research';document.querySelector('#installation-code').textContent='123456'});
    if(file==='verification-populated.html')await page.locator('details').evaluate(el=>el.open=true);
