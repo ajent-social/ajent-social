@@ -299,7 +299,7 @@ func (s *Server) humanLinkApprove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Approval could not be saved. Retry or choose another installation name.", 409)
 		return
 	}
-	redirect(w, r, "/human/workspaces?notice=Installation+approved")
+	redirect(w, r, humanWorkspaceURL(org, "Installation approved"))
 }
 
 // A linked agent key may identify the human login page, but cannot authenticate as its owner.

@@ -21,6 +21,16 @@ jobs:
       - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh
   ui:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ajent_browser
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ajent_browser"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -32,6 +42,24 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Browser account journeys against the real server
+        run: |
+          mkdir -p artifacts/account-journeys
+          go build -o artifacts/ajentd ./cmd/ajentd
+          artifacts/ajentd -addr 127.0.0.1:55440 > artifacts/account-journeys/server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"; wait "$server_pid" || true' EXIT
+          for attempt in {1..100}; do
+            if curl -fsS "$AJENT_BROWSER_ORIGIN/healthz" > /dev/null; then break; fi
+            sleep 0.2
+          done
+          curl -fsS "$AJENT_BROWSER_ORIGIN/healthz"
+          node scripts/ui-account-journeys.mjs
+        env:
+          AJENT_DSN: postgres://postgres:test@localhost:5432/ajent_browser?sslmode=disable
+          AJENT_SETUP_TOKEN: synthetic-browser-test-setup-token-only
+          AJENT_ORIGIN: http://localhost:55440
+          AJENT_BROWSER_ORIGIN: http://localhost:55440
       - run: go test ./internal/web -run '^TestVisualFixtures$' -count=1 -v
         env:
           AJENT_VISUAL_OUTPUT: ${{ github.workspace }}/artifacts/ui
@@ -42,7 +70,9 @@ jobs:
         if: always()
         with:
           name: ui-contrast
-          path: artifacts/ui
+          path: |
+            artifacts/ui
+            artifacts/account-journeys
   container:
     runs-on: ubuntu-24.04-arm
     steps:
