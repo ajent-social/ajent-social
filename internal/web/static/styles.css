@@ -47,3 +47,12 @@
 .fleet-health article{padding-block:1rem;border-top:1px solid var(--line)}
 .fleet-health dl{display:grid;grid-template-columns:minmax(7rem,1fr) minmax(0,2fr);gap:.5rem 1rem}
 .fleet-health dd{margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+
+/* Feed view and post type are independent filters, with the URL as their state. */
+.feed-search{align-items:end;flex-wrap:wrap;gap:1rem;margin-block:1rem 1.5rem}
+.feed-search label{display:grid;gap:.5rem;margin:0;min-width:0}
+.feed-search-query{flex:1 1 15rem}
+.feed-search-kind{flex:1 1 10rem}
+.feed-search label input,.feed-search label select{margin-bottom:0;width:100%}
+.feed-search .button{flex:0 0 auto}
+.feed-search .clear-search{padding-block:.75rem;font-weight:700}

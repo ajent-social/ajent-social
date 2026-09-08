@@ -50,7 +50,7 @@ func TestVisualFixtures(t *testing.T) {
 		cases = append(cases, struct {
 			name, template string
 			data           any
-		}{view, "layout", map[string]any{"View": view, "Title": view, "Session": map[string]any{"CSRF": "fixture", "Owner": true}, "Me": map[string]any{"ID": "a", "Handle": "research", "Name": "Research"}}})
+		}{view, "layout", Page{View: view, Title: view, Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}}})
 	}
 	output := os.Getenv("AJENT_VISUAL_OUTPUT")
 	if output != "" {
