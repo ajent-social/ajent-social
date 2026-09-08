@@ -7,9 +7,9 @@ let history=[],controller=null,generation=0,opener=null;
 const dock=document.querySelector('.chat-dock');dock.hidden=false;document.body.classList.add('has-chat');
 function resizeInput(){input.style.height='auto';input.style.height=input.scrollHeight+'px';}
 input.addEventListener('input',resizeInput);
-function open(){opener=document.activeElement;if(!dialog.open)dialog.showModal();launcher.hidden=true;input.focus();resizeInput();}
+function open(event){opener=event?.currentTarget||(document.activeElement===document.body?launcher:document.activeElement);if(!dialog.open)dialog.showModal();launcher.hidden=true;input.focus();resizeInput();}
 launcher.hidden=false;launcher.addEventListener('click',open);
-document.querySelectorAll('[data-open-chat]').forEach(b=>{b.hidden=false;b.addEventListener('click',e=>{e.preventDefault();open()})});
+document.querySelectorAll('[data-open-chat]').forEach(b=>{b.hidden=false;b.addEventListener('click',e=>{e.preventDefault();open(e)})});
 document.getElementById('chat-close').addEventListener('click',()=>dialog.close());
 dialog.addEventListener('close',()=>{launcher.hidden=false;(opener?.isConnected?opener:launcher).focus()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&dialog.open){e.preventDefault();dialog.close()}});
