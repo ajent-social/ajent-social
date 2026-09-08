@@ -6,9 +6,13 @@ import (
 	"ajent/internal/bootstrap"
 	"ajent/migrations"
 	"context"
+	"html"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -63,6 +67,7 @@ func TestReadFailureProbes(t *testing.T) {
 		{"feed_unavailable", "/app", "/v1/feed", "A little quiet here.", "Content is currently unavailable. Please try again.", http.StatusServiceUnavailable},
 		{"feed_rate_limited", "/app?view=saved&kind=finding", "/v1/feed", "A little quiet here.", "Content is currently unavailable. Please try again.", http.StatusTooManyRequests},
 		{"search_unavailable", "/app?q=retained&kind=finding", "/v1/search", "Try a different phrase", "Content is currently unavailable. Please try again.", http.StatusServiceUnavailable},
+		{"native_retry_cursor_and_repeated_query", "/app?view=saved&kind=finding&before=cursor%2Btoken%2F%3D&q=retained&q=second%26literal&q=", "/v1/search", "Try a different phrase", "Content is currently unavailable. Please try again.", http.StatusServiceUnavailable},
 		{"groups_unavailable", "/app/groups", "/v1/groups", "No groups yet.", "Groups are currently unavailable.", http.StatusServiceUnavailable},
 		{"profile_missing", "/app/agents/11111111-1111-4111-8111-111111111111", "/v1/agents/11111111-1111-4111-8111-111111111111", "Follow agent", "This profile is unavailable.", http.StatusNotFound},
 		{"thread_unavailable", "/app/posts/11111111-1111-4111-8111-111111111111", "/v1/posts/11111111-1111-4111-8111-111111111111", "Add a fresh perspective.", "This conversation is currently unavailable. Please try again.", http.StatusServiceUnavailable},
@@ -122,6 +127,25 @@ func TestReadFailureProbes(t *testing.T) {
 			}
 			if strings.Contains(tc.page, "kind=finding") && !strings.Contains(body, `name="kind" value="finding"`) {
 				t.Error("retry lost kind filter")
+			}
+			if tc.name == "native_retry_cursor_and_repeated_query" {
+				form := regexp.MustCompile(`<form method="get">(.*?)</form>`).FindStringSubmatch(body)
+				if len(form) != 2 {
+					t.Fatal("native read failure omitted GET retry form")
+				}
+				retryValues := url.Values{}
+				for _, input := range regexp.MustCompile(`<input type="hidden" name="([^"]*)" value="([^"]*)">`).FindAllStringSubmatch(form[1], -1) {
+					retryValues.Add(html.UnescapeString(input[1]), html.UnescapeString(input[2]))
+				}
+				if got := retryValues.Get("before"); got != "cursor+token/=" {
+					t.Errorf("native retry changed cursor: got %q", got)
+				}
+				if got, want := retryValues["q"], []string{"retained", "second&literal", ""}; !reflect.DeepEqual(got, want) {
+					t.Errorf("native retry changed repeated query order, escaping, or empty value: got %#v, want %#v", got, want)
+				}
+				if !reflect.DeepEqual(retryValues, r.URL.Query()) {
+					t.Errorf("native retry did not preserve complete query context: got %#v, want %#v", retryValues, r.URL.Query())
+				}
 			}
 			if tc.page == "/app/notifications" && strings.Contains(body, "Mark all read") {
 				t.Error("failed notifications still offer Mark all read")

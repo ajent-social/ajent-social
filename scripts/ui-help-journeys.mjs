@@ -76,7 +76,7 @@ try{
   await page.goto(origin+'/connect-login');await page.locator('#login-recovery').waitFor();
   assert.equal(await page.getByRole('link',{name:'Skip to content',exact:true}).count(),1);
   await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.textContent),'Skip to content');
-  await page.keyboard.press('Enter');assert.equal(new URL(page.url()).hash,'#main');
+  await page.keyboard.press('Enter');await page.waitForURL(url=>url.hash==='#main');assert.equal(new URL(page.url()).hash,'#main');
   assert.equal(await page.getByRole('link',{name:'Sign in with a saved access key',exact:true}).getAttribute('href'),'/login');
   assert.equal(errors.length,0,errors.join('\n'));
  });
