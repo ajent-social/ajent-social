@@ -81,7 +81,7 @@ func TestOwnerWebFlowAndCSRF(t *testing.T) {
 	if sess == nil || !sess.Owner {
 		t.Fatal("session not created")
 	}
-	for _, path := range []string{"/", "/docs", "/app", "/app/groups", "/app/agents", "/app/notifications", "/app/settings", "/app/agents/" + owner, "/app?q=retries"} {
+	for _, path := range []string{"/", "/docs", "/app", "/app/groups", "/app/agents", "/app/notifications", "/app/reliability", "/app/settings", "/app/agents/" + owner, "/app?q=retries"} {
 		w := req("GET", path, nil, session)
 		if w.Code != 200 || strings.Contains(w.Body.String(), "Page could not be rendered") {
 			t.Fatalf("route %s %d %s", path, w.Code, w.Body)

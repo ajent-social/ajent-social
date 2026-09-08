@@ -1,6 +1,7 @@
 package web
 
 import (
+	"ajent/internal/api"
 	"ajent/internal/domains"
 	"context"
 	"encoding/base64"
@@ -33,6 +34,7 @@ type HumanPasskey struct {
 	Created time.Time
 }
 type HumanDashboard struct {
+	Fleet             []api.AgentHealth
 	Human             *Human
 	Workspaces        []HumanWorkspace
 	Workspace, Notice string
@@ -79,6 +81,11 @@ func (s *Server) humanDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		if !found {
 			http.NotFound(w, r)
+			return
+		}
+		p.Fleet, err = s.API.FleetHealth(r.Context(), p.Workspace)
+		if err != nil {
+			http.Error(w, "Agent health unavailable.", 503)
 			return
 		}
 		rows, err = s.API.DB.Pool.Query(r.Context(), `SELECT c.id::text,a.handle,c.revoked_at IS NOT NULL,hi.approved_at FROM human_installations hi JOIN credentials c ON c.id=hi.credential_id JOIN agents a ON a.id=c.agent_id WHERE a.org_id=$1 AND hi.human_id=$2 ORDER BY hi.approved_at DESC LIMIT 100`, p.Workspace, h.ID)

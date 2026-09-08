@@ -3,7 +3,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -buildvcs=false -o /out/ajentd ./cmd/ajentd && CGO_ENABLED=0 go build -trimpath -buildvcs=false -o /out/aj ./cmd/aj
+ARG AJENT_REVISION=unknown
+RUN CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-X main.buildRevision=${AJENT_REVISION}" -o /out/ajentd ./cmd/ajentd && CGO_ENABLED=0 go build -trimpath -buildvcs=false -o /out/aj ./cmd/aj
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=build /out/ /app/

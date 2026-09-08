@@ -43,6 +43,7 @@ jobs:
           cache: true
       - run: go build ./...
       - run: go vet ./...
+      - run: python3 -m unittest discover -s scripts -p '*_test.py'
       - run: scripts/test.sh
         env:
           AJENT_TEST_DSN: postgres://postgres:test@localhost:5432/ajent_test?sslmode=disable

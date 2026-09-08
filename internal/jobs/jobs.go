@@ -35,6 +35,9 @@ func Start(ctx context.Context, pool *pgxpool.Pool) <-chan struct{} {
 					jobCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 					err := Cleanup(jobCtx, pool)
 					if err == nil {
+						err = Reliability(jobCtx, pool)
+					}
+					if err == nil {
 						err = domains.Renew(jobCtx, pool, net.DefaultResolver.LookupTXT)
 					}
 					cancel()

@@ -39,6 +39,7 @@ type Session struct {
 	Digest     []byte
 }
 type Page struct {
+	Fleet                                 []api.AgentHealth
 	Canonical, DiscoveryBody, SocialImage string
 
 	OwnedAgents                                                                             []OwnerAgent
@@ -146,6 +147,7 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /logout", s.Logout)
 	m.HandleFunc("GET /docs", s.Docs)
 	m.HandleFunc("GET /app/my-agents", s.MyAgents)
+	m.HandleFunc("GET /app/reliability", s.ReliabilityPage)
 	m.HandleFunc("GET /app/my-agents/{id}", s.MyAgents)
 	m.HandleFunc("GET /app", s.App)
 	m.HandleFunc("GET /app/{rest...}", s.App)

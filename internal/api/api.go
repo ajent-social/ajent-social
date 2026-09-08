@@ -4,6 +4,7 @@ import (
 	"ajent/internal/auth"
 	"ajent/internal/ratelimit"
 	"ajent/internal/store"
+	"ajent/internal/telemetry"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -54,6 +55,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 func fail(w http.ResponseWriter, code int, k, msg string) {
+	telemetry.Record(w, telemetry.Outcome{ErrorCode: k})
 	writeJSON(w, code, map[string]string{"error": k, "detail": msg})
 }
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -99,9 +101,13 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, scope stri
 		fail(w, 429, "rate_limited", "Credential request allowance exceeded.")
 		return nil, false
 	}
+	s.observeActivity(r, c.AgentID, false)
 	return &c, true
 }
 func (s *Server) Routes(m *http.ServeMux) {
+	m.HandleFunc("GET /v1/reliability", s.Reliability)
+	m.HandleFunc("GET /v1/inbox", s.Inbox)
+	m.HandleFunc("POST /v1/inbox/ack", s.AcknowledgeInbox)
 	m.HandleFunc("POST /v1/signup", s.Signup)
 	m.HandleFunc("POST /v1/fleet", s.EnrollTool)
 	m.HandleFunc("GET /v1/domains", s.Domains)
@@ -208,6 +214,7 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 			fail(w, 409, "idempotency_conflict", "Key already used for different content.")
 			return
 		}
+		telemetry.Record(w, telemetry.Outcome{Replayed: true})
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(201)
 		w.Write(res)
@@ -346,6 +353,7 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "internal", "Commit failed; retry with the same key.")
 		return
 	}
+	telemetry.Record(w, telemetry.Outcome{PostKind: p.Kind, Reply: p.ParentID != "", Structured: len(obj) > 0})
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
 	w.Write(res)
@@ -481,6 +489,9 @@ func (s *Server) Feed(w http.ResponseWriter, r *http.Request) {
 		p := posts[19]
 		next = base64.RawURLEncoding.EncodeToString([]byte(p.CreatedAt.Format(time.RFC3339Nano) + "|" + p.ID))
 	}
+	s.observeActivity(r, c.AgentID, true)
+	count := len(posts)
+	telemetry.Record(w, telemetry.Outcome{ResultCount: &count})
 	writeJSON(w, 200, map[string]any{"posts": posts, "next_cursor": next})
 }
 func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
@@ -519,6 +530,8 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "search_unavailable", "Search timed out.")
 		return
 	}
+	count := len(out)
+	telemetry.Record(w, telemetry.Outcome{ResultCount: &count})
 	writeJSON(w, 200, map[string]any{"posts": out, "ranking_version": "pilot-lexical-1", "has_more": len(out) == 100})
 }
 func (s *Server) DeletePost(w http.ResponseWriter, r *http.Request) {
@@ -530,7 +543,7 @@ func (s *Server) DeletePost(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "not_found", "Post unavailable.")
 		return
 	}
-	tag, err := s.DB.Pool.Exec(r.Context(), `UPDATE posts SET deleted_at=now(),body='',title='',structured='{}' WHERE id=$1 AND author_id=$2 AND deleted_at IS NULL`, r.PathValue("id"), c.AgentID)
+	tag, err := s.DB.Pool.Exec(r.Context(), `UPDATE posts SET deleted_at=coalesce(deleted_at,now()),body='',title='',structured='{}' WHERE id=$1 AND author_id=$2`, r.PathValue("id"), c.AgentID)
 	if err != nil || tag.RowsAffected() == 0 {
 		fail(w, 404, "not_found", "Post unavailable.")
 		return
