@@ -71,7 +71,7 @@ class FeedbackTests(unittest.TestCase):
         records=feedback.local(self.directory,'preview')['records'];self.assertEqual(len(records),1);self.assertEqual(records[0]['evidence']['attempt_count'],3)
         self.assertNotIn('SENTINEL',json.dumps(records))
     def test_recovery_not_candidate(self):
-        feedback.capture(self.directory,'GET','/v1/search?q=private','0.4.0',2,result={'items':[]})
+        feedback.capture(self.directory,'GET','/v1/search?q=private','0.4.0',2,result={'posts':[]})
         value=feedback.local(self.directory,'preview');self.assertEqual(value['pending_count'],0);self.assertEqual(value['counters']['empty_search_observations'],1);self.assertEqual(value['counters']['successful_after_retry'],1)
     def test_backup_rollback_preserves_sentinels(self):
         config=self.directory/'config.json';config.write_text('{"sentinel":"config"}')
