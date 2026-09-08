@@ -1,0 +1,23 @@
+# E23 -- Prepare a dense founding community
+
+fidelity: executable
+Acceptance: one problem-focused cohort is ready with a private candidate workflow, ten-team eligibility rubric, five authentic approved starter findings, exact invitation drafts, and a bounded response process. Sending and enrollment are executed in E26 after readiness.
+
+- [ ] T23.1 Build eligibility and candidate worksheet  Owner: community  Est: 60m  kind: agent  deps: [T21.2]  delivers: [15-20 candidate slots and qualification rubric]
+  Area: docs/marketing/moltbook-community-kit.md (new) plus an approved private ledger for actual identities. Score two real tools, recent relay problem, repeat-task opportunity, safe evaluation task and independent owner. Record disqualifiers and explicit unknowns; a social follower is not automatically qualified.
+- [ ] T23.2 Research evidence-backed candidate sources  Owner: researcher  Est: 90m  kind: agent  deps: [T23.1]  delivers: [bounded candidate shortlist with public problem evidence]
+  Area: private candidate ledger; public source references only in shareable summaries. Use incoming interest, consented referrals or recent public problem accounts. Stop at 20 qualified-or-needs-check candidates. Verify dates and specific community access/rules. No scraped private messages, purchased lists or assumed access to consulting contacts.
+- [ ] T23.3 Reconcile contact ownership and send history  Owner: community  Est: 45m  kind: agent  deps: [T23.2]  delivers: [deduplicated candidate queue and contact owner]
+  Area: existing authorized private pipeline. Check potential overlap with the consulting owner's W3.8 allocation and last contact. Prepare missing ownership questions for the existing review surface after research; do not contact another session/person without authorization. No new consulting quota follows from this product cohort.
+- [ ] T23.4 Draft exact invitation and follow-up variants  Owner: marketing  Est: 60m  kind: agent  deps: [T23.3, T25.1]  delivers: [recipient-ready product-pilot invitation packet]
+  Area: private recipient drafts and public template in community kit. State two tools, real task, 14-day follow-through, private default, requested feedback and optional public sharing. Distinguish product study from a sales offer. Include one permitted follow-up and stop/withdrawal handling; no automatic sends.
+- [ ] T23.5 Inventory reusable starter findings  Owner: community  Est: 90m  kind: agent  deps: [T21.2]  delivers: [10-15 candidate findings with consent and evidence status]
+  Area: community kit and existing owner-authorized sources. Check source ownership, environment/version, testable check, limitation, freshness and proposed audience. Select five covering likely cohort problems. Private group content is ineligible for automatic promotion; draft a separately reviewed public summary where appropriate.
+- [ ] T23.6 Prepare starter findings one through three  Owner: community  Est: 90m  kind: agent  deps: [T23.5, T22.3]  delivers: [three source-linked finding drafts]
+  Area: docs/marketing/moltbook-seeds.md (new). Each draft has observation, proposed check, actual result if tested, environment and limitation. Identify founder-produced examples. Record permission needed for each public field; factual and consent gaps keep the item draft.
+- [ ] T23.7 Prepare starter findings four and five  Owner: community  Est: 60m  kind: agent  deps: [T23.6]  delivers: [five complete candidate seed findings and matching matrix]
+  Area: moltbook-seeds.md. Match each finding to likely cohort tasks without manufacturing relevance. Retain negative/inconclusive findings when they provide a useful check. No fabricated customer outcomes or prefilled engagement.
+- [ ] T23.8 Write onboarding and community response runbook  Owner: community  Est: 60m  kind: agent  deps: [T23.4, T23.7, T22.19]  delivers: [participant runbook and response templates]
+  Area: community kit and pilot protocol. Cover installation/reload, second-tool retrieval, check, rescue/assistance flags, unresolved status, correction/retraction and issue handoff. Schedule three 20-minute triage windows/week. Include named operational roles and explicit manual fallback where a tool does not support a hook.
+- [ ] T23.9 Assemble seed-publication and cohort review packet  Owner: coordinator  Est: 45m  kind: agent  deps: [T23.8, T21.11, T25.4]  delivers: [concrete cohort and seed packet ready for review]
+  Area: moltbook-readiness.md. Include exact recipient drafts, eligible seeds, requested field permissions, signup limits, support budget and phase timing. Review public seed permission independently from directory listing or private enrollment. Leave unapproved entries out of publication candidates.
