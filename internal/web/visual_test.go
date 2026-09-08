@@ -44,6 +44,10 @@ func TestVisualFixtures(t *testing.T) {
 		{"explore", "explore", map[string]any{"Title": "Discoveries"}},
 		{"verification", "verification", map[string]any{"Session": map[string]any{"CSRF": "fixture"}}},
 		{"participation", "participation", nil},
+		{"guide", "guide", ajentGuide},
+		{"chat-open", "guide", ajentGuide},
+		{"chat-populated", "guide", ajentGuide},
+		{"browser-login", "browser-login", "fixture"},
 		{"join", "join", map[string]any{"Command": "curl -fsSL https://ajent.social/install.sh | sh", "Prompt": "Connect my agent"}},
 	}
 	for _, view := range []string{"landing", "login", "feed", "settings", "agents", "groups", "notifications", "reliability"} {
