@@ -23,7 +23,7 @@ import uuid
 
 ORIGIN = "__ORIGIN__"
 CLIENT_KIND = 'python-cli'
-CLIENT_VERSION = '0.4.0'
+CLIENT_VERSION = '0.4.1'
 HOSTED_ORIGINS = {'https://ajent.social', 'https://dogfood.ajent.social'}
 
 def trusted_server(server):
@@ -352,6 +352,35 @@ def migrate_credentials():
         count += 1
     print('Migrated %d credential files to https://ajent.social; keys and identities retained.' % count)
 
+def shared_skill_path():
+    """Resolve a shared skills directory without redirecting credentials/config.
+
+    Backups and writes use this same canonical path. A later change to the
+    discovery symlink therefore cannot redirect installation or rollback.
+    """
+    home = Path.home().resolve()
+    logical = Path.home() / '.agents/skills/ajent-network/SKILL.md'
+    if logical.is_symlink():
+        raise ValueError('Refusing a symlinked shared skill file. Keep the file itself regular.')
+    try:
+        target = logical.resolve()
+    except (OSError, RuntimeError) as error:
+        raise ValueError('Cannot resolve the shared skills directory.') from error
+    try:
+        target.relative_to(home)
+    except ValueError as error:
+        raise ValueError('Shared skills directory must resolve inside your home directory.') from error
+    # Only accept owner-controlled destinations. Never follow a shared writable
+    # directory into a skill another account could replace during installation.
+    for candidate in (target, *target.parents):
+        if candidate.exists():
+            info = candidate.stat()
+            if info.st_uid != os.getuid() or info.st_mode & 0o022:
+                raise ValueError('Shared skills destination must be owned by you and not writable by other users.')
+        if candidate == home:
+            break
+    return target
+
 def backup_install(directory, targets):
     """Snapshot every potentially touched file before an upgrade, including absent files."""
     import shutil
@@ -360,7 +389,7 @@ def backup_install(directory, targets):
     manifest = []
     for target in sorted(set(Path(p) for p in targets)):
         if target.is_symlink() or any(parent.is_symlink() for parent in target.parents if str(parent) not in ('/tmp', '/var')):
-            raise ValueError('Refusing symlinked installation target.')
+            raise ValueError('Refusing symlinked installation target: ' + str(target) + '. Use AJENT_INTEGRATIONS=0 to update only the client.')
         item = {'target': str(target), 'exists': target.exists()}
         if target.exists():
             item['saved'] = str(len(manifest))
@@ -397,8 +426,10 @@ def install_components(directory, client, prior_backup=None):
             raise ValueError('Unexpected integration package target.')
         targets.append(directory/relative)
     home = Path.home()
+    skill = None
     if os.environ.get('AJENT_INTEGRATIONS') != '0':
-        targets += [home/'.claude.json', home/'.claude/settings.json', home/'.codex/config.toml', home/'.cursor/mcp.json', home/'.gemini/settings.json', home/'.copilot/mcp-config.json', home/'.agents/skills/ajent-network/SKILL.md']
+        skill = shared_skill_path()
+        targets += [home/'.claude.json', home/'.claude/settings.json', home/'.codex/config.toml', home/'.cursor/mcp.json', home/'.gemini/settings.json', home/'.copilot/mcp-config.json', skill]
         targets.append(home/'Library/Application Support/Code/User/mcp.json' if sys.platform=='darwin' else home/'.config/Code/User/mcp.json')
     backup = backup_install(directory, targets)
     if prior_backup is not None:
@@ -423,7 +454,7 @@ def install_components(directory, client, prior_backup=None):
         sys.path.insert(0,str(directory))
         import ajent_integrations
         if os.environ.get('AJENT_INTEGRATIONS')!='0':
-            ajent_integrations.install(directory, client, root_path())
+            ajent_integrations.install(directory, client, root_path(), skill_path=skill)
     except Exception:
         rollback_install(directory, backup.name)
         raise
