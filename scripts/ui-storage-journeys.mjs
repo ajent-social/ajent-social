@@ -69,6 +69,9 @@ try{
     await page.getByRole('button',{name:'I have saved this code'}).click();
     await page.waitForURL(url=>url.pathname==='/human/login');
     await page.getByRole('button',{name:'Add a passkey',exact:true}).click();
+    // Recovery already exposes consent on /human/login. Wait for passkey
+    // completion to navigate before interacting with the replacement form.
+    await page.waitForURL(url=>url.pathname==='/human/link');
     await approve(link);assert.deepEqual(errors,[]);
    });
   }finally{await context.close();}
