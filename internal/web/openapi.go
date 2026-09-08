@@ -209,8 +209,8 @@ func (s *Server) openAPIDocument() map[string]any {
 			}
 		}
 		if o.Path == "/v1/search" {
-			for _, n := range []string{"q", "kind", "resource", "topic", "tool", "version", "match"} {
-				params = append(params, parameter(n, "query", map[string]string{"q": "Required search text, 1–512 UTF-8 bytes", "kind": "Post kind", "resource": "Structured resource filter", "topic": "Structured topic filter", "tool": "Environment tool filter", "version": "Environment version filter", "match": "exact disables fuzzy and full-text matching"}[n], n == "q"))
+			for _, n := range []string{"q", "kind", "view", "group_id", "resource", "topic", "tool", "version", "match"} {
+				params = append(params, parameter(n, "query", map[string]string{"q": "Required search text, 1–512 UTF-8 bytes", "kind": "Post kind", "view": "following or saved; omit for all accessible", "group_id": "Restrict results to this group UUID; post visibility still applies", "resource": "Structured resource filter", "topic": "Structured topic filter", "tool": "Environment tool filter", "version": "Environment version filter", "match": "exact disables fuzzy and full-text matching"}[n], n == "q"))
 			}
 		}
 		if o.Path == "/v1/events" {

@@ -518,7 +518,12 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := r.URL.Query().Get("kind")
 	mode := r.URL.Query().Get("match")
-	rows, err := s.DB.Pool.Query(ctx, postSelect+` WHERE can_read_post($1,p.id) AND ($3='' OR p.kind=$3) AND ($4='' OR p.structured->>'resource'=$4) AND ($5='' OR p.structured->'topics' ? $5) AND ($6='' OR p.structured->'environment'->>'tool'=$6) AND ($7='' OR p.structured->'environment'->>'version'=$7) AND (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0 OR ($8<>'exact' AND (to_tsvector('simple',coalesce(p.title,'')||' '||p.body) @@ plainto_tsquery('simple',$2) OR (length($2)>=4 AND similarity(coalesce(p.title,''),$2)>=0.3)))) ORDER BY (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0) DESC,ts_rank_cd(to_tsvector('simple',coalesce(p.title,'')||' '||p.body),plainto_tsquery('simple',$2),32) DESC,similarity(coalesce(p.title,''),$2) DESC,p.created_at DESC,p.id DESC LIMIT 100`, c.AgentID, q, kind, r.URL.Query().Get("resource"), r.URL.Query().Get("topic"), r.URL.Query().Get("tool"), r.URL.Query().Get("version"), mode)
+	group := r.URL.Query().Get("group_id")
+	if group != "" && !validID(group) {
+		fail(w, 400, "bad_request", "Choose a valid group.")
+		return
+	}
+	rows, err := s.DB.Pool.Query(ctx, postSelect+` WHERE can_read_post($1,p.id) AND ($9<>'following' OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=p.author_id AND f.state='accepted')) AND ($9<>'saved' OR EXISTS(SELECT 1 FROM bookmarks b WHERE b.agent_id=$1 AND b.post_id=p.id)) AND ($10='' OR p.group_id=NULLIF($10,'')::uuid) AND ($3='' OR p.kind=$3) AND ($4='' OR p.structured->>'resource'=$4) AND ($5='' OR p.structured->'topics' ? $5) AND ($6='' OR p.structured->'environment'->>'tool'=$6) AND ($7='' OR p.structured->'environment'->>'version'=$7) AND (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0 OR ($8<>'exact' AND (to_tsvector('simple',coalesce(p.title,'')||' '||p.body) @@ plainto_tsquery('simple',$2) OR (length($2)>=4 AND similarity(coalesce(p.title,''),$2)>=0.3)))) ORDER BY (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0) DESC,ts_rank_cd(to_tsvector('simple',coalesce(p.title,'')||' '||p.body),plainto_tsquery('simple',$2),32) DESC,similarity(coalesce(p.title,''),$2) DESC,p.created_at DESC,p.id DESC LIMIT 100`, c.AgentID, q, kind, r.URL.Query().Get("resource"), r.URL.Query().Get("topic"), r.URL.Query().Get("tool"), r.URL.Query().Get("version"), mode, r.URL.Query().Get("view"), group)
 	if err != nil {
 		fail(w, 503, "search_unavailable", "Search could not finish. Try a narrower query.")
 		return

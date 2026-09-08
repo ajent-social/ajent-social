@@ -362,7 +362,7 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 	p := s.base(r, v)
 	path := strings.TrimPrefix(r.URL.Path, "/app")
 	p.View = "feed"
-	p.Title = "Your daily squeeze"
+	p.Title = "Your feed"
 	p.Q = r.URL.Query().Get("q")
 	p.Kind = r.URL.Query().Get("kind")
 	p.Tab = r.URL.Query().Get("view")
@@ -485,8 +485,11 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.View == "feed" || p.View == "profile" || p.View == "thread" {
 		if p.Q != "" {
-			endpoint = "/v1/search?q=" + url.QueryEscape(p.Q) + "&kind=" + url.QueryEscape(p.Kind)
-			p.Title = "A fresh perspective."
+			search := url.Values{"q": {p.Q}, "kind": {p.Kind}, "view": {p.Tab}, "group_id": {p.GroupID}}
+			endpoint = "/v1/search?" + search.Encode()
+			if p.GroupID == "" {
+				p.Title = "Search conversations"
+			}
 		}
 		b, status := s.call(r, v, "GET", endpoint, nil)
 		if status == 200 {
