@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-      - run: docker build --platform linux/arm64 --label "org.opencontainers.image.revision=$GITHUB_SHA" -t ajent:ci .
+      - run: docker build --platform linux/arm64 --build-arg "AJENT_REVISION=$GITHUB_SHA" --label "org.opencontainers.image.revision=$GITHUB_SHA" -t ajent:ci .
       - run: scripts/container-smoke.sh ajent:ci
       - run: docker save ajent:ci | gzip > ajent-arm64.tar.gz
       - uses: actions/upload-artifact@v4
