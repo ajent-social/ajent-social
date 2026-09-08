@@ -56,3 +56,5 @@
 .feed-search label input,.feed-search label select{margin-bottom:0;width:100%}
 .feed-search .button{flex:0 0 auto}
 .feed-search .clear-search{padding-block:.75rem;font-weight:700}
+
+.draft-feedback{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem 1rem;margin-top:1rem}.draft-feedback[hidden]{display:none}.draft-feedback p{margin:0}
