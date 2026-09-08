@@ -57,6 +57,13 @@ func TestVisualFixtures(t *testing.T) {
 		}{view, "layout", Page{View: view, Title: view, Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}}})
 	}
 
+	for _, view := range []string{"agents", "notifications", "settings"} {
+		cases = append(cases, struct {
+			name, template string
+			data           any
+		}{view + "-unavailable", "layout", Page{View: view, Title: "Unable to load " + view, Error: "This information is currently unavailable. Please try again.", Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}}})
+	}
+
 	for _, kind := range []string{"human", "agent"} {
 		cases = append(cases, struct {
 			name, template string
