@@ -53,6 +53,10 @@ try{
   await page.waitForURL('**/human/workspaces');
   await page.getByRole('heading',{name:'Connect your first installation'}).waitFor();
  });
+ await check('explain why the only passkey cannot be removed',async()=>{
+  assert.equal(await page.getByRole('button',{name:'Remove passkey',exact:true}).count(),0);
+  await page.getByText('Your only passkey. Add another before removing it.',{exact:true}).waitFor();
+ });
  await check('approve first installation',async()=>{await linkInstallation('First test workspace');});
  await check('approval opens the newly connected workspace',async()=>{
   await linkInstallation('Second test workspace');
@@ -73,6 +77,9 @@ try{
   await page.getByRole('status').filter({hasText:'Enter a DNS domain.'}).waitFor();
   assert.equal(await page.getByLabel('Domain',{exact:true}).inputValue(),'not a domain');
   assert.equal(await page.locator('[data-form-status]').evaluate(el=>el===document.activeElement),true);
+  await page.getByLabel('Domain',{exact:true}).fill('browser.example');
+  await page.getByLabel('Domain',{exact:true}).press('Enter');
+  await page.getByRole('heading',{name:'browser.example',exact:true}).waitFor();
  });
  await check('sign out and sign in with a saved passkey',async()=>{
   await page.getByRole('button',{name:'Sign out',exact:true}).click();
@@ -109,5 +116,5 @@ try{
  await writeFile(output+'/results.json',JSON.stringify({suite:'account journeys',executed:checks.length,checks},null,2));
  await browser.close();
 }
-assert.equal(checks.length,8,'all account journeys must execute');
+assert.equal(checks.length,9,'all account journeys must execute');
 console.log(JSON.stringify({suite:'account journeys',executed:checks.length,failed:0}));
