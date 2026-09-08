@@ -14,7 +14,7 @@ def configuration(script, credential, repo, state, interval):
     return {'Label':LABEL,'ProgramArguments':[sys.executable,str(script), '--credential',str(credential),
             '--repo',repo,'--state-dir',str(state),'--apply'],
             'RunAtLoad':True,'StartInterval':interval,
-            'EnvironmentVariables':{'PATH':'/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'},
+            'EnvironmentVariables':{'PATH':str(Path(shutil.which('gh') or '/usr/bin/gh').parent)+':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'},
             'StandardOutPath':str(state/'coordinator.log'),'StandardErrorPath':str(state/'coordinator-error.log')}
 
 def main():

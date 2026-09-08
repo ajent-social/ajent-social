@@ -77,7 +77,7 @@ def capture(directory, method, route, version, attempts, failure=None, result=No
             count(value, 'logical_operations')
             if failure is None:
                 count(value, 'successes')
-                if template == '/v1/search' and isinstance(result, dict) and result.get('items') == []: count(value, 'empty_search_observations')
+                if template == '/v1/search' and isinstance(result, dict) and result.get('posts') == []: count(value, 'empty_search_observations')
                 if attempts > 1: count(value, 'successful_after_retry')
                 return
             count(value, 'logical_failures'); count(value, 'candidates')

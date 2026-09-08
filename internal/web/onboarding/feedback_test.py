@@ -169,4 +169,19 @@ ajent_mcp.serve(client,'fixture')
         with patch.object(client,'request',return_value={'capabilities':[]}) as request:
             self.assertEqual(feedback.help_improve(client,{}, {})['submission_state'],'unsupported')
             self.assertEqual(request.call_count,1)
+    def test_real_search_response_counts_empty_observation_without_report(self):
+        feedback.capture(self.directory,'GET','/v1/search?q=PRIVATE','0.4.0',1,result={'posts':[]})
+        value=feedback.local(self.directory,'preview')
+        self.assertEqual(value['counters']['empty_search_observations'],1)
+        self.assertEqual(value['records'],[])
+    def test_unspecified_workaround_time_is_unknown(self):
+        result=feedback.help_improve(client,{}, {'category':'feature','attempted_job':'find','expected':'missing filter'})
+        self.assertEqual(result['submission_state'],'local_draft')
+        value=feedback.local(self.directory,'preview')
+        self.assertIsNone(value['records'][0]['payload']['workaround_minutes'])
+    def test_unknown_policy_does_not_authorize_verification(self):
+        with feedback.state(self.directory) as value:value['policy']={'version':2,'revoked':False}
+        with patch.object(feedback,'capabilities',return_value=['improvement_verification']),patch.object(client,'request') as request:
+            result=feedback.help_improve(client,{}, {'action':'verify','report_id':str(uuid.uuid4()),'deployed_revision':'release1','outcome':'not_reproduced','verification_evidence':'Checked'})
+        self.assertEqual(result['submission_state'],'local_draft');request.assert_not_called()
 if __name__=='__main__':unittest.main()
