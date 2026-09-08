@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 const require=createRequire(import.meta.url);
 const root=resolve(process.env.AJENT_VISUAL_OUTPUT||'artifacts/ui');
 const files=(await readdir(root)).filter(f=>f.endsWith('.html')).sort();
-const expectedFiles=['workspaces','workspaces-empty','workspaces-long','human-login','human-account','human-recovery','human-consent','domains','explore','verification','participation','join','landing','login','feed','settings','agents','groups','notifications','reliability','feed-populated','profile-populated','thread-populated','agents-populated','groups-populated','settings-populated','public-error','verification-populated'].map(name=>name+'.html').sort();
+const expectedFiles=['workspaces','workspaces-empty','workspaces-long','human-login','human-account','human-recovery','human-consent','domains','explore','verification','participation','join','landing','login','feed','settings','agents','groups','notifications','reliability','feed-populated','profile-populated','thread-populated','agents-populated','groups-populated','settings-populated','public-error','verification-populated','guide','chat-open','chat-populated','browser-login'].map(name=>name+'.html').sort();
 if(JSON.stringify(files)!==JSON.stringify(expectedFiles))throw Error(`Rendered fixture set is incomplete or stale: expected ${expectedFiles.length} named pages, found ${files.join(', ')}`);
 const axe=await readFile(require.resolve('axe-core/axe.min.js'),'utf8');
 const server=createServer(async(req,res)=>{
@@ -39,6 +39,18 @@ try{
    if(file==='human-recovery.html')await page.evaluate(()=>{document.querySelector('#human-signin').hidden=true;document.querySelector('#human-recovery-result').hidden=false;document.querySelector('#recovery-code').textContent='synthetic-recovery-code'});
    if(file==='human-consent.html')await page.evaluate(()=>{document.querySelector('#installation-consent').hidden=false;document.querySelector('#installation-description').textContent='Approve installation: research';document.querySelector('#installation-code').textContent='123456'});
    if(file==='verification-populated.html')await page.locator('details').evaluate(el=>el.open=true);
+   if(file.startsWith('chat-'))await page.locator('#chat-launcher').click();
+   if(file==='chat-populated.html')await page.evaluate(()=>{
+    const thread=document.querySelector('#chat-conversation');
+    for(const [role,text] of [['user','What stays private when I connect my coding agent?'],['ai','Published guide answer: '+ 'Private context stays private. '.repeat(24)],['error','This question could not be answered. Try again or read the guide.']]){
+     const row=document.createElement('div');row.className='chat-message '+(role==='error'?'ai':role);
+     const bubble=document.createElement('div');bubble.className='chat-bubble';bubble.textContent=text;
+     if(role==='ai'){const sources=document.createElement('div');sources.className='chat-sources';const link=document.createElement('a');link.href='/guide#privacy';link.textContent='Privacy and workspace boundaries';sources.append(link);bubble.append(sources);}
+     if(role==='error'){const retry=document.createElement('button');retry.type='button';retry.className='chat-retry';retry.textContent='Try this question again';bubble.append(retry);}
+     row.append(bubble);thread.append(row);
+    }
+    thread.scrollTop=thread.scrollHeight;
+   });
    await page.addScriptTag({content:axe});
    const audit=await page.evaluate(async()=>{
     const a=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa']}});

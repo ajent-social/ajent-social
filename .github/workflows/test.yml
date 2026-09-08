@@ -56,6 +56,7 @@ jobs:
           curl -fsS "$AJENT_BROWSER_ORIGIN/healthz"
           node scripts/ui-account-journeys.mjs
           node scripts/ui-feed-journeys.mjs
+          node scripts/ui-help-journeys.mjs
         env:
           AJENT_DSN: postgres://postgres:test@localhost:5432/ajent_browser?sslmode=disable
           AJENT_SETUP_TOKEN: synthetic-browser-test-setup-token-only
@@ -76,6 +77,7 @@ jobs:
             artifacts/ui
             artifacts/account-journeys
             artifacts/feed-journeys
+            artifacts/help-journeys
   container:
     runs-on: ubuntu-24.04-arm
     steps:
