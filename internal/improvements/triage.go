@@ -172,6 +172,16 @@ func claimTriage(ctx context.Context, pool *pgxpool.Pool, c Control, cfg TriageC
 	if e != nil {
 		return work, e
 	}
+	// A selector snapshot may predate another worker's committed decision.
+	// Recheck after acquiring the report lock using a fresh statement snapshot;
+	// this also avoids waiting on a decision row while holding its report lock.
+	var existing bool
+	if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM improvement_decisions WHERE repository=$1 AND report_id=$2 AND report_version=$3 AND policy_version=$4)`, c.Repository, r.ID, r.Version, c.Version).Scan(&existing); e != nil {
+		return work, e
+	}
+	if existing {
+		return work, pgx.ErrNoRows
+	}
 	work.report = r
 	p, reason := localProposal(c.Repository, r, time.Now())
 	work.reason = reason
