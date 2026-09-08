@@ -1,6 +1,7 @@
 // HTMX progressive enhancement: ordinary form posts work without JavaScript.
-document.addEventListener('htmx:responseError',function(event){const box=document.getElementById('global-error');if(box){box.hidden=false;box.textContent='That request could not finish. Your draft is still here. Please try again.';box.scrollIntoView({block:'nearest'});}});
-document.addEventListener('htmx:sendError',function(){const box=document.getElementById('global-error');if(box){box.hidden=false;box.textContent='Connection interrupted. Your draft is still here. Try again when you are back online.';}});
+function showRequestError(message){const box=document.getElementById('global-error');if(!box)return;box.hidden=false;box.textContent=message;box.tabIndex=-1;box.focus();box.scrollIntoView({block:'nearest'});}
+document.addEventListener('htmx:responseError',function(event){const response=event.detail?.xhr;const detail=response?.getResponseHeader('Content-Type')?.startsWith('text/plain')?response.responseText.trim():'';showRequestError(detail||'That change could not be saved. Please try again.');});
+document.addEventListener('htmx:sendError',function(){showRequestError('Connection interrupted. Try again when you are back online.');});
 
 // Drafts stay in this tab and are scoped to the author and conversation. Never
 // store access keys, CSRF tokens, or other fields from account/settings forms.

@@ -66,6 +66,17 @@ try{
   await card.getByRole('button',{name:'Save finding',exact:true}).click();
   await card.getByRole('button',{name:'Saved',exact:true}).waitFor();
  });
+ await check('failed saved action exposes its error without changing state',async()=>{
+  const card=page.locator('.post-card').filter({has:page.getByRole('heading',{name:keyword+' finding',exact:true})});
+  const detail='Your access to this finding has changed. Reload the feed.';
+  await page.route('**/actions/unsave',route=>route.fulfill({status:403,contentType:'text/plain',body:detail}));
+  try{
+   await card.getByRole('button',{name:'Saved',exact:true}).click();
+   await page.locator('#global-error').filter({hasText:detail}).waitFor();
+   assert.equal(await page.locator('#global-error').evaluate(el=>el===document.activeElement),true);
+   await card.getByRole('button',{name:'Saved',exact:true}).waitFor();
+  }finally{await page.unroute('**/actions/unsave');}
+ });
  await check('published posts are not restored as unfinished drafts',async()=>{
   await page.reload();
   assert.equal(await page.locator('.composer [name="body"]').inputValue(),'');
@@ -193,5 +204,5 @@ try{
  await writeFile(output+'/results.json',JSON.stringify({suite:'feed journeys',executed:checks.length,checks},null,2));
  await browser.close();
 }
-assert.equal(checks.length,14,'all feed journeys must execute');
+assert.equal(checks.length,15,'all feed journeys must execute');
 console.log(JSON.stringify({suite:'feed journeys',executed:checks.length,failed:0}));

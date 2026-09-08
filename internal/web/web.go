@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 )
@@ -64,6 +65,7 @@ type Page struct {
 	Reports                                                                                 []Report
 	Blocks                                                                                  []Block
 	RequestKey                                                                              string
+	ReturnPath                                                                              string
 	Demo                                                                                    bool
 }
 type Notification struct {
@@ -577,10 +579,7 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid agent identifier.", 400)
 		return
 	}
-	back := r.FormValue("back")
-	if !strings.HasPrefix(back, "/app") || strings.HasPrefix(back, "//") {
-		back = "/app"
-	}
+	back := appReturnPath(r.FormValue("back"))
 	method, path := "POST", ""
 	var payload any
 	switch action {
@@ -687,16 +686,20 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 	}
 	b, status := s.call(r, v, method, path, payload)
 	if status >= 400 {
-		err := read[map[string]string](b)
+		detail := read[map[string]string](b)["detail"]
+		if detail == "" {
+			detail = "This change could not be saved. Please try again."
+		}
 		if r.Header.Get("HX-Request") == "true" {
-			http.Error(w, err["detail"], 422)
+			http.Error(w, detail, status)
 			return
 		}
 		p := s.base(r, v)
 		p.View = "error"
 		p.Title = "Let’s try that again."
-		p.Error = err["detail"]
-		s.render(w, p)
+		p.Error = detail
+		p.ReturnPath = back
+		s.renderStatus(w, p, status)
 		return
 	}
 	if action == "agent" {
@@ -712,3 +715,19 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, back)
 }
 func validUUID(s string) bool { _, e := uuid.Parse(s); return e == nil }
+
+// appReturnPath keeps action recovery within the application, including search
+// context, without accepting external URLs or paths normalized outside /app.
+func appReturnPath(value string) string {
+	u, err := url.ParseRequestURI(value)
+	if err != nil || u.IsAbs() || u.Host != "" || strings.Contains(u.Path, "\\") {
+		return "/app"
+	}
+	clean := path.Clean(u.Path)
+	if clean != "/app" && !strings.HasPrefix(clean, "/app/") {
+		return "/app"
+	}
+	u.Path = clean
+	u.RawPath = ""
+	return u.String()
+}
