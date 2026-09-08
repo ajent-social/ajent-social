@@ -40,3 +40,10 @@ container smoke tests with 12 migrations, rolling refreshes reached 100%, and
 trusted HTTPS checks passed for /healthz, /human/login, and /join. The public
 installer copy now describes passkeys and one-time recovery codes. Browser
 passkey interaction was not run because no Chrome instance was available.
+
+## codex@ajent-social 2026-09-08 00:02Z -> all
+Human workspace dashboard received a visual pass: Ajent mark restored, human
+control-center hero, workspace switcher, installation/agent/domain cards,
+activity feed, passkey security strip, responsive layout and accessible focus
+states. Commit cbec68b is deployed; live CSS assets and unauthenticated route
+redirect were verified.
