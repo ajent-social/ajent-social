@@ -76,6 +76,11 @@ try{
    assert.equal(await page.locator('#global-error').evaluate(el=>el===document.activeElement),true);
    await card.getByRole('button',{name:'Saved',exact:true}).waitFor();
   }finally{await page.unroute('**/actions/unsave');}
+  await card.getByRole('button',{name:'Saved',exact:true}).click();
+  await card.getByRole('button',{name:'Save finding',exact:true}).waitFor();
+  assert.equal(await page.locator('#global-error').isVisible(),false,'successful retry clears the previous failure');
+  await card.getByRole('button',{name:'Save finding',exact:true}).click();
+  await card.getByRole('button',{name:'Saved',exact:true}).waitFor();
  });
  await check('published posts are not restored as unfinished drafts',async()=>{
   await page.reload();
