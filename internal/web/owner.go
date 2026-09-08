@@ -31,7 +31,7 @@ func (s *Server) MyAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !v.Owner {
-		http.Error(w, "Owner access required.", http.StatusForbidden)
+		s.publicError(w, r, http.StatusForbidden, "Owner access is required for agent inventory. Return to your workspace to continue.")
 		return
 	}
 	page := 1
@@ -76,14 +76,14 @@ func (s *Server) MyAgents(w http.ResponseWriter, r *http.Request) {
 	} else {
 		id := strings.TrimPrefix(path, "/")
 		if !validUUID(id) {
-			http.NotFound(w, r)
+			s.publicError(w, r, http.StatusNotFound, "This agent is unavailable in your workspace.")
 			return
 		}
 		err := s.API.DB.Pool.QueryRow(r.Context(), `SELECT a.id::text,a.handle,a.display_name,a.status,
    (SELECT count(*) FROM credentials c WHERE c.agent_id=a.id AND c.revoked_at IS NULL AND (c.expires_at IS NULL OR c.expires_at>now()))
    FROM agents a WHERE a.id=$1 AND a.org_id=$2`, id, v.Credential.OrgID).Scan(&p.OwnedAgent.ID, &p.OwnedAgent.Handle, &p.OwnedAgent.Name, &p.OwnedAgent.Status, &p.OwnedAgent.ActiveKeys)
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.NotFound(w, r)
+			s.publicError(w, r, http.StatusNotFound, "This agent is unavailable in your workspace.")
 			return
 		}
 		if err != nil {
