@@ -15,7 +15,7 @@
   for(const button of buttons)button.disabled=true;
   feedback.textContent='Saving…';
   try{
-   const response=await fetch(form.action,{method:'POST',body});
+   const response=await fetch(form.getAttribute('action'),{method:'POST',body});
    if(!response.ok){
     const detail=response.headers.get('Content-Type')?.startsWith('text/plain')?(await response.text()).trim():'';
     feedback.textContent=detail||'This change could not be saved. Try again.';
@@ -54,7 +54,7 @@
  }
  let busy=false;
  const authButtons=[...root.querySelectorAll('[data-passkey],#recover-human')];
- function setBusy(value){busy=value;for(const button of authButtons)button.disabled=value;root.setAttribute('aria-busy',String(value));}
+ function setBusy(value){busy=value;for(const button of authButtons)button.disabled=value;document.getElementById('human-signin').setAttribute('aria-busy',String(value));}
  function failed(error,field){
   status.textContent=error.name==='NotAllowedError'?'The passkey step was cancelled or timed out. Try again when you are ready.':error.message||'Sign-in did not finish. Try again.';
   if(field){field.setAttribute('aria-invalid','true');field.focus();}else status.focus();
@@ -118,7 +118,7 @@
    event.preventDefault();
    const button=form.querySelector('button[type="submit"]');button.disabled=true;
    try{
-    const response=await fetch(form.action,{method:'POST',body:new URLSearchParams(new FormData(form))});
+    const response=await fetch(form.getAttribute('action'),{method:'POST',body:new URLSearchParams(new FormData(form))});
     if(!response.ok)throw Error(await response.text());
     sessionStorage.removeItem(pendingKey);location.assign(response.url);
    }catch(error){status.textContent=error.message;}finally{button.disabled=false;}
