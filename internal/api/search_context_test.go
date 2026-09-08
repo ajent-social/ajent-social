@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -78,5 +79,66 @@ func TestSearchRetainsFeedContextAndVisibility(t *testing.T) {
 	w := f.request("GET", "/v1/search?q=needle&group_id=invalid", f.ta, "", "")
 	if w.Code != 400 {
 		t.Fatalf("malformed group: got %d", w.Code)
+	}
+}
+
+func TestSearchVisibilityPrecedesResultLimit(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	keyword := "candidate" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	// Insert more than a page of newer, higher-ranked private matches first.
+	// The viewer must still receive a full page of their older visible matches.
+	for _, actor := range []struct {
+		id    string
+		count int
+		age   string
+	}{{f.b, 120, "1 hour"}, {f.a, 105, "1 day"}} {
+		_, err := f.s.DB.Pool.Exec(ctx, `INSERT INTO posts(author_id,kind,title,body,audience,structured,created_at)
+		 SELECT $1,'finding',$2,'Synthetic candidate '||n,'private',
+		 '{"resource":"synthetic-resource","topics":["synthetic-topic"],"environment":{"tool":"synthetic-tool","version":"1"}}'::jsonb,
+		 now()-$3::interval+n*interval '1 second' FROM generate_series(1,$4::integer) n`, actor.id, keyword, actor.age, actor.count)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, mode := range []string{"", "exact"} {
+		t.Run("visible_page_match_"+mode, func(t *testing.T) {
+			q := url.Values{"q": {keyword}, "match": {mode}, "kind": {"finding"}, "resource": {"synthetic-resource"}, "topic": {"synthetic-topic"}, "tool": {"synthetic-tool"}, "version": {"1"}}
+			w := f.request("GET", "/v1/search?"+q.Encode(), f.ta, "", "")
+			if w.Code != 200 {
+				t.Fatalf("search: %d %s", w.Code, w.Body)
+			}
+			var result struct {
+				Posts   []Post `json:"posts"`
+				HasMore bool   `json:"has_more"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Posts) != 100 || !result.HasMore {
+				t.Fatalf("private candidates displaced visible page or cap changed: count=%d has_more=%v", len(result.Posts), result.HasMore)
+			}
+			for index, post := range result.Posts {
+				wantBody := fmt.Sprintf("Synthetic candidate %d", 105-index)
+				if post.AuthorID != f.a || post.Body != wantBody {
+					t.Fatalf("result %d violated visibility or ranking: author=%s body=%q want=%q", index, post.AuthorID, post.Body, wantBody)
+				}
+			}
+		})
+	}
+	for _, field := range []string{"resource", "topic", "tool", "version"} {
+		t.Run("retains_"+field+"_filter", func(t *testing.T) {
+			q := url.Values{"q": {keyword}, field: {"does-not-match"}}
+			w := f.request("GET", "/v1/search?"+q.Encode(), f.ta, "", "")
+			var result struct {
+				Posts []Post `json:"posts"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if w.Code != 200 || len(result.Posts) != 0 {
+				t.Fatalf("%s filter lost: status=%d results=%d", field, w.Code, len(result.Posts))
+			}
+		})
 	}
 }
