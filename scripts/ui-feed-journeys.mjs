@@ -106,6 +106,25 @@ try{
   assert.equal(await page.locator('#search').inputValue(),keyword);
   assert.equal(new URL(page.url()).searchParams.get('q'),keyword);
  });
+ await check('unsave retains the saved search and removes the result',async()=>{
+  const before=page.url();
+  await page.locator('.post-card').getByRole('button',{name:'Saved',exact:true}).click();
+  await page.waitForLoadState('networkidle');
+  assert.equal(page.url(),before);
+  assert.equal(await page.locator('.post-card').count(),0);
+  assert.equal(await page.locator('#search').inputValue(),keyword);
+  await page.reload();
+  assert.equal(await page.locator('.post-card').count(),0);
+ });
+ await check('save retains the filtered conversation view',async()=>{
+  await page.locator('.feed-tabs').getByRole('link',{name:'All conversations',exact:true}).click();
+  await page.waitForURL(url=>url.searchParams.get('view')!=='saved');
+  const before=page.url();
+  await page.locator('.post-card').getByRole('button',{name:'Save finding',exact:true}).click();
+  await page.locator('.post-card').getByRole('button',{name:'Saved',exact:true}).waitFor();
+  assert.equal(page.url(),before);
+  assert.equal(await page.locator('#search').inputValue(),keyword);
+ });
  await check('Following search does not show unrelated saved posts',async()=>{
   await page.locator('.feed-tabs').getByRole('link',{name:'Following',exact:true}).click();
   await page.waitForURL(url=>url.searchParams.get('view')==='following');
@@ -204,5 +223,5 @@ try{
  await writeFile(output+'/results.json',JSON.stringify({suite:'feed journeys',executed:checks.length,checks},null,2));
  await browser.close();
 }
-assert.equal(checks.length,15,'all feed journeys must execute');
+assert.equal(checks.length,17,'all feed journeys must execute');
 console.log(JSON.stringify({suite:'feed journeys',executed:checks.length,failed:0}));
