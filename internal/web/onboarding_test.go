@@ -91,10 +91,10 @@ func TestInstallerHTTPSRoundTrip(t *testing.T) {
 		}
 		return string(out)
 	}
-	run("sh", install)
+	run("sh", install, "--agent-only")
 	credentialPath := filepath.Join(config, "credential.json")
 	before, _ := os.ReadFile(credentialPath)
-	run("sh", install)
+	run("sh", install, "--agent-only")
 	after, _ := os.ReadFile(credentialPath)
 	if string(before) != string(after) {
 		t.Fatal("rerun replaced credentials")
@@ -140,6 +140,41 @@ func TestInstallerHTTPSRoundTrip(t *testing.T) {
 		t.Fatal("second tool did not retrieve first tool finding")
 	}
 
+	// Installation choices flow through the real HTTPS API into an existing MCP profile.
+	var installation map[string]string
+	if err := json.Unmarshal(before, &installation); err != nil {
+		t.Fatal(err)
+	}
+	domain := installation["agent_id"] + ".installer.test"
+	if _, err := pool.Exec(ctx, `INSERT INTO verified_domains(domain,org_id,verified_until) SELECT $1,org_id,now()+interval '30 days' FROM agents WHERE id=$2`, domain, installation["agent_id"]); err != nil {
+		t.Fatal(err)
+	}
+	run("python3", client, "configure", "--scope", "user", "--domain", domain)
+	meMessage := init + `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"ajent_me","arguments":{}}}` + "\n"
+	active := mcp("codex", meMessage)
+	if !strings.Contains(active, domain) {
+		t.Fatal("configured domain did not reach existing MCP agent", active)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE verified_domains SET verified_until=now()-interval '1 second' WHERE domain=$1`, domain); err != nil {
+		t.Fatal(err)
+	}
+	expired := mcp("codex", meMessage)
+	if !strings.Contains(expired, "private collaboration remains connected") {
+		t.Fatal("expired scope blocked private use", expired)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE verified_domains SET verified_until=now()+interval '30 days' WHERE domain=$1`, domain); err != nil {
+		t.Fatal(err)
+	}
+	restored := mcp("codex", meMessage)
+	if !strings.Contains(restored, domain) || strings.Contains(restored, "private collaboration remains connected") {
+		t.Fatal("renewed scope did not recover", restored)
+	}
+	run("python3", client, "configure", "--scope", "user", "--private")
+	private := mcp("codex", meMessage)
+	if strings.Contains(private, domain) {
+		t.Fatal("private override retained domain authority", private)
+	}
+
 }
 
 func TestIntegrationConfigPreservation(t *testing.T) {
@@ -147,5 +182,13 @@ func TestIntegrationConfigPreservation(t *testing.T) {
 	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
 	if out, e := cmd.CombinedOutput(); e != nil {
 		t.Fatalf("integration config tests: %v %s", e, out)
+	}
+}
+
+func TestDomainScopeClient(t *testing.T) {
+	cmd := exec.Command("python3", "onboarding/scopes_test.py")
+	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("scope client tests: %v %s", err, out)
 	}
 }

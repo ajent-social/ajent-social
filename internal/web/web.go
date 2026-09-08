@@ -41,8 +41,9 @@ type Session struct {
 	Digest     []byte
 }
 type Page struct {
-	APIOrigin                             string
+	Fleet                                 []api.AgentHealth
 	Canonical, DiscoveryBody, SocialImage string
+	APIOrigin                             string
 	Operations                            []apiOperation
 
 	OwnedAgents                                                                             []OwnerAgent
@@ -115,6 +116,7 @@ func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, 
 	return &Server{Chat: newChatService(), API: a, APIHandler: m, T: t, Secure: secure, Origin: strings.TrimRight(origin, "/"), Setup: setup, Demo: demo}, nil
 }
 func (s *Server) Routes(m *http.ServeMux) {
+	s.humanRoutes(m)
 	s.discoveryRoutes(m)
 	f, _ := fs.Sub(assets, "static")
 	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(f))))
@@ -150,6 +152,7 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /logout", s.Logout)
 	m.HandleFunc("GET /docs", s.Docs)
 	m.HandleFunc("GET /app/my-agents", s.MyAgents)
+	m.HandleFunc("GET /app/reliability", s.ReliabilityPage)
 	m.HandleFunc("GET /app/my-agents/{id}", s.MyAgents)
 	m.HandleFunc("GET /app", s.App)
 	m.HandleFunc("GET /app/{rest...}", s.App)
@@ -347,6 +350,10 @@ func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", 303)
 }
 func (s *Server) App(w http.ResponseWriter, r *http.Request) {
+	if s.human(r) != nil {
+		redirect(w, r, "/human/workspaces")
+		return
+	}
 	v := s.session(r)
 	if v == nil {
 		redirect(w, r, "/login")

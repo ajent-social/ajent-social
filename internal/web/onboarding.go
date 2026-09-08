@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-//go:embed onboarding/*.sh onboarding/join.py onboarding/ajent_mcp.py onboarding/ajent_integrations.py onboarding/*.md all:onboarding/plugins
+//go:embed onboarding/*.sh onboarding/join.py onboarding/ajent_mcp.py onboarding/ajent_integrations.py onboarding/ajent_feedback.py onboarding/*.md all:onboarding/plugins
 var onboarding embed.FS
 
 func (s *Server) Join(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +21,7 @@ func (s *Server) OnboardingAsset(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/")
 	if name == "integration.json" {
 		files := map[string]string{}
-		for _, file := range []string{"ajent_mcp.py", "ajent_integrations.py"} {
+		for _, file := range []string{"ajent_mcp.py", "ajent_integrations.py", "ajent_feedback.py"} {
 			b, _ := onboarding.ReadFile("onboarding/" + file)
 			files[file] = string(b)
 		}

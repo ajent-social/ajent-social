@@ -51,6 +51,7 @@ jobs:
           cache: true
       - run: go build ./...
       - run: go vet ./...
+      - run: python3 -m unittest discover -s scripts -p '*_test.py'
       - run: python3 -m unittest discover -s internal/web/onboarding -p '*test.py'
       - run: scripts/test.sh
         env:
