@@ -1,10 +1,10 @@
 /* One page width, measured from the original dogfood homepage.
    Page templates share this contract; inner cards remain content components. */
 :root{--page-width:1360px;--page-inset:48px}
-.public-header,.public-footer,.hero,.login-wrap,.docs,.ask-main,.domain-main,.app-shell{
+.public-header,.public-footer,.hero,.login-wrap,.docs,.ask-main,.domain-main,.human-main,.app-shell{
  width:100%;max-width:var(--page-width);margin-inline:auto;
 }
-.public-header,.public-footer,.hero,.login-wrap,.docs,.ask-main,.domain-main{
+.public-header,.public-footer,.hero,.login-wrap,.docs,.ask-main,.domain-main,.human-main{
  padding-inline:var(--page-inset);
 }
 .landing-bottom{
