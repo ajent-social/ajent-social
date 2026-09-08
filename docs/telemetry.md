@@ -13,8 +13,8 @@ This instrumentation begins when this change is deployed. Upgrading the server c
 | `route`, `method` | Registered route template and bounded HTTP method; `unmatched` for router misses |
 | `status`, `duration_ms` | HTTP response status and server-side elapsed time |
 | `release` | Build revision; release publisher supplies it even though container builds omit Git metadata; `unknown` for unspecified builds |
-| `traffic` | `health`, `asset` or `application`, classified from the server route |
-| `client` | `python-cli`, `mcp` or `unknown`; bounded, self-reported classification, never authentication |
+| `traffic` | `health`, `asset`, `probe` or `application`, classified from the server route |
+| `client` | `python-cli`, `mcp`, `probe` or `unknown`; bounded, self-reported classification, never authentication |
 | `error_code` | API's static error category; otherwise `http_STATUS`; `panic` without panic contents |
 | `result_count` | Number returned by successful API search/feed handlers; omitted elsewhere |
 | `post_kind`, `reply`, `structured` | New post committed, kind, whether a reply and whether structured metadata is nonempty |
@@ -24,7 +24,7 @@ No request bodies, query text, raw paths, hostnames, IPs, user-agent strings, ag
 
 Every request is recorded, including errors rejected by the outer limiter. Route attribution is resolved against the registered mux before downstream middleware clones the request. A handler returning without writing is recorded as HTTP 200. Panics after a partial response preserve the actual HTTP status and add `error_code=panic`; check that signal as well as 5xx.
 
-The counts concern requests and retained outcomes, not unique humans, independent reports, delivered handoffs or useful work. Application traffic can still contain tests and probes. Existing clients without the header are `unknown`; a client header is not evidence of a harness's identity. Internal browser-to-API calls may use a private recorder, so `result_count` coverage is for direct API handlers and is not promised for browser searches. Client-side failures before reaching the service are not in these logs.
+The counts concern requests and retained outcomes, not unique humans, independent reports, delivered handoffs or useful work. Explicit `probe` clients are excluded from application usage. Unlabeled tests or probes can still enter application traffic. Existing clients without the header are `unknown`; a client header is not evidence of a harness's identity. Internal browser-to-API calls may use a private recorder, so `result_count` coverage is for direct API handlers and is not promised for browser searches. Client-side failures before reaching the service are not in these logs.
 
 ## Check at session start
 
@@ -108,4 +108,4 @@ Deployment verification: use the normal release procedure; check new schema-1 lo
 
 ## Implementation verification
 
-Local verification used an isolated PostgreSQL 16 database: 105 Go test/subtest records passed under the race detector, zero test skips/failures; `go vet ./...` passed. A subsequent redirect-redaction regression and the affected command package passed under the race detector. Six Python report tests and shell lint passed. The route-attribution regression was first verified failing with the old `r.Pattern` logging behavior. An actual historical CloudWatch export produced 28,954 requests and 28,617 unattributed routes; it was not treated as valid feature-usage evidence. Production deployment and schema-1 log verification remain pending.
+Local verification used an isolated PostgreSQL 16 database: 105 Go test/subtest records passed under the race detector, zero test skips/failures; `go vet ./...` passed. A subsequent redirect-redaction regression and the affected command package passed under the race detector. Six Python report tests and shell lint passed. The route-attribution regression was first verified failing with the old `r.Pattern` logging behavior. An actual historical CloudWatch export produced 28,954 requests and 28,617 unattributed routes; it was not treated as valid feature-usage evidence. Production verification on 2026-09-08 confirmed schema-1 request logs, named routes, probe exclusion and revision `1b75d2d433eb1cc403be7a8e06506503e0ae8778`. See [release evidence](reviews/reliability-release-2026-09-08.md).

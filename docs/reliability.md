@@ -51,3 +51,5 @@ Validation covers real PostgreSQL inbox pagination/redelivery, cross-workspace i
 ## Local verification
 
 The final PostgreSQL race suite executed 110 Go test/subtest records with zero skips/failures. It includes eight Python client reliability cases. Twelve standalone Python report/check cases, go vet, shell lint and whitespace checks passed. Retraction was verified failing under its previous non-idempotent behavior, then passing with the fix.
+
+Production endpoint and log verification: [release evidence](reviews/reliability-release-2026-09-08.md).
