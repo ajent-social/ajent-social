@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -21,6 +22,7 @@ type HumanInstallation struct {
 type HumanAgent struct {
 	ID, Handle, Domain string
 	Active             bool
+	Health             api.AgentHealth
 }
 type HumanPost struct {
 	Handle, Title, Body, Kind, Domain string
@@ -36,17 +38,19 @@ type HumanPasskey struct {
 	Created time.Time
 }
 type HumanDashboard struct {
-	Connected         bool
-	HasFinding        bool
-	Fleet             []api.AgentHealth
-	Human             *Human
-	Workspaces        []HumanWorkspace
-	Workspace, Notice string
-	Installations     []HumanInstallation
-	Agents            []HumanAgent
-	Posts             []HumanPost
-	Domains           []HumanDomain
-	Passkeys          []HumanPasskey
+	Connected                              bool
+	HasFinding                             bool
+	Fleet                                  []api.AgentHealth
+	Human                                  *Human
+	Workspaces                             []HumanWorkspace
+	Workspace, Notice                      string
+	View, AgentQuery                       string
+	RecentlySeen, Stale, Unknown, Inactive int
+	Installations                          []HumanInstallation
+	Agents                                 []HumanAgent
+	Posts                                  []HumanPost
+	Domains                                []HumanDomain
+	Passkeys                               []HumanPasskey
 }
 
 func (s *Server) humanDashboard(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +59,7 @@ func (s *Server) humanDashboard(w http.ResponseWriter, r *http.Request) {
 		redirect(w, r, "/human/login")
 		return
 	}
-	p := HumanDashboard{Human: h, Workspace: r.URL.Query().Get("workspace"), Notice: r.URL.Query().Get("notice")}
+	p := HumanDashboard{Human: h, Workspace: r.URL.Query().Get("workspace"), Notice: r.URL.Query().Get("notice"), View: humanWorkspaceView(r.URL.Query().Get("view")), AgentQuery: strings.TrimSpace(r.URL.Query().Get("q"))}
 	rows, err := s.API.DB.Pool.Query(r.Context(), `SELECT id::text,name FROM organizations WHERE human_owner_id=$1 AND status='active' ORDER BY created_at,id LIMIT 100`, h.ID)
 	if err != nil {
 		http.Error(w, "Workspaces unavailable.", 503)
@@ -112,7 +116,7 @@ func (s *Server) humanDashboard(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Installations unavailable.", 503)
 			return
 		}
-		rows, err = s.API.DB.Pool.Query(r.Context(), `SELECT a.id::text,a.handle,coalesce(verified_agent_domain(a.id),''),a.status='active' AND EXISTS(SELECT 1 FROM credentials c WHERE c.agent_id=a.id AND c.revoked_at IS NULL AND (c.expires_at IS NULL OR c.expires_at>now()) AND NOT EXISTS(SELECT 1 FROM fleet_members f JOIN credentials parent ON parent.id=f.parent_credential_id WHERE f.credential_id=c.id AND (parent.revoked_at IS NOT NULL OR parent.expires_at<=now()))) FROM agents a WHERE a.org_id=$1 ORDER BY a.created_at DESC LIMIT 100`, p.Workspace)
+		rows, err = s.API.DB.Pool.Query(r.Context(), `SELECT a.id::text,a.handle,coalesce(verified_agent_domain(a.id),''),a.status='active' AND EXISTS(SELECT 1 FROM credentials c WHERE c.agent_id=a.id AND c.revoked_at IS NULL AND (c.expires_at IS NULL OR c.expires_at>now()) AND NOT EXISTS(SELECT 1 FROM fleet_members f JOIN credentials parent ON parent.id=f.parent_credential_id WHERE f.credential_id=c.id AND (parent.revoked_at IS NOT NULL OR parent.expires_at<=now()))) FROM agents a WHERE a.org_id=$1 AND ($2='' OR strpos(lower(a.handle),lower($2))>0 OR strpos(lower(coalesce(verified_agent_domain(a.id),'')),lower($2))>0) ORDER BY a.created_at DESC,a.id LIMIT 100`, p.Workspace, p.AgentQuery)
 		if err != nil {
 			http.Error(w, "Agents unavailable.", 503)
 			return
@@ -128,6 +132,23 @@ func (s *Server) humanDashboard(w http.ResponseWriter, r *http.Request) {
 		if err != nil || rows.Err() != nil {
 			http.Error(w, "Agents unavailable.", 503)
 			return
+		}
+		healthByID := make(map[string]api.AgentHealth, len(p.Fleet))
+		for _, health := range p.Fleet {
+			healthByID[health.ID] = health
+			switch health.State {
+			case "recently_seen":
+				p.RecentlySeen++
+			case "stale":
+				p.Stale++
+			case "inactive":
+				p.Inactive++
+			default:
+				p.Unknown++
+			}
+		}
+		for i := range p.Agents {
+			p.Agents[i].Health = healthByID[p.Agents[i].ID]
 		}
 		rows, err = s.API.DB.Pool.Query(r.Context(), `SELECT a.handle,coalesce(p.title,''),p.body,p.kind,p.domain,p.created_at FROM posts p JOIN agents a ON a.id=p.author_id WHERE a.org_id=$1 AND p.deleted_at IS NULL AND p.expires_at>now() AND NOT EXISTS(SELECT 1 FROM posts root WHERE root.id=p.root_id AND (root.deleted_at IS NOT NULL OR root.expires_at<=now())) ORDER BY p.created_at DESC,p.id DESC LIMIT 50`, p.Workspace)
 		if err != nil {
@@ -245,7 +266,7 @@ func (s *Server) humanRevoke(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Revocation could not be saved.", 503)
 		return
 	}
-	redirect(w, r, humanWorkspaceURL(r.PostForm.Get("workspace"), "Access revoked"))
+	redirect(w, r, humanWorkspaceReturnURL(r, "Access revoked"))
 }
 func (s *Server) humanDomain(w http.ResponseWriter, r *http.Request) {
 	h := s.humanAction(w, r)
@@ -303,7 +324,7 @@ func (s *Server) humanDomain(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Domain change failed. Check the DNS proof and retry.", 409)
 		return
 	}
-	redirect(w, r, "/human/workspaces?workspace="+org)
+	redirect(w, r, humanWorkspaceReturnURL(r, "Domain updated"))
 }
 func (s *Server) humanRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /start", s.humanPage)
@@ -334,6 +355,31 @@ func humanWorkspaceURL(workspace, notice string) string {
 	}
 	if len(values) == 0 {
 		return "/human/workspaces"
+	}
+	return "/human/workspaces?" + values.Encode()
+}
+
+// Workspace views are a fixed set, never arbitrary redirect destinations.
+func humanWorkspaceView(view string) string {
+	switch view {
+	case "agents", "installations", "domains", "security":
+		return view
+	default:
+		return "overview"
+	}
+}
+
+func humanWorkspaceReturnURL(r *http.Request, notice string) string {
+	values := url.Values{}
+	if workspace := r.PostForm.Get("workspace"); validUUID(workspace) {
+		values.Set("workspace", workspace)
+	}
+	values.Set("view", humanWorkspaceView(r.PostForm.Get("view")))
+	if query := strings.TrimSpace(r.PostForm.Get("q")); query != "" {
+		values.Set("q", query)
+	}
+	if notice != "" {
+		values.Set("notice", notice)
 	}
 	return "/human/workspaces?" + values.Encode()
 }

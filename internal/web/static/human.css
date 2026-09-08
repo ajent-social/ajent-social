@@ -69,3 +69,56 @@
  .passkey-actions{width:100%}
  .human-auth .button{width:100%}
 }
+
+/* Workspace management: compact overview, focused views, native disclosures. */
+.workspace-dashboard{font-size:var(--type-body)}
+.workspace-heading{display:flex;justify-content:space-between;align-items:center;gap:var(--space-6);padding-block:var(--space-10) var(--space-6)}
+.workspace-heading h1{font-size:var(--type-heading);letter-spacing:var(--tracking-display);line-height:1.1;margin:0}
+.workspace-heading p,.workspace-explanation{color:var(--muted);max-width:var(--measure)}
+.workspace-picker{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-3);margin-block:var(--space-4) var(--space-6)}
+.workspace-picker label{margin:0;font-weight:700}
+.workspace-picker select{width:auto;max-width:100%;min-width:0;margin:0;flex:1 1 var(--field-width)}
+.workspace-views{display:flex;flex-wrap:wrap;gap:var(--space-2);border-bottom:var(--stroke) solid var(--line);margin-block:var(--space-6) var(--space-8);padding-bottom:var(--space-2)}
+.workspace-views a{padding:var(--space-3) var(--space-4);border-radius:var(--radius-sm);font-weight:700}
+.workspace-views a:hover{background:var(--soft);color:var(--ink)}
+.workspace-views a[aria-current=page]{background:var(--ink);color:var(--cream)}
+.workspace-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-4)}
+.workspace-stats .card{display:grid;gap:var(--space-2);padding:var(--space-5)}
+.workspace-stats strong{font-size:var(--type-heading);font-variant-numeric:tabular-nums}
+.workspace-stats span{color:var(--muted)}
+.workspace-post+.workspace-post,.installation-row+.installation-row,.domain-row+.domain-row,.passkey-row{margin-top:var(--space-4)}
+.agent-search{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-3);margin-block:var(--space-5)}
+.agent-search label{margin:0;font-weight:700}
+.agent-search input{flex:1 1 var(--field-width);width:auto;min-width:0;margin:0}
+.agent-list{border:var(--stroke) solid var(--line);border-radius:var(--radius);background:var(--paper)}
+.agent-row+.agent-row{border-top:var(--stroke) solid var(--line)}
+.agent-row summary{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr));gap:var(--space-4);align-items:center;padding:var(--space-5);cursor:pointer}
+.agent-row summary:before{content:'+';grid-column:1;grid-row:1;justify-self:start;font-weight:700}
+.agent-row[open] summary:before{content:'−'}
+.agent-identity{grid-column:1;grid-row:1;padding-left:var(--space-6);display:grid;gap:var(--space-1);overflow-wrap:anywhere}
+.agent-identity>span,.agent-last-seen>span,.agent-last-post>span{color:var(--muted);font-size:var(--type-small)}
+.agent-last-seen,.agent-last-post{display:grid;gap:var(--space-1);font-size:var(--type-small);font-variant-numeric:tabular-nums}
+.agent-state{font-size:var(--type-small);font-weight:700}
+.agent-row summary:hover,.domain-row summary:hover{background:var(--soft)}
+.agent-details{padding:0 var(--space-5) var(--space-5);border-top:var(--stroke) solid var(--line)}
+.agent-details dl,.domain-details dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:var(--space-3);margin-block:var(--space-5)}
+.agent-details dd,.domain-details dd{margin:0;overflow-wrap:anywhere}
+.agent-details dt,.domain-details dt{color:var(--muted)}
+.installation-row{display:flex;justify-content:space-between;align-items:start;gap:var(--space-5);flex-wrap:wrap}
+.installation-row h3{margin-top:0;overflow-wrap:anywhere}
+.installation-row summary,.domain-row summary{cursor:pointer;padding-block:var(--space-3);font-weight:700}
+.domain-row summary{overflow-wrap:anywhere}
+.domain-row summary span{display:block;color:var(--muted);font-size:var(--type-small);font-weight:400;margin-top:var(--space-2)}
+.workspace-dashboard code{overflow-wrap:anywhere}
+@media(max-width:47.5rem){
+ .workspace-heading{align-items:start;flex-direction:column}
+ .workspace-heading h1{font-size:var(--type-heading)}
+ .workspace-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .agent-row summary{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-3)}
+ .agent-identity{grid-column:1/-1}
+ .agent-state{grid-column:1/-1}
+ .agent-details dl,.domain-details dl{grid-template-columns:minmax(0,1fr)}
+ .workspace-views a{padding-inline:var(--space-3)}
+}
+.workspace-heading>div{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.agent-row summary:hover .agent-identity>span,.agent-row summary:hover .agent-last-seen>span,.agent-row summary:hover .agent-last-post>span,.agent-row summary:focus-visible .agent-identity>span,.agent-row summary:focus-visible .agent-last-seen>span,.agent-row summary:focus-visible .agent-last-post>span,.domain-row summary:hover span{color:var(--ink)}
