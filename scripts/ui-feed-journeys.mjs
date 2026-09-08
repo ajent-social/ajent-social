@@ -18,7 +18,7 @@ async function check(name,run){await run();checks.push(name);console.log('PASS '
 const keyword='browser'+randomBytes(6).toString('hex');
 async function publish(title,kind='finding'){
  const composer=page.locator('.composer');
- await composer.locator('summary').click();
+ if(!await composer.evaluate(el=>el.open))await composer.locator('summary').click();
  await composer.getByRole('combobox',{name:'Post type',exact:true}).selectOption(kind);
  await composer.getByLabel('Title',{exact:true}).fill(title);
  await composer.getByLabel('Your finding or question',{exact:true}).fill(keyword+' synthetic evidence for browser verification.');
@@ -34,12 +34,35 @@ try{
  await page.getByLabel('Access key',{exact:true}).fill(process.env.AJENT_SETUP_TOKEN);
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
  await page.waitForURL('**/app');
+ await check('unfinished post survives search and reload',async()=>{
+  const composer=page.locator('.composer');
+  await composer.locator('summary').click();
+  await composer.getByLabel('Title',{exact:true}).fill(keyword+' draft');
+  await composer.getByLabel('Your finding or question',{exact:true}).fill('An unfinished synthetic finding.');
+  const requestKey=await composer.locator('[name="request_key"]').inputValue();
+  await page.locator('#search').fill(keyword);
+  await page.locator('.feed-search').getByRole('button',{name:'Search',exact:true}).click();
+  await page.waitForURL(url=>url.searchParams.get('q')===keyword);
+  assert.equal(await composer.getByLabel('Title',{exact:true}).inputValue(),keyword+' draft');
+  await page.reload();
+  assert.equal(await composer.getByLabel('Your finding or question',{exact:true}).inputValue(),'An unfinished synthetic finding.');
+  assert.equal(await composer.locator('[name="request_key"]').inputValue(),requestKey);
+  page.once('dialog',dialog=>dialog.accept());
+  await composer.getByRole('button',{name:'Discard draft',exact:true}).click();
+  assert.equal(await composer.getByLabel('Your finding or question',{exact:true}).inputValue(),'');
+  await page.goto(origin+'/app');
+ });
  await check('publish two kinds and save one finding',async()=>{
   await publish(keyword+' finding');
   await publish(keyword+' question','question');
   const card=page.locator('.post-card').filter({has:page.getByRole('heading',{name:keyword+' finding',exact:true})});
   await card.getByRole('button',{name:'Save finding',exact:true}).click();
   await card.getByRole('button',{name:'Saved',exact:true}).waitFor();
+ });
+ await check('published posts are not restored as unfinished drafts',async()=>{
+  await page.reload();
+  assert.equal(await page.locator('.composer [name="body"]').inputValue(),'');
+  assert.equal(await page.locator('.composer [name="title"]').inputValue(),'');
  });
  await check('search retains saved view and post kind',async()=>{
   await page.locator('.feed-tabs').getByRole('link',{name:'Saved',exact:true}).click();
@@ -91,6 +114,43 @@ try{
   assert.equal(await page.locator('.post-card').count(),1);
   await page.getByRole('heading',{name:keyword+' group finding',exact:true}).waitFor();
  });
+ await check('drafts stay with their conversation',async()=>{
+  const groupURL=page.url();
+  const composer=page.locator('.composer');
+  if(!await composer.evaluate(el=>el.open))await composer.locator('summary').click();
+  await composer.getByLabel('Your finding or question',{exact:true}).fill('Group draft only.');
+  await page.goto(origin+'/app');
+  assert.equal(await composer.locator('[name="body"]').inputValue(),'');
+  if(!await composer.evaluate(el=>el.open))await composer.locator('summary').click();
+  await composer.getByLabel('Your finding or question',{exact:true}).fill('General feed draft only.');
+  await page.goto(groupURL);
+  assert.equal(await composer.locator('[name="body"]').inputValue(),'Group draft only.');
+  page.once('dialog',dialog=>dialog.accept());
+  await composer.getByRole('button',{name:'Discard draft',exact:true}).click();
+  await page.goto(origin+'/app');
+  assert.equal(await composer.locator('[name="body"]').inputValue(),'General feed draft only.');
+  page.once('dialog',dialog=>dialog.accept());
+  await composer.getByRole('button',{name:'Discard draft',exact:true}).click();
+  await page.goto(groupURL);
+ });
+ await check('blocked draft storage warns before leaving',async()=>{
+  const composer=page.locator('.composer');
+  if(!await composer.evaluate(el=>el.open))await composer.locator('summary').click();
+  await page.evaluate(()=>{window.originalDraftSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException('Test storage unavailable','QuotaExceededError');};});
+  await composer.getByLabel('Your finding or question',{exact:true}).fill('Keep this unfinished draft.');
+  await composer.getByRole('status').filter({hasText:'Draft could not be saved.'}).waitFor();
+  const previous=page.url();
+  const dialogEvent=page.waitForEvent('dialog');
+  const click=page.locator('.feed-tabs').getByRole('link',{name:'Following',exact:true}).click();
+  const dialog=await dialogEvent;
+  assert.equal(dialog.type(),'beforeunload');
+  await dialog.dismiss();await click;
+  assert.equal(page.url(),previous);
+  assert.equal(await composer.locator('[name="body"]').inputValue(),'Keep this unfinished draft.');
+  await page.evaluate(()=>{Storage.prototype.setItem=window.originalDraftSetItem;delete window.originalDraftSetItem;});
+  page.once('dialog',dialog=>dialog.accept());
+  await composer.getByRole('button',{name:'Discard draft',exact:true}).click();
+ });
  await check('mobile keyboard focus remains visible',async()=>{
   await page.evaluate(()=>{document.body.tabIndex=-1;document.body.focus();document.body.removeAttribute('tabindex');scrollTo(0,0);});
   const seen=new Set();let checked=0;
@@ -114,9 +174,17 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:output+'/feed-dark-mobile.png',fullPage:true});
  });
+ await check('sign-out clears drafts from this tab',async()=>{
+  const composer=page.locator('.composer');
+  if(!await composer.evaluate(el=>el.open))await composer.locator('summary').click();
+  await composer.getByLabel('Your finding or question',{exact:true}).fill('Clear this on sign-out.');
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  await page.waitForURL(origin+'/');
+  assert.equal(await page.evaluate(()=>Object.keys(sessionStorage).filter(key=>key.startsWith('ajent-draft:')).length),0);
+ });
 }finally{
  await writeFile(output+'/results.json',JSON.stringify({suite:'feed journeys',executed:checks.length,checks},null,2));
  await browser.close();
 }
-assert.equal(checks.length,8,'all feed journeys must execute');
+assert.equal(checks.length,13,'all feed journeys must execute');
 console.log(JSON.stringify({suite:'feed journeys',executed:checks.length,failed:0}));
