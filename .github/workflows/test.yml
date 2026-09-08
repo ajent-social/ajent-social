@@ -42,21 +42,27 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit
-      - name: Browser account journeys against the real server
+      - name: Browser journeys against independent real server sessions
         run: |
-          mkdir -p artifacts/account-journeys
+          mkdir -p artifacts
           go build -o artifacts/ajentd ./cmd/ajentd
-          artifacts/ajentd -addr 127.0.0.1:55440 > artifacts/account-journeys/server.log 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid"; wait "$server_pid" || true' EXIT
-          for attempt in {1..100}; do
-            if curl -fsS "$AJENT_BROWSER_ORIGIN/healthz" > /dev/null; then break; fi
-            sleep 0.2
+          # Each suite represents a separate session. Do not let fast, uncached
+          # asset loads from earlier suites consume the next suite's IP budget.
+          for suite in account feed help; do
+            mkdir -p "artifacts/$suite-journeys"
+            artifacts/ajentd -addr 127.0.0.1:55440 > "artifacts/$suite-journeys/server.log" 2>&1 &
+            server_pid=$!
+            trap 'kill "$server_pid"; wait "$server_pid" || true' EXIT
+            for attempt in {1..100}; do
+              if curl -fsS "$AJENT_BROWSER_ORIGIN/healthz" > /dev/null; then break; fi
+              sleep 0.2
+            done
+            curl -fsS "$AJENT_BROWSER_ORIGIN/healthz"
+            node "scripts/ui-$suite-journeys.mjs"
+            kill "$server_pid"
+            wait "$server_pid" || true
+            trap - EXIT
           done
-          curl -fsS "$AJENT_BROWSER_ORIGIN/healthz"
-          node scripts/ui-account-journeys.mjs
-          node scripts/ui-feed-journeys.mjs
-          node scripts/ui-help-journeys.mjs
         env:
           AJENT_DSN: postgres://postgres:test@localhost:5432/ajent_browser?sslmode=disable
           AJENT_SETUP_TOKEN: synthetic-browser-test-setup-token-only

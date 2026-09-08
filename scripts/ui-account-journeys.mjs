@@ -57,6 +57,19 @@ try{
   assert.equal(await page.getByRole('button',{name:'Remove passkey',exact:true}).count(),0);
   await page.getByText('Your only passkey. Add another before removing it.',{exact:true}).waitFor();
  });
+ await check('public pages return a human account to its workspaces',async()=>{
+  for(const width of [320,390]){
+   await page.setViewportSize({width,height:844});
+   for(const path of ['/','/guide','/docs','/domains','/explore','/join','/participation']){
+    await page.goto(origin+path);
+    const link=page.getByRole('navigation',{name:'Main',exact:true}).getByRole('link',{name:'Your workspaces',exact:true});
+    await link.waitFor();assert.equal(await link.getAttribute('href'),'/human/workspaces');
+    assert.equal(await page.locator('[data-session-join]').textContent(),'Connect agent');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,path+' overflow');
+   }
+  }
+  await page.goto(origin+'/human/workspaces');
+ });
  await check('approve first installation',async()=>{await linkInstallation('First test workspace');});
  await check('approval opens the newly connected workspace',async()=>{
   await linkInstallation('Second test workspace');
@@ -81,11 +94,22 @@ try{
   await page.getByLabel('Domain',{exact:true}).press('Enter');
   await page.getByRole('heading',{name:'browser.example',exact:true}).waitFor();
  });
- await check('sign out and sign in with a saved passkey',async()=>{
-  await page.getByRole('button',{name:'Sign out',exact:true}).click();
-  await page.waitForURL('**/human/login');
-  await page.getByRole('button',{name:'Sign in with a passkey',exact:true}).click();
-  await page.waitForURL('**/human/workspaces');
+ await check('sign out and sign in update public navigation on tab-return events',async()=>{
+  const publicPage=await context.newPage();publicPage.setDefaultTimeout(10000);
+  await publicPage.addInitScript(()=>{window.navigationEvents=[];for(const name of ['focus','blur','pageshow','visibilitychange'])window.addEventListener(name,()=>window.navigationEvents.push({name,hidden:document.hidden}));});
+  try{
+   await publicPage.goto(origin+'/guide');await publicPage.getByRole('link',{name:'Your workspaces',exact:true}).waitFor();
+   await page.bringToFront();await page.getByRole('button',{name:'Sign out',exact:true}).click();
+   await page.waitForURL('**/human/login');await publicPage.bringToFront();
+   // Automation keeps both pages visible; exercise the tab-return handler.
+   await publicPage.evaluate(()=>window.dispatchEvent(new Event('focus')));
+   await publicPage.getByRole('navigation',{name:'Main',exact:true}).getByRole('link',{name:'Sign in',exact:true}).waitFor();
+   await page.bringToFront();await page.getByRole('button',{name:'Sign in with a passkey',exact:true}).click();
+   await page.waitForURL('**/human/workspaces');await publicPage.bringToFront();
+   // Automation keeps both pages visible; exercise the tab-return handler.
+   await publicPage.evaluate(()=>window.dispatchEvent(new Event('focus')));
+   await publicPage.getByRole('link',{name:'Your workspaces',exact:true}).waitFor();
+  }catch(error){console.error(JSON.stringify({events:await publicPage.evaluate(()=>window.navigationEvents),status:await(await context.request.get(origin+'/session-status')).json()}));throw error;}finally{await publicPage.close();await page.bringToFront();}
  });
  await check('recover with Enter after losing the authenticator',async()=>{
   await page.getByRole('button',{name:'Sign out',exact:true}).click();
@@ -116,5 +140,5 @@ try{
  await writeFile(output+'/results.json',JSON.stringify({suite:'account journeys',executed:checks.length,checks},null,2));
  await browser.close();
 }
-assert.equal(checks.length,9,'all account journeys must execute');
+assert.equal(checks.length,10,'all account journeys must execute');
 console.log(JSON.stringify({suite:'account journeys',executed:checks.length,failed:0}));

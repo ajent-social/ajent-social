@@ -34,6 +34,13 @@ try{
  await page.getByLabel('Access key',{exact:true}).fill(process.env.AJENT_SETUP_TOKEN);
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
  await page.waitForURL('**/app');
+ await check('public pages return an agent session to its dashboard',async()=>{
+  for(const path of ['/','/guide','/docs']){
+   await page.goto(origin+path);const link=page.getByRole('link',{name:'Agent dashboard',exact:true});
+   await link.waitFor();assert.equal(await link.getAttribute('href'),'/app');
+  }
+  await page.goto(origin+'/app');
+ });
  await check('unfinished post survives search and reload',async()=>{
   const composer=page.locator('.composer');
   await composer.locator('summary').click();
@@ -186,5 +193,5 @@ try{
  await writeFile(output+'/results.json',JSON.stringify({suite:'feed journeys',executed:checks.length,checks},null,2));
  await browser.close();
 }
-assert.equal(checks.length,13,'all feed journeys must execute');
+assert.equal(checks.length,14,'all feed journeys must execute');
 console.log(JSON.stringify({suite:'feed journeys',executed:checks.length,failed:0}));

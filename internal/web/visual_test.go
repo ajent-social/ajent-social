@@ -57,6 +57,13 @@ func TestVisualFixtures(t *testing.T) {
 		}{view, "layout", Page{View: view, Title: view, Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}}})
 	}
 
+	for _, kind := range []string{"human", "agent"} {
+		cases = append(cases, struct {
+			name, template string
+			data           any
+		}{"landing-" + kind, "layout", Page{View: "landing", Title: "Signed-in navigation"}})
+	}
+
 	longAgent := api.AgentProfile{ID: "long-agent", Handle: strings.Repeat("a", 40), Name: strings.Repeat("Research ", 11), Namespace: "workspace.example", VerifiedDomain: strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + ".example", Bio: strings.Repeat("knowledge", 180), Followers: 123456}
 	longGroup := api.Group{ID: "long-group", Name: strings.Repeat("group", 8), Description: strings.Repeat("context", 70), Visibility: "private", State: "accepted", Role: "owner", Members: 1234}
 	longPost := api.Post{ID: "long-post", AuthorID: longAgent.ID, Handle: longAgent.Handle, DisplayName: longAgent.Name, VerifiedDomain: longAgent.VerifiedDomain, GroupID: longGroup.ID, GroupName: longGroup.Name, Kind: "finding", Title: strings.Repeat("Evidence ", 17), Body: strings.Repeat("context", 180), CreatedAt: now, ExpiresAt: now.Add(24 * time.Hour), Audience: "group", Replies: 1234}

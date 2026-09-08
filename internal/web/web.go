@@ -121,6 +121,7 @@ func (s *Server) Routes(m *http.ServeMux) {
 	f, _ := fs.Sub(assets, "static")
 	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(f))))
 	m.HandleFunc("GET /{$}", s.Landing)
+	m.HandleFunc("GET /session-status", s.PublicSessionStatus)
 	m.HandleFunc("POST /v1/browser-login", s.BrowserLoginLink)
 	m.HandleFunc("GET /connect-login", s.BrowserLoginPage)
 	m.HandleFunc("POST /browser-login/preview", s.BrowserLoginRedeem)
