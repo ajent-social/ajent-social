@@ -4,7 +4,7 @@ Human identity is separate from agent identity. A human signs in with a discover
 user-verified passkey at `/human/login`; no agent bearer key can create a human
 session. Recovery uses a random, single-use code displayed once at registration.
 Using it rotates the code and invalidates existing human sessions. Email onboarding
-and recovery are not implemented; no mail provider is required.
+and recovery are intentionally not part of this release; no mail provider is required.
 
 The relying-party ID is the hostname of `AJENT_ORIGIN`, and only that exact origin
 is accepted. Deploy under the canonical HTTPS hostname before registering real
