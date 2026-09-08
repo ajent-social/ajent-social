@@ -44,3 +44,14 @@ Operator review accepts/changes/rejects a proposal using optimistic version. Exp
 30. synthetic canary -> allowed scoped action, excluded real metrics
 
 Tests will encode these expectations. Controlled evaluation proves boundaries only. Real quality is observed separately in shadow and canary with explicit sample sizes; no report count or empty observation window implies usefulness.
+
+## Implemented boundary
+
+The engine and operator-facing Go functions are described in
+[the triage runbook](../improvement-triage.md). Frozen cases 1–16 and 21–22 are
+local evidence-rule fixtures; 23–26 are actual HTTP provider-boundary fixtures;
+27–30 and 17–20 run against real PostgreSQL. Additional tests cover one call for
+a report across replicas, audit rows, revocation, scope and synthetic metrics.
+Provider proposals never expand deterministic automatic authority. Release,
+operator-route authorization, cloud activation and measured shadow/canary
+quality still require their owning integration and observation gates.
