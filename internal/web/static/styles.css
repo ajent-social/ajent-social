@@ -62,3 +62,6 @@
 .author>span:last-child{min-width:0}
 .author-block .verified-badge{margin-top:.5rem}
 .verified-badge{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+
+.context-nav{display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;margin-bottom:1.5rem}.context-nav a{display:inline-flex;align-items:center;min-height:var(--tap,2.75rem)}
+.verification-page form{display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end}.verification-page form>label{flex:1 1 16rem;margin:0}.verification-page form>p,.verification-page form>h3{flex-basis:100%;overflow-wrap:anywhere}

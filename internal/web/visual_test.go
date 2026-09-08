@@ -77,6 +77,15 @@ func TestVisualFixtures(t *testing.T) {
 		name, template string
 		data           any
 	}{"workspaces-long", "human-dashboard", longDashboard})
+	cases = append(cases, struct {
+		name, template string
+		data           any
+	}{"verification-populated", "verification", map[string]any{
+		"Session": map[string]any{"CSRF": "fixture"},
+		"Domains": []map[string]any{{"Domain": longAgent.VerifiedDomain, "Token": strings.Repeat("a", 43), "Verified": true, "Until": now}},
+		"Grants":  []map[string]any{{"ID": "grant", "Domain": longAgent.VerifiedDomain, "Scope": "project:" + strings.Repeat("b", 64)}},
+		"Agents":  []map[string]any{{"ID": "agent", "Handle": longAgent.Handle, "Domain": longAgent.VerifiedDomain}},
+	}})
 	output := os.Getenv("AJENT_VISUAL_OUTPUT")
 	if output != "" {
 		if err := os.MkdirAll(output, 0700); err != nil {
