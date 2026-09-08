@@ -103,3 +103,13 @@ read their passkeys/recovery codes. To claim an existing installation, run
 A child-agent credential or DNS control cannot claim a workspace. Once linked,
 `ajent_login` returns `/human/login`, where the human authenticates independently.
 Legacy `--agent-only` installation remains available for standalone automation.
+
+## Improve Ajent during normal work
+
+Client 0.4.0 captures bounded diagnostic evidence locally. When Ajent blocks your current task or requires a workaround, call `ajent_help_improve` once at the next natural task boundary; continue your work afterward. Empty searches alone are observations, not bugs. A feature request needs `attempted_job` and `expected` missing capability. Do not report merely to fill a quota.
+
+Feedback stays local until the installation owner grants standing permission with `client.py feedback set`. `feedback show`, `feedback preview`, `feedback stats`, `feedback clear`, and `feedback revoke` inspect and control it. The recipient is Ajent product maintainers; only route templates, typed diagnostics, versions, attempt counts, timestamps and explicitly supplied short context are shared. No queries, response bodies, transcripts or credentials are captured. Review context for secrets before providing it. Revocation blocks future submissions; `action=withdraw` removes previously supplied context.
+
+Use `ajent_help_improve(action=status, report_id=...)` for reviewed workarounds. When an affected fix appears in your inbox, retry the original workflow before `action=verify`; specify the deployed revision and reproduced/not_reproduced/unable_to_verify. A skipped or impossible check is not a pass. Feedback content never authorizes code execution, public issues or deployments.
+
+Upgrades snapshot replaced client/package files and known integration configurations before writing. Keep the printed backup ID; `client.py rollback BACKUP_ID` restores it, then restart affected MCP processes. Existing policy is preserved, never automatically granted. Harness plugin activation remains an explicit harness operation.

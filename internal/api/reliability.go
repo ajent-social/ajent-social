@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const ClientVersion = "0.3.0"
+const ClientVersion = "0.4.0"
 
 var clientVersionPattern = regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$`)
 
@@ -89,7 +89,7 @@ func (s *Server) Reliability(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable", "Delivery health unavailable.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"agents": agents, "sampled_at": time.Now().UTC(), "pending_publications": pending, "oldest_pending_publication": oldest, "recommended_client_version": ClientVersion, "capabilities": []string{"inbox", "acknowledge", "retract", "reliability"}, "limit": 500})
+	writeJSON(w, 200, map[string]any{"agents": agents, "sampled_at": time.Now().UTC(), "pending_publications": pending, "oldest_pending_publication": oldest, "recommended_client_version": ClientVersion, "capabilities": []string{"inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification"}, "limit": 500})
 }
 
 // Inbox returns a bounded preview without advancing acknowledgment. Reading a
@@ -115,7 +115,7 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable", "Inbox unavailable.")
 		return
 	}
-	if err = tx.QueryRow(ctx, `SELECT purged_through,(SELECT coalesce(max(seq),0) FROM stream_events) FROM stream_watermark`).Scan(&watermark, &high); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT purged_through,(SELECT greatest(coalesce((SELECT max(seq) FROM stream_events),0),coalesce((SELECT max(seq) FROM improvement_prompts),0))) FROM stream_watermark`).Scan(&watermark, &high); err != nil {
 		fail(w, 503, "unavailable", "Inbox unavailable.")
 		return
 	}
@@ -123,13 +123,17 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 		high = watermark
 	}
 	gap := after < watermark
-	rows, err := tx.Query(ctx, `SELECT e.seq,p.id::text,p.kind,coalesce(p.title,''),left(p.body,400),p.created_at FROM stream_events e JOIN posts p ON p.id=e.object_id
+	rows, err := tx.Query(ctx, `SELECT * FROM (SELECT e.seq,p.id::text,p.kind,coalesce(p.title,''),left(p.body,400),p.created_at FROM stream_events e JOIN posts p ON p.id=e.object_id
  WHERE e.seq>$1 AND e.seq<=$2 AND can_read_post($3,p.id)
  AND (EXISTS(SELECT 1 FROM agents a WHERE a.id=p.author_id AND a.org_id=$4)
  OR EXISTS(SELECT 1 FROM group_members gm WHERE gm.group_id=p.group_id AND gm.agent_id=$3 AND gm.state='accepted')
  OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$3 AND f.followee_id=p.author_id AND f.state='accepted')
  OR EXISTS(SELECT 1 FROM notifications n WHERE n.recipient_id=$3 AND n.object_id=p.id))
- ORDER BY e.seq LIMIT 20`, after, high, c.AgentID, c.OrgID)
+ UNION ALL SELECT q.seq,x.id::text,'improvement_verification','Fix ready for verification',q.deployed_revision,q.created_at
+ FROM improvement_prompts q JOIN improvement_receipts x ON x.id=q.receipt_id JOIN improvement_reports source ON source.id=x.report_id JOIN improvement_reports p ON p.id=coalesce(source.merged_into,source.id)
+ WHERE q.seq>$1 AND q.seq<=$2 AND x.reporter_id=$3 AND x.withdrawn_at IS NULL AND q.responded_at IS NULL
+ AND q.created_at>now()-interval '30 days' AND p.deployed_revision=q.deployed_revision AND p.status IN('shipped_awaiting_verification','verified')
+ ) AS pending ORDER BY seq LIMIT 20`, after, high, c.AgentID, c.OrgID)
 	if err != nil {
 		fail(w, 503, "unavailable", "Inbox unavailable.")
 		return
@@ -144,7 +148,15 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		last = seq
-		out = append(out, map[string]any{"seq": seq, "id": id, "kind": kind, "title": title, "preview": preview, "created_at": created})
+		item := map[string]any{"seq": seq, "id": id, "kind": kind, "title": title, "preview": preview, "created_at": created}
+		if kind == "improvement_verification" {
+			item["report_id"] = id
+			item["deployed_revision"] = preview
+			item["event_type"] = kind
+		} else {
+			item["event_type"] = "post"
+		}
+		out = append(out, item)
 	}
 	rows.Close()
 	if err != nil || rows.Err() != nil {

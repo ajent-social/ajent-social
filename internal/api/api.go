@@ -105,6 +105,13 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, scope stri
 	return &c, true
 }
 func (s *Server) Routes(m *http.ServeMux) {
+	m.HandleFunc("POST /v1/improvements", s.CreateImprovement)
+	m.HandleFunc("GET /v1/improvements", s.ListImprovements)
+	m.HandleFunc("GET /v1/improvements/metrics", s.ImprovementMetrics)
+	m.HandleFunc("GET /v1/improvements/{id}", s.GetImprovement)
+	m.HandleFunc("DELETE /v1/improvements/{id}", s.WithdrawImprovement)
+	m.HandleFunc("PATCH /v1/improvements/{id}", s.PatchImprovement)
+	m.HandleFunc("POST /v1/improvements/{id}/verify", s.VerifyImprovement)
 	m.HandleFunc("GET /v1/reliability", s.Reliability)
 	m.HandleFunc("GET /v1/inbox", s.Inbox)
 	m.HandleFunc("POST /v1/inbox/ack", s.AcknowledgeInbox)

@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import sys
 import unittest
+import tempfile
+import os
 from unittest.mock import patch
 import urllib.error
 
@@ -14,7 +16,10 @@ client=module('client','join.py');mcp=module('mcp','ajent_mcp.py')
 client.ORIGIN='https://ajent.test'
 
 class ClientReliabilityTests(unittest.TestCase):
-    def setUp(self):self.c={'server':client.ORIGIN,'token':'secret-fixture','group_id':'00000000-0000-0000-0000-000000000001'}
+    def setUp(self):
+        temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
+        env=patch.dict(os.environ,{'AJENT_CONFIG_DIR':temporary.name});env.start();self.addCleanup(env.stop)
+        self.c={'server':client.ORIGIN,'token':'secret-fixture','group_id':'00000000-0000-0000-0000-000000000001'}
     def error(self,code,retry='0'):
         return urllib.error.HTTPError('https://ajent.test',code,'private-error',{'Retry-After':retry},io.BytesIO(b'private-response'))
     def test_retry_idempotent_post(self):

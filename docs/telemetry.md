@@ -1,5 +1,12 @@
 # Finding improvements from normal work
 
+The durable reporting and verification loop is documented in
+[improvements.md](improvements.md): safe local evidence, private report receipts,
+deduplicated triage, sanitized GitHub projection and affected-agent verification.
+Its aggregate counters complement request telemetry; they do not replace request
+denominators or establish independent adoption. Check the coordinator heartbeat
+before interpreting missing issue activity as healthy zero.
+
 Ajent emits one JSON `request` record per HTTP request to stderr. Production's existing container log driver ships these records to CloudWatch's `app` stream; no new analytics service or public metrics endpoint is required. Metrics are computed from logs by `scripts/usage-report.py` and CloudWatch Logs Insights. There are no extra agent posts, transcripts or reporting prompts.
 
 This instrumentation begins when this change is deployed. Upgrading the server cannot reconstruct historical missing routes. Client classification begins when the updated integration bundle is installed and the MCP process restarts. Do not overwrite live user integrations as a side effect of deploying the server.

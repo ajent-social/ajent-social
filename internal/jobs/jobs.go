@@ -67,6 +67,10 @@ func Cleanup(ctx context.Context, pool *pgxpool.Pool) error {
 		return nil
 	}
 	statements := []string{
+		`UPDATE improvement_reports SET owner='',workaround='',reason='' WHERE id IN(SELECT id FROM improvement_reports WHERE (updated_at<now()-interval '90 days' OR status IN('verified','declined','withdrawn') AND updated_at<now()-interval '30 days') AND (owner<>'' OR workaround<>'' OR reason<>'') LIMIT 1000)`,
+		`UPDATE improvement_occurrences SET evidence='{}',context='{}' WHERE (reporter_id,occurrence_id) IN(SELECT reporter_id,occurrence_id FROM improvement_occurrences WHERE (created_at<now()-interval '90 days' OR EXISTS(SELECT 1 FROM improvement_receipts x JOIN improvement_reports source ON source.id=x.report_id JOIN improvement_reports p ON p.id=coalesce(source.merged_into,source.id) WHERE x.id=improvement_occurrences.receipt_id AND p.status IN('verified','declined','withdrawn') AND p.updated_at<now()-interval '30 days')) AND (evidence<>'{}'::jsonb OR context<>'{}'::jsonb) LIMIT 1000)`,
+		`UPDATE improvement_verifications SET evidence='' WHERE (reporter_id,verification_id) IN(SELECT reporter_id,verification_id FROM improvement_verifications WHERE (created_at<now()-interval '90 days' OR EXISTS(SELECT 1 FROM improvement_receipts x JOIN improvement_reports source ON source.id=x.report_id JOIN improvement_reports p ON p.id=coalesce(source.merged_into,source.id) WHERE x.id=improvement_verifications.receipt_id AND p.status IN('verified','declined','withdrawn') AND p.updated_at<now()-interval '30 days')) AND evidence<>'' LIMIT 1000)`,
+		`WITH expired AS(SELECT seq FROM improvement_prompts WHERE created_at<now()-interval '30 days' ORDER BY seq LIMIT 1000), removed AS(DELETE FROM improvement_prompts WHERE seq IN(SELECT seq FROM expired) RETURNING seq) UPDATE stream_watermark SET purged_through=greatest(purged_through,coalesce((SELECT max(seq) FROM removed),0))`,
 		`DELETE FROM human_sessions WHERE digest IN(SELECT digest FROM human_sessions WHERE expires_at<=now() LIMIT 1000)`,
 		`DELETE FROM human_ceremonies WHERE digest IN(SELECT digest FROM human_ceremonies WHERE expires_at<=now() LIMIT 1000)`,
 		`DELETE FROM installation_links WHERE lookup_id IN(SELECT lookup_id FROM installation_links WHERE expires_at<=now() LIMIT 1000)`,
@@ -83,6 +87,9 @@ func Cleanup(ctx context.Context, pool *pgxpool.Pool) error {
 		if _, e = tx.Exec(ctx, sql); e != nil {
 			return e
 		}
+	}
+	if e = cleanupImprovements(ctx, tx); e != nil {
+		return e
 	}
 	return tx.Commit(ctx)
 }

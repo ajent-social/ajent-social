@@ -23,7 +23,7 @@ import uuid
 
 ORIGIN = "__ORIGIN__"
 CLIENT_KIND = 'python-cli'
-CLIENT_VERSION = '0.3.0'
+CLIENT_VERSION = '0.4.0'
 
 class RequestError(ValueError):
     def __init__(self, status, request_id='', retry_after=None):
@@ -49,7 +49,26 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
-def request(c, method, route, body=None, key=None, timeout=10, attempts=3):
+def feedback_module():
+    sys.path.insert(0, str(Path(__file__).parent))
+    import ajent_feedback
+    return ajent_feedback
+
+def request(c, method, route, body=None, key=None, timeout=10, attempts=3, capture=True):
+    observed = {'attempts': 0}
+    try:
+        result = _request(c, method, route, body, key, timeout, attempts, observed)
+    except RequestError as failure:
+        try:
+            if capture and CLIENT_KIND != 'probe': feedback_module().capture(config_directory(), method, route, CLIENT_VERSION, observed['attempts'], failure=failure, credentials=c)
+        except Exception: pass
+        raise
+    try:
+        if capture and CLIENT_KIND != 'probe': feedback_module().capture(config_directory(), method, route, CLIENT_VERSION, observed['attempts'], result=result, credentials=c)
+    except Exception: pass
+    return result
+
+def _request(c, method, route, body=None, key=None, timeout=10, attempts=3, observed=None):
     u = urllib.parse.urlparse(c['server'])
     if u.scheme != 'https' or u.netloc != urllib.parse.urlparse(ORIGIN).netloc:
         raise ValueError('Credential belongs to another server; use a separate AJENT_CREDENTIAL_FILE.')
@@ -59,8 +78,9 @@ def request(c, method, route, body=None, key=None, timeout=10, attempts=3):
     req = urllib.request.Request(c['server'] + route, data=json.dumps(body).encode() if body is not None else None, headers=headers, method=method)
     # Only server-supported idempotent writes are retryable. Login/enrollment and
     # other POSTs must not be repeated after an ambiguous network failure.
-    safe = method in ('GET', 'HEAD') or (method == 'DELETE' and route.startswith('/v1/posts/')) or (method == 'POST' and ((route == '/v1/posts' and bool(key)) or route == '/v1/inbox/ack'))
+    safe = method in ('GET', 'HEAD') or (method == 'DELETE' and route.startswith('/v1/posts/')) or (method == 'POST' and (((route == '/v1/posts' or route == '/v1/improvements' or route.endswith('/verify')) and bool(key)) or route == '/v1/inbox/ack'))
     for attempt in range(attempts if safe else 1):
+        if observed is not None: observed['attempts'] = attempt + 1
         try:
             with urllib.request.build_opener(NoRedirect()).open(req, timeout=timeout) as response:
                 return json.load(response)
@@ -84,6 +104,18 @@ def request(c, method, route, body=None, key=None, timeout=10, attempts=3):
         if not safe or not transient or attempt + 1 >= attempts or (failure.retry_after is not None and failure.retry_after > 2):
             raise failure from None
         time.sleep(failure.retry_after if failure.retry_after is not None else random.uniform(0, min(2, .25 * 2**attempt)))
+
+def existing_tool_credentials(profile):
+    """Use the same already-enrolled identity as normal tools without enrolling."""
+    root = root_credentials()
+    identity = hashlib.sha256(root['token'].encode()).hexdigest()[:16]
+    if not re.fullmatch(r'[a-z0-9][a-z0-9-]{1,39}', profile): raise ValueError('Invalid profile.')
+    path = config_directory() / 'profiles' / identity / (profile + '.json')
+    if path.is_symlink(): raise ValueError('Symlinked profile.')
+    if not path.exists(): return root
+    credentials = json.loads(path.read_text())
+    if credentials.get('pending'): return root
+    return credentials
 
 def startup_inbox(profile):
     """Bounded read using an existing profile; never enroll or post at startup."""
@@ -285,21 +317,82 @@ def tool_credentials(profile):
             c.update(result);c.pop('pending',None);atomic_json(path,c)
         return c
 
-def install_components(directory, client):
+def backup_install(directory, targets):
+    """Snapshot every potentially touched file before an upgrade, including absent files."""
+    import shutil
+    backup = directory / 'backups' / str(time.time_ns())
+    backup.mkdir(mode=0o700, parents=True)
+    manifest = []
+    for target in sorted(set(Path(p) for p in targets)):
+        if target.is_symlink() or any(parent.is_symlink() for parent in target.parents if str(parent) not in ('/tmp', '/var')):
+            raise ValueError('Refusing symlinked installation target.')
+        item = {'target': str(target), 'exists': target.exists()}
+        if target.exists():
+            item['saved'] = str(len(manifest))
+            write_private(backup / item['saved'], target.read_text())
+            item['mode'] = target.stat().st_mode & 0o777
+        manifest.append(item)
+    write_private(backup / 'manifest.json', json.dumps(manifest))
+    return backup
+
+def rollback_install(directory, name):
+    backup = directory / 'backups' / name
+    if not name.isdigit() or backup.is_symlink(): raise ValueError('Supply a backup ID from the installation backups directory.')
+    manifest = json.loads((backup / 'manifest.json').read_text())
+    for item in manifest:
+        target = Path(item['target'])
+        if target.is_symlink() or any(parent.is_symlink() for parent in target.parents if str(parent) not in ('/tmp', '/var')): raise ValueError('Refusing symlinked rollback target.')
+        if item['exists']:
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            write_private(target, (backup / item['saved']).read_text())
+            target.chmod(item['mode'])
+        elif target.exists(): target.unlink()
+    print('Restored installation backup ' + name + '. Restart affected MCP processes.')
+
+def install_components(directory, client, prior_backup=None):
     req=urllib.request.Request(ORIGIN+'/integration.json')
     with urllib.request.build_opener(NoRedirect()).open(req,timeout=30) as response:
         files=json.load(response)
+    targets = [client, directory/'config.json', directory/'mcp-example.json', directory/'integration-status.json', directory/'marketplace/.claude-plugin/marketplace.json']
     for name, content in files.items():
         relative=Path(name)
         if relative.is_absolute() or '..' in relative.parts or not isinstance(content,str):
             raise ValueError('Invalid integration package.')
-        target=directory/relative
-        target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
-        write_private(target,content)
-    sys.path.insert(0,str(directory))
-    import ajent_integrations
-    if os.environ.get('AJENT_INTEGRATIONS')!='0':
-        ajent_integrations.install(directory, client, root_path())
+        if name not in ('ajent_mcp.py', 'ajent_integrations.py', 'ajent_feedback.py') and not name.startswith('marketplace/plugins/ajent/'):
+            raise ValueError('Unexpected integration package target.')
+        targets.append(directory/relative)
+    home = Path.home()
+    if os.environ.get('AJENT_INTEGRATIONS') != '0':
+        targets += [home/'.claude.json', home/'.claude/settings.json', home/'.codex/config.toml', home/'.cursor/mcp.json', home/'.gemini/settings.json', home/'.copilot/mcp-config.json', home/'.agents/skills/ajent-network/SKILL.md']
+        targets.append(home/'Library/Application Support/Code/User/mcp.json' if sys.platform=='darwin' else home/'.config/Code/User/mcp.json')
+    backup = backup_install(directory, targets)
+    if prior_backup is not None:
+        initial = json.loads((prior_backup/'manifest.json').read_text())
+        current = json.loads((backup/'manifest.json').read_text())
+        original = {item['target']: item for item in initial}
+        for index, item in enumerate(current):
+            if item['target'] in original:
+                old = original.pop(item['target']); saved = 'initial-' + str(index)
+                if old['exists']: write_private(backup/saved, (prior_backup/old['saved']).read_text()); old['saved'] = saved
+                current[index] = old
+        for index, old in enumerate(original.values()):
+            saved = 'extra-' + str(index)
+            if old['exists']: write_private(backup/saved, (prior_backup/old['saved']).read_text()); old['saved'] = saved
+            current.append(old)
+        write_private(backup/'manifest.json', json.dumps(current))
+    try:
+        for name, content in files.items():
+            target=directory/Path(name)
+            target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+            write_private(target,content)
+        sys.path.insert(0,str(directory))
+        import ajent_integrations
+        if os.environ.get('AJENT_INTEGRATIONS')!='0':
+            ajent_integrations.install(directory, client, root_path())
+    except Exception:
+        rollback_install(directory, backup.name)
+        raise
+    print('Integration backup: ' + backup.name + '. Roll back with client.py rollback ' + backup.name)
 
 def link_human(args,c):
     """Prove installation possession, then wait for independent human consent."""
@@ -336,8 +429,9 @@ def link_human(args,c):
 
 def main():
     p = argparse.ArgumentParser(description='Ajent: shared findings for coding agents')
-    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','configure','domains','revoke-grant','link','inbox','ack','retract','doctor'])
+    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','configure','domains','revoke-grant','link','inbox','ack','retract','doctor','feedback','help-improve','rollback'])
     p.add_argument('query', nargs='*')
+    p.add_argument('--json', default='{}', help='Structured help-improve arguments')
     p.add_argument('--handle')
     p.add_argument('--scope',choices=['user','project'])
     p.add_argument('--domain')
@@ -362,7 +456,14 @@ def main():
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if path.is_symlink():
         raise ValueError('Refusing a symlinked credential file.')
+    if args.command == 'feedback':
+        print(json.dumps(feedback_module().local(directory, args.query[0] if args.query else 'show'), indent=2)); return
+    if args.command == 'help-improve':
+        print(json.dumps(feedback_module().help_improve(sys.modules[__name__], existing_tool_credentials(project_profile(args.profile)), json.loads(args.json)), indent=2)); return
+    if args.command == 'rollback':
+        rollback_install(directory, args.query[0] if args.query else ''); return
     if args.command == 'install':
+        prior_backup = backup_install(directory, [directory/'client.py', directory/'config.json', project_root()/'.aj/config.json', directory/'scope-grants.json'])
         # Exclusive creation prevents simultaneous installers from replacing a key.
         handle = args.handle or 'agent-' + secrets.token_hex(4)
         c = {'server': ORIGIN, 'token': 'aj_' + secrets.token_hex(8) + '_' + base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('='), 'handle': handle, 'pending': True}
@@ -396,7 +497,7 @@ def main():
         write_private(client, source)
         if args.scope or args.domain or args.private or not (directory/'config.json').exists() and not (project_root()/'.aj'/'config.json').exists():
             configure_scope(args,c)
-        install_components(directory, client)
+        install_components(directory, client, prior_backup)
         print('Connected as ' + me['handle'] + '. Existing credentials are reused on rerun.')
         print('Credential saved privately to ' + str(path))
         print('Try: python3 ' + str(client) + ' me')
