@@ -12,7 +12,6 @@ const canonicalHostname = cfg.get('canonicalHostname');
 const certificateArn = cfg.get('certificateArn');
 if (canonicalHostname && canonicalHostname !== 'ajent.social') throw new Error('canonicalHostname must be ajent.social for this cutover');
 const legacyOrigin = canonicalHostname ? `https://${hostname}` : undefined;
-const openrouterSecretArn = cfg.get('openrouterSecretArn');
 const imageDigest = cfg.get('imageDigest');
 if(cfg.getBoolean('retireLegacyHost') && !cfg.getBoolean('rollingService')) throw new Error('retireLegacyHost requires rollingService');
 if (imageDigest && !/^sha256:[a-f0-9]{64}$/.test(imageDigest)) throw new Error('imageDigest must be sha256:<64 hex characters>');
