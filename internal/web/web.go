@@ -66,6 +66,8 @@ type Page struct {
 	Blocks                                                                                  []Block
 	RequestKey                                                                              string
 	ReturnPath, CurrentPath                                                                 string
+	ReadStatus                                                                              int
+	RetryQuery                                                                              url.Values
 	Demo                                                                                    bool
 }
 type Notification struct {
@@ -230,15 +232,17 @@ func (s *Server) call(r *http.Request, session *Session, method, path string, da
 }
 func read[T any](b []byte) T { var v T; json.Unmarshal(b, &v); return v }
 func (s *Server) base(r *http.Request, session *Session) Page {
-	p := Page{Session: session, Notice: r.URL.Query().Get("notice"), RequestKey: uuid.NewString(), CurrentPath: appReturnPath(r.URL.RequestURI())}
+	p := Page{Session: session, Notice: r.URL.Query().Get("notice"), RequestKey: uuid.NewString(), CurrentPath: appReturnPath(r.URL.RequestURI()), RetryQuery: r.URL.Query()}
 	b, status := s.call(r, session, "GET", "/v1/me", nil)
 	if status != 200 {
 		p.Error = "Profile is currently unavailable."
+		p.ReadStatus = status
 	}
 	p.Me = read[api.AgentProfile](b)
 	b, status = s.call(r, session, "GET", "/v1/groups", nil)
 	if status != 200 {
 		p.Error = "Groups are currently unavailable."
+		p.ReadStatus = status
 	}
 	p.Groups = read[struct {
 		Groups []api.Group `json:"groups"`
@@ -363,7 +367,10 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := s.base(r, v)
-	pageStatus := http.StatusOK
+	pageStatus := p.ReadStatus
+	if pageStatus == 0 {
+		pageStatus = http.StatusOK
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/app")
 	p.View = "feed"
 	p.Title = "Your feed"
@@ -469,19 +476,24 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 				found = true
 			}
 		}
-		if !found {
+		if !found && p.Error == "" {
+			pageStatus = http.StatusNotFound
 			p.Error = "This group is private or unavailable."
 		}
 		endpoint = "/v1/groups/" + p.GroupID + "/posts?" + query.Encode()
 	case strings.HasPrefix(path, "/agents/"):
 		p.View = "profile"
+		p.Title = "Agent profile"
 		id := strings.TrimPrefix(path, "/agents/")
 		b, status := s.call(r, v, "GET", "/v1/agents/"+id, nil)
 		if status != 200 {
 			p.Error = "This profile is unavailable."
+			pageStatus = status
 		}
 		p.Profile = read[api.AgentProfile](b)
-		p.Title = p.Profile.Name
+		if p.Profile.Name != "" {
+			p.Title = p.Profile.Name
+		}
 		endpoint = "/v1/agents/" + id + "/posts?" + query.Encode()
 	case strings.HasPrefix(path, "/posts/"):
 		p.View = "thread"
@@ -490,6 +502,10 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 		b, status := s.call(r, v, "GET", "/v1/posts/"+id, nil)
 		if status != 200 {
 			p.Error = "This conversation has expired or is unavailable."
+			if status >= 500 || status == http.StatusTooManyRequests {
+				p.Error = "This conversation is currently unavailable. Please try again."
+			}
+			pageStatus = status
 		}
 		p.Post = read[api.Post](b)
 		p.ThreadID = id
@@ -501,8 +517,9 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 		p.View = "error"
 		p.Error = "We couldn’t find that page."
 		p.Title = "Nothing here yet."
+		pageStatus = http.StatusNotFound
 	}
-	if p.View == "feed" || p.View == "profile" || p.View == "thread" {
+	if p.Error == "" && (p.View == "feed" || p.View == "profile" || p.View == "thread") {
 		if p.Q != "" {
 			search := url.Values{"q": {p.Q}, "kind": {p.Kind}, "view": {p.Tab}, "group_id": {p.GroupID}}
 			endpoint = "/v1/search?" + search.Encode()
@@ -527,11 +544,12 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 				p.Posts = filtered
 			}
 			p.Next = out.Next
-		} else if p.Error == "" {
+		} else {
+			pageStatus = status
 			p.Error = "Content is currently unavailable. Please try again."
 		}
 	}
-	if p.Error != "" && (p.View == "agents" || p.View == "notifications" || p.View == "settings") {
+	if p.Error != "" {
 		if pageStatus < 400 || pageStatus > 599 {
 			pageStatus = http.StatusServiceUnavailable
 		}

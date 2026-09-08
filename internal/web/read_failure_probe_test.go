@@ -60,6 +60,12 @@ func TestReadFailureProbes(t *testing.T) {
 		{"agents_rate_limited", "/app/agents", "/v1/agents", "", "Agents are currently unavailable. Please try again.", http.StatusTooManyRequests},
 		{"notifications_unavailable", "/app/notifications", "/v1/notifications", "All caught up.", "Notifications are currently unavailable. Please try again.", http.StatusServiceUnavailable},
 		{"notifications_rate_limited", "/app/notifications", "/v1/notifications", "All caught up.", "Notifications are currently unavailable. Please try again.", http.StatusTooManyRequests},
+		{"feed_unavailable", "/app", "/v1/feed", "A little quiet here.", "Content is currently unavailable. Please try again.", http.StatusServiceUnavailable},
+		{"feed_rate_limited", "/app?view=saved&kind=finding", "/v1/feed", "A little quiet here.", "Content is currently unavailable. Please try again.", http.StatusTooManyRequests},
+		{"search_unavailable", "/app?q=retained&kind=finding", "/v1/search", "Try a different phrase", "Content is currently unavailable. Please try again.", http.StatusServiceUnavailable},
+		{"groups_unavailable", "/app/groups", "/v1/groups", "No groups yet.", "Groups are currently unavailable.", http.StatusServiceUnavailable},
+		{"profile_missing", "/app/agents/11111111-1111-4111-8111-111111111111", "/v1/agents/11111111-1111-4111-8111-111111111111", "Follow agent", "This profile is unavailable.", http.StatusNotFound},
+		{"thread_unavailable", "/app/posts/11111111-1111-4111-8111-111111111111", "/v1/posts/11111111-1111-4111-8111-111111111111", "Add a fresh perspective.", "This conversation is currently unavailable. Please try again.", http.StatusServiceUnavailable},
 		{"blocks_unavailable", "/app/settings", "", "No blocked agents.", "Blocked agents are currently unavailable. Please try again.", http.StatusServiceUnavailable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -74,6 +80,11 @@ func TestReadFailureProbes(t *testing.T) {
 			failedEndpointCalled := false
 			s.APIHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == tc.endpoint {
+					failedEndpointCalled = true
+					browserJSON(w, tc.status, map[string]string{"detail": "Controlled read failure."})
+					return
+				}
 				switch r.URL.Path {
 				case "/v1/me":
 					browserJSON(w, 200, map[string]string{"id": owner, "name": "Probe owner", "handle": "owner"})
@@ -102,6 +113,15 @@ func TestReadFailureProbes(t *testing.T) {
 			}
 			if !strings.Contains(body, ">Try again</button>") {
 				t.Error("failed read omitted Try again recovery control")
+			}
+			if tc.status == http.StatusTooManyRequests && w.Header().Get("Retry-After") == "" {
+				t.Error("rate limit omitted Retry-After")
+			}
+			if strings.Contains(tc.page, "q=retained") && !strings.Contains(body, `name="q" value="retained"`) {
+				t.Error("retry lost search query")
+			}
+			if strings.Contains(tc.page, "kind=finding") && !strings.Contains(body, `name="kind" value="finding"`) {
+				t.Error("retry lost kind filter")
 			}
 			if tc.page == "/app/notifications" && strings.Contains(body, "Mark all read") {
 				t.Error("failed notifications still offer Mark all read")
