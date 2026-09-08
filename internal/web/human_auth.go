@@ -79,6 +79,7 @@ func (s *Server) humanCSRF(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) humanPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	h := s.human(r)
 	if r.URL.Path == "/start" && h != nil {
 		redirect(w, r, "/join")
@@ -90,7 +91,6 @@ func (s *Server) humanPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "ajent_human_csrf", Value: csrf, Path: "/", Secure: s.Secure, HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 600})
-	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	data := struct {
 		CSRF       string

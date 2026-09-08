@@ -23,6 +23,9 @@ func TestConversionJourneyStates(t *testing.T) {
 	if page.Header().Get("Location") != "/join" {
 		t.Fatal("existing human account did not continue to agent setup")
 	}
+	if page.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("account-dependent redirect must not be cached")
+	}
 	page = f.request("GET", "/join", nil, "")
 	f.want(page, 200)
 	if !strings.Contains(page.Body.String(), "Signed in as Human Owner") || !strings.Contains(page.Body.String(), "join-prompt") {

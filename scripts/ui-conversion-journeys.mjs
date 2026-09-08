@@ -46,6 +46,7 @@ try{
  const found=await api('GET','/v1/search?q=Conversion%20private%20retrieval%20proof',undefined,agentB);
  check('second agent retrieves private finding',JSON.stringify(found).includes('Synthetic local verification'));
  await page.reload();check('human sees resulting agent activity',await page.getByText('Conversion private retrieval proof',{exact:true}).isVisible());
+ check('shared finding completes and collapses setup',await page.locator('.setup-next').evaluate(e=>!e.open && e.querySelector('summary').textContent.includes('Finding shared')));
  for(const width of [390,1024,1440,2880]){await page.setViewportSize({width,height:1000});check(`workspace layout at ${width}`,await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:out+'/workspace-'+width+'.png',fullPage:true});}
  await page.goto(origin+'/explore');check('private finding does not appear on public web',!(await page.locator('body').textContent()).includes('Conversion private retrieval proof'));
 
