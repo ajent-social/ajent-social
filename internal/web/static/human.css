@@ -1,12 +1,12 @@
 :root {
-  --human-ink: #291b32;
-  --human-cream: #fff8eb;
-  --human-paper: #fffdf7;
-  --human-orange: #ff651f;
-  --human-lime: #d9f45b;
-  --human-muted: #776a79;
-  --human-line: #ded4ce;
-  --human-soft: #f4ecdf;
+  --human-ink: var(--ink);
+  --human-cream: var(--cream);
+  --human-paper: var(--paper);
+  --human-orange: var(--orange);
+  --human-lime: var(--lime);
+  --human-muted: var(--muted);
+  --human-line: var(--line);
+  --human-soft: var(--soft);
 }
 .human-body { min-height: 100vh; background: var(--human-cream); color: var(--human-ink); }
 .human-header { max-width: 1240px; margin: 0 auto; padding: 22px 36px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--human-line); }
@@ -21,7 +21,7 @@
 .human-main { max-width: 1240px; margin: 0 auto; padding: 0 36px 80px; }
 .human-hero { min-height: 330px; padding: 66px 0 54px; display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 40px; align-items: center; }
 .human-hero h1 { margin: 18px 0 20px; font-size: clamp(48px, 7vw, 82px); line-height: .98; letter-spacing: -5px; }
-.human-hero h1 span { color: var(--human-orange); }
+.human-hero h1 span { color: var(--accent-text); }
 .human-hero-copy { max-width: 590px; margin: 0; color: var(--human-muted); font-size: 18px; line-height: 1.65; }
 .human-hero-mark { position: relative; justify-self: end; width: 220px; height: 220px; display: grid; place-items: center; }
 .human-hero-mark img { width: 178px; height: 178px; object-fit: contain; transform: rotate(8deg); }
@@ -131,3 +131,34 @@
 @media (prefers-reduced-motion: reduce) {
   .workspace-tab:hover { transform: none; }
 }
+
+/* Theme-aware account surfaces. Fixed bright/inverse panels scope both text
+   roles together, so shared components cannot inherit the opposite theme. */
+.human-notice{--human-ink:var(--on-bright);--human-muted:var(--on-bright-muted);color:var(--on-bright)}
+.human-card-icon,.human-row-icon,.agent-avatar,.activity-kind{color:var(--on-bright)}
+.human-row-icon,.agent-avatar{background:var(--soft);color:var(--ink)}
+.workspace-tab-mark,.human-empty>span,.activity-empty>span{color:var(--on-bright)}
+.passkey-strip{--human-ink:var(--inverse);--human-cream:var(--on-inverse);--human-muted:var(--on-inverse-muted);background:var(--inverse);color:var(--on-inverse)}
+.passkey-strip .button.outline{color:var(--on-inverse);border-color:var(--inverse-line)}
+.passkey-strip .button.outline:hover{background:var(--inverse-hover)}
+.passkey-strip :focus-visible{outline-color:var(--lime)}
+.human-signout:hover{color:var(--on-bright)}
+.human-card>form[action="/human/revoke"]{padding-block:1rem;border-top:1px solid var(--line)}
+.human-card>form[action="/human/revoke"] p{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin:0;overflow-wrap:anywhere}
+.human-card code,.human-post-body{overflow-wrap:anywhere}
+.human-post-body{white-space:pre-wrap}
+.human-grid{align-items:start}
+.activity-section article+article{margin-top:1rem}
+.human-hero h1{font-size:clamp(2.75rem,5vw,4.5rem);letter-spacing:-.04em;overflow-wrap:anywhere}
+.workspace-tab{min-width:0;max-width:100%;flex-shrink:0;overflow-wrap:anywhere}
+.workspace-tabs{padding:.5rem}
+.passkey-strip,.passkey-actions{flex-wrap:wrap}
+.passkey-actions form p{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.human-auth .card{margin-block:1.5rem}
+.human-auth .card h2{margin-top:2rem}
+.human-auth details{margin-top:1.5rem;border-top:1px solid var(--line);padding-top:1rem}
+.human-auth #recovery-code{display:block;padding:1rem;background:var(--soft);color:var(--ink);overflow-wrap:anywhere}
+.human-auth summary{cursor:pointer;font-weight:800;padding-block:.75rem}
+.human-auth #human-status:not(:empty){padding:1rem;background:var(--soft);color:var(--ink);border-radius:var(--radius)}
+.human-notice-icon{background:var(--on-bright)}
+@media(max-width:760px){.human-header{flex-wrap:wrap}.human-auth .button{width:100%}.human-section-head{flex-wrap:wrap}.human-hero-mark{display:none}}

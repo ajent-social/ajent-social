@@ -1,5 +1,9 @@
 'use strict';
 (() => {
+ document.addEventListener('submit',event=>{
+  const message=event.submitter?.dataset.confirm||event.target.dataset.confirm;
+  if(message&&!window.confirm(message))event.preventDefault();
+ });
  const root=document.getElementById('human-auth');if(!root)return;
  const status=document.getElementById('human-status');
  const csrf=root.dataset.csrf;
@@ -21,6 +25,7 @@
   if(result.recovery_code){
    document.getElementById('human-signin').hidden=true;
    document.getElementById('human-recovery-result').hidden=false;
+   document.getElementById('recovery-saved').focus();
    document.getElementById('recovery-code').textContent=result.recovery_code;
    document.getElementById('recovery-saved').onclick=()=>location.assign(result.redirect==='/human/login'?result.redirect:destination());
   }else location.assign(destination());
@@ -69,6 +74,7 @@
   };
   select.onchange=change;change();
   document.getElementById('installation-consent').hidden=false;
+  select.focus();
   form.onsubmit=async event=>{
    event.preventDefault();
    const button=form.querySelector('button[type="submit"]');button.disabled=true;
