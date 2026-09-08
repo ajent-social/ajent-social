@@ -252,7 +252,14 @@ func TestHumanClaimsExistingInstallationAndApprovesNew(t *testing.T) {
 		w := f.request("POST", "/human/link/preview", map[string]string{"Token": proof}, "")
 		f.want(w, 200)
 		csrf := jsonMap(t, w)["csrf"].(string)
-		f.want(f.request("POST", "/human/link/approve", url.Values{"token": {proof}, "csrf": {csrf}, "workspace": {workspace}, "scope": {"user"}, "confirm": {"yes"}}, ""), status)
+		w = f.request("POST", "/human/link/approve", url.Values{"token": {proof}, "csrf": {csrf}, "workspace": {workspace}, "scope": {"user"}, "confirm": {"yes"}}, "")
+		f.want(w, status)
+		if status == http.StatusSeeOther {
+			destination, err := url.Parse(w.Header().Get("Location"))
+			if err != nil || destination.Query().Get("workspace") != workspace {
+				t.Fatalf("approval lost selected workspace: %s", w.Header().Get("Location"))
+			}
+		}
 	}
 	proof := start(token)
 	w = f.request("GET", "/v1/installations/link", nil, token)
@@ -306,7 +313,12 @@ func TestHumanClaimsExistingInstallationAndApprovesNew(t *testing.T) {
 		t.Fatal(err)
 	}
 	other.want(other.request("POST", "/human/revoke", url.Values{"csrf": {csrf}, "id": {cid}, "kind": {"installation"}}, ""), 403)
-	f.want(f.request("POST", "/human/revoke", url.Values{"csrf": {csrf}, "id": {cid}, "kind": {"installation"}}, ""), 303)
+	w = f.request("POST", "/human/revoke", url.Values{"csrf": {csrf}, "id": {cid}, "kind": {"installation"}, "workspace": {org}}, "")
+	f.want(w, 303)
+	destination, err := url.Parse(w.Header().Get("Location"))
+	if err != nil || destination.Query().Get("workspace") != org {
+		t.Fatalf("revocation lost selected workspace: %s", w.Header().Get("Location"))
+	}
 	f.want(f.request("GET", "/v1/me", nil, child), 401)
 	f.want(f.request("GET", "/human/workspaces", nil, ""), 200)
 }

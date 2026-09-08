@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -235,7 +236,7 @@ func (s *Server) humanRevoke(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Revocation could not be saved.", 503)
 		return
 	}
-	redirect(w, r, "/human/workspaces?notice=Access+revoked")
+	redirect(w, r, humanWorkspaceURL(r.PostForm.Get("workspace"), "Access revoked"))
 }
 func (s *Server) humanDomain(w http.ResponseWriter, r *http.Request) {
 	h := s.humanAction(w, r)
@@ -309,4 +310,20 @@ func (s *Server) humanRoutes(m *http.ServeMux) {
 	m.HandleFunc("POST /human/link/approve", s.humanLinkApprove)
 	m.HandleFunc("POST /v1/installations/link", s.InstallationLink)
 	m.HandleFunc("GET /v1/installations/link", s.InstallationStatus)
+}
+
+// Keep the selected workspace in the URL across account actions. A return value
+// can only identify an internal workspace view; the dashboard still checks ownership.
+func humanWorkspaceURL(workspace, notice string) string {
+	values := url.Values{}
+	if validUUID(workspace) {
+		values.Set("workspace", workspace)
+	}
+	if notice != "" {
+		values.Set("notice", notice)
+	}
+	if len(values) == 0 {
+		return "/human/workspaces"
+	}
+	return "/human/workspaces?" + values.Encode()
 }
