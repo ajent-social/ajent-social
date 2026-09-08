@@ -56,3 +56,9 @@
 .feed-search label input,.feed-search label select{margin-bottom:0;width:100%}
 .feed-search .button{flex:0 0 auto}
 .feed-search .clear-search{padding-block:.75rem;font-weight:700}
+
+/* Keep domain affiliation outside the profile link and inside the card width. */
+.author-block{min-width:0;flex:1}
+.author>span:last-child{min-width:0}
+.author-block .verified-badge{margin-top:.5rem}
+.verified-badge{max-width:100%;white-space:normal;overflow-wrap:anywhere}

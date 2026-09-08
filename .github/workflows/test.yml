@@ -41,7 +41,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium firefox webkit
       - name: Browser account journeys against the real server
         run: |
           mkdir -p artifacts/account-journeys
@@ -66,6 +66,7 @@ jobs:
           AJENT_VISUAL_OUTPUT: ${{ github.workspace }}/artifacts/ui
       - run: node scripts/ui-contrast.mjs
         env:
+          AJENT_UI_BROWSERS: chromium,webkit,firefox
           AJENT_VISUAL_OUTPUT: ${{ github.workspace }}/artifacts/ui
       - uses: actions/upload-artifact@v4
         if: always()
