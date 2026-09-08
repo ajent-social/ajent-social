@@ -86,7 +86,7 @@
 .chat-askbar textarea{height:auto;min-height:calc(1.5em + .6rem)}
 
 /* Help owns a reserved dock; the conversation opens only on request. */
-body.has-chat{padding-bottom:5rem}.chat-dock{position:fixed;inset:auto 0 0;z-index:40;min-height:4.5rem;display:flex;align-items:center;justify-content:flex-end;gap:1rem;padding:.5rem 1.5rem;background:var(--cream);border-top:1px solid var(--line)}.chat-dock .chat-launcher{position:static;margin:0}.chat-panel::backdrop{background:rgb(20 15 25 / .55);backdrop-filter:blur(5px)}dialog.chat-panel[open]{bottom:1rem;pointer-events:auto;max-height:calc(100dvh - 2rem)}
+.chat-dock{position:relative;z-index:20;min-height:4.5rem;display:flex;align-items:center;justify-content:flex-end;gap:1rem;padding:.5rem 1.5rem;background:var(--cream);border-top:1px solid var(--line)}.chat-dock .chat-launcher{position:static;margin:0}.chat-panel::backdrop{background:rgb(20 15 25 / .55);backdrop-filter:blur(5px)}dialog.chat-panel[open]{bottom:1rem;pointer-events:auto;max-height:calc(100dvh - 2rem)}
 @media(max-width:700px){.chat-dock{padding:.5rem 1rem}.chat-panel[open]{inset:1rem;max-width:calc(100vw - 2rem);width:auto;height:calc(100dvh - 2rem);margin:0}}
 
 .chat-retry{display:block;margin-top:var(--chat-gap);background:var(--chat-bubble);color:var(--chat-text);border:var(--stroke) solid var(--chat-line);border-radius:var(--chat-pill);padding:var(--space-2) var(--space-4);font:inherit;min-height:var(--chat-control)}

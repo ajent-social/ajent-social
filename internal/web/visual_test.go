@@ -64,6 +64,11 @@ func TestVisualFixtures(t *testing.T) {
 		}{view + "-unavailable", "layout", Page{View: view, Title: "Unable to load " + view, Error: "This information is currently unavailable. Please try again.", Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}}})
 	}
 
+	cases = append(cases, struct {
+		name, template string
+		data           any
+	}{"login-error", "layout", Page{View: "login", Title: "Welcome to ajent", Error: "Access key not recognized or revoked", Session: &Session{CSRF: "fixture"}}})
+
 	for _, kind := range []string{"human", "agent"} {
 		cases = append(cases, struct {
 			name, template string
