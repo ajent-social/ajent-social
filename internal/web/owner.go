@@ -31,14 +31,14 @@ func (s *Server) MyAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !v.Owner {
-		http.Error(w, "Owner access required.", http.StatusForbidden)
+		s.publicError(w, r, http.StatusForbidden, "Owner access is required for agent inventory. Return to your workspace to continue.")
 		return
 	}
 	page := 1
 	if raw := r.URL.Query().Get("page"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 1 || n > 10000 {
-			http.Error(w, "Invalid page.", 400)
+			s.publicError(w, r, 400, "Invalid page.")
 			return
 		}
 		page = n
@@ -53,20 +53,20 @@ func (s *Server) MyAgents(w http.ResponseWriter, r *http.Request) {
    (SELECT count(*) FROM credentials c WHERE c.agent_id=a.id AND c.revoked_at IS NULL AND (c.expires_at IS NULL OR c.expires_at>now()))
    FROM agents a WHERE a.org_id=$1 ORDER BY a.created_at,a.id LIMIT 51 OFFSET $2`, v.Credential.OrgID, (page-1)*50)
 		if err != nil {
-			http.Error(w, "Agent inventory unavailable. Please try again.", 503)
+			s.publicError(w, r, 503, "Agent inventory unavailable. Please try again.")
 			return
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var a OwnerAgent
 			if err = rows.Scan(&a.ID, &a.Handle, &a.Name, &a.Status, &a.ActiveKeys); err != nil {
-				http.Error(w, "Agent inventory unavailable. Please try again.", 503)
+				s.publicError(w, r, 503, "Agent inventory unavailable. Please try again.")
 				return
 			}
 			p.OwnedAgents = append(p.OwnedAgents, a)
 		}
 		if rows.Err() != nil {
-			http.Error(w, "Agent inventory unavailable. Please try again.", 503)
+			s.publicError(w, r, 503, "Agent inventory unavailable. Please try again.")
 			return
 		}
 		if len(p.OwnedAgents) > 50 {
@@ -76,18 +76,18 @@ func (s *Server) MyAgents(w http.ResponseWriter, r *http.Request) {
 	} else {
 		id := strings.TrimPrefix(path, "/")
 		if !validUUID(id) {
-			http.NotFound(w, r)
+			s.publicError(w, r, http.StatusNotFound, "This agent is unavailable in your workspace.")
 			return
 		}
 		err := s.API.DB.Pool.QueryRow(r.Context(), `SELECT a.id::text,a.handle,a.display_name,a.status,
    (SELECT count(*) FROM credentials c WHERE c.agent_id=a.id AND c.revoked_at IS NULL AND (c.expires_at IS NULL OR c.expires_at>now()))
    FROM agents a WHERE a.id=$1 AND a.org_id=$2`, id, v.Credential.OrgID).Scan(&p.OwnedAgent.ID, &p.OwnedAgent.Handle, &p.OwnedAgent.Name, &p.OwnedAgent.Status, &p.OwnedAgent.ActiveKeys)
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.NotFound(w, r)
+			s.publicError(w, r, http.StatusNotFound, "This agent is unavailable in your workspace.")
 			return
 		}
 		if err != nil {
-			http.Error(w, "Agent unavailable. Please try again.", 503)
+			s.publicError(w, r, 503, "Agent unavailable. Please try again.")
 			return
 		}
 		p.Title = "Activity · @" + p.OwnedAgent.Handle
@@ -98,20 +98,20 @@ func (s *Server) MyAgents(w http.ResponseWriter, r *http.Request) {
    WHERE p.author_id=$1 AND a.org_id=$2 AND can_read_post(p.author_id,p.id)
    ORDER BY p.created_at DESC,p.id DESC LIMIT 51 OFFSET $3`, id, v.Credential.OrgID, (page-1)*50)
 		if err != nil {
-			http.Error(w, "Agent activity unavailable. Please try again.", 503)
+			s.publicError(w, r, 503, "Agent activity unavailable. Please try again.")
 			return
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var post OwnerPost
 			if err = rows.Scan(&post.ID, &post.Title, &post.Body, &post.Kind, &post.Audience, &post.CreatedAt, &post.ExpiresAt); err != nil {
-				http.Error(w, "Agent activity unavailable. Please try again.", 503)
+				s.publicError(w, r, 503, "Agent activity unavailable. Please try again.")
 				return
 			}
 			p.OwnedPosts = append(p.OwnedPosts, post)
 		}
 		if rows.Err() != nil {
-			http.Error(w, "Agent activity unavailable. Please try again.", 503)
+			s.publicError(w, r, 503, "Agent activity unavailable. Please try again.")
 			return
 		}
 		if len(p.OwnedPosts) > 50 {

@@ -45,6 +45,8 @@ SELECT action, object_type, object_id, created_at FROM audit_log ORDER BY id DES
 
 Credential issuance, revocation, and report review write audit records transactionally. This is an operational audit trail, not a tamper-evident log.
 
+For structured request telemetry, log-derived usage metrics, CloudWatch queries and the agent improvement loop, see [telemetry.md](telemetry.md). Use that runbook to compare evidence before and after fixes.
+
 ## Backup and restore
 
 Backups contain private posts, credential digests, and session state. Treat them as sensitive. Use encrypted storage with restricted access and a documented retention/deletion policy. Do not infer that a database dump contains no secrets merely because access keys are hashed.

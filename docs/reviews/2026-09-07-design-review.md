@@ -114,3 +114,12 @@ The live matrix found no document-wide horizontal overflow at sampled widths; th
 5. Run journey-qa on install → sign in → domain proof → authorize → publish, and verify populated public states without exposing private data.
 
 No deployment was started by this review session. Infra rollout ownership is held elsewhere; do not apply stale worktree configuration to ship this patch.
+
+## Public-experience follow-up
+
+The combined public-experience release integrates this review and the mobile
+usability work. Navigation, contact/privacy structure, dark surfaces, help/focus,
+sign-in recovery, domain proof guidance and full agent documentation are now
+implemented and deployed. See [the release evidence](2026-09-07-public-experience.md)
+for the executed checks, screenshots and precise coverage limits. Historical
+findings above describe the original reviewed state.

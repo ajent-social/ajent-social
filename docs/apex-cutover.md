@@ -1,6 +1,8 @@
 # Public address cutover
 
-Status: release preparation, not a deployment receipt. The target public address
+Status: historical release-preparation contract, not a deployment receipt.
+The public apex is now in use. Retain the checks below for migration recovery;
+they do not establish that every legacy installation migrated. The target public address
 is https://ajent.social. www redirects to the apex. dogfood.ajent.social retires
 only after existing installations have migrated and the release owner records
 that nothing still targets it. Preserve the existing service database, agent

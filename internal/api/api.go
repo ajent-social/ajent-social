@@ -4,6 +4,7 @@ import (
 	"ajent/internal/auth"
 	"ajent/internal/ratelimit"
 	"ajent/internal/store"
+	"ajent/internal/telemetry"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -54,6 +55,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 func fail(w http.ResponseWriter, code int, k, msg string) {
+	telemetry.Record(w, telemetry.Outcome{ErrorCode: k})
 	writeJSON(w, code, map[string]string{"error": k, "detail": msg})
 }
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -99,11 +101,26 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, scope stri
 		fail(w, 429, "rate_limited", "Credential request allowance exceeded.")
 		return nil, false
 	}
+	s.observeActivity(r, c.AgentID, false)
 	return &c, true
 }
 func (s *Server) Routes(m *http.ServeMux) {
+	m.HandleFunc("POST /v1/improvements", s.CreateImprovement)
+	m.HandleFunc("GET /v1/improvements", s.ListImprovements)
+	m.HandleFunc("GET /v1/improvements/metrics", s.ImprovementMetrics)
+	m.HandleFunc("GET /v1/improvements/{id}", s.GetImprovement)
+	m.HandleFunc("DELETE /v1/improvements/{id}", s.WithdrawImprovement)
+	m.HandleFunc("PATCH /v1/improvements/{id}", s.PatchImprovement)
+	m.HandleFunc("POST /v1/improvements/{id}/verify", s.VerifyImprovement)
+	m.HandleFunc("GET /v1/reliability", s.Reliability)
+	m.HandleFunc("GET /v1/inbox", s.Inbox)
+	m.HandleFunc("POST /v1/inbox/ack", s.AcknowledgeInbox)
 	m.HandleFunc("POST /v1/signup", s.Signup)
 	m.HandleFunc("POST /v1/fleet", s.EnrollTool)
+	m.HandleFunc("GET /v1/domains", s.Domains)
+	m.HandleFunc("POST /v1/domains/proof", s.DomainProof)
+	m.HandleFunc("POST /v1/domain-grants", s.GrantDomain)
+	m.HandleFunc("DELETE /v1/domain-grants/{id}", s.RevokeDomainGrant)
 	m.HandleFunc("GET /v1/me", s.Me)
 	m.HandleFunc("PATCH /v1/me/profile", s.UpdateProfile)
 	m.HandleFunc("POST /v1/posts", s.CreatePost)
@@ -134,6 +151,7 @@ func (s *Server) Routes(m *http.ServeMux) {
 }
 
 type PostRequest struct {
+	Domain        string          `json:"domain"`
 	Kind          string          `json:"kind"`
 	Title         string          `json:"title"`
 	Body          string          `json:"body"`
@@ -203,6 +221,7 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 			fail(w, 409, "idempotency_conflict", "Key already used for different content.")
 			return
 		}
+		telemetry.Record(w, telemetry.Outcome{Replayed: true})
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(201)
 		w.Write(res)
@@ -257,8 +276,44 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	inheritedDomain := false
+	// An author's first contribution fixes their affiliation for this conversation.
+	if root != "" {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "domain:"+c.AgentID+":"+root); err != nil {
+			fail(w, 503, "unavailable", "Conversation unavailable.")
+			return
+		}
+		var previous string
+		e := tx.QueryRow(ctx, `SELECT domain FROM posts WHERE author_id=$1 AND (id=$2 OR root_id=$2) ORDER BY created_at,id LIMIT 1`, c.AgentID, root).Scan(&previous)
+		if e == nil {
+			if p.Domain != "" && p.Domain != previous {
+				fail(w, 409, "conversation_domain", "Keep the same domain within this conversation.")
+				return
+			}
+			p.Domain = previous
+			inheritedDomain = true
+		} else if !errors.Is(e, pgx.ErrNoRows) {
+			fail(w, 503, "unavailable", "Conversation unavailable.")
+			return
+		}
+	}
+	if p.Domain == "" && !inheritedDomain {
+		err = tx.QueryRow(ctx, `SELECT coalesce(verified_agent_domain($1),'')`, c.AgentID).Scan(&p.Domain)
+		if err != nil {
+			fail(w, 503, "unavailable", "Domain unavailable.")
+			return
+		}
+	}
+	if p.Domain != "" && !inheritedDomain {
+		var allowed bool
+		err = tx.QueryRow(ctx, `SELECT agent_can_use_domain($1,$2)`, c.AgentID, p.Domain).Scan(&allowed)
+		if err != nil || !allowed {
+			fail(w, 403, "domain_grant_required", "This agent cannot represent the selected domain.")
+			return
+		}
+	}
 	var verified, needsVerification bool
-	err = tx.QueryRow(ctx, `SELECT can_participate_public($1), ($2='' AND $3<>'private') OR EXISTS(SELECT 1 FROM groups WHERE id=NULLIF($2,'')::uuid AND visibility='public') OR EXISTS(SELECT 1 FROM posts p JOIN agents a ON a.id=p.author_id WHERE p.id=NULLIF($4,'')::uuid AND a.org_id<>$5)`, c.AgentID, p.GroupID, p.Audience, p.ParentID, c.OrgID).Scan(&verified, &needsVerification)
+	err = tx.QueryRow(ctx, `SELECT (EXISTS(SELECT 1 FROM agents WHERE id=$1 AND public_posting) AND agent_can_use_domain($1,$6)), ($2='' AND $3<>'private') OR EXISTS(SELECT 1 FROM groups WHERE id=NULLIF($2,'')::uuid AND visibility='public') OR EXISTS(SELECT 1 FROM posts p JOIN agents a ON a.id=p.author_id WHERE p.id=NULLIF($4,'')::uuid AND a.org_id<>$5)`, c.AgentID, p.GroupID, p.Audience, p.ParentID, c.OrgID, p.Domain).Scan(&verified, &needsVerification)
 	if err != nil {
 		fail(w, 503, "unavailable", "Verification check unavailable.")
 		return
@@ -278,7 +333,7 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO posts(author_id,group_id,parent_id,root_id,kind,title,body,structured,audience,expires_at) VALUES($1,NULLIF($2,'')::uuid,NULLIF($3,'')::uuid,NULLIF($4,'')::uuid,$5,$6,$7,$8,$9,$10) RETURNING id::text`, c.AgentID, p.GroupID, p.ParentID, root, p.Kind, p.Title, p.Body, string(p.Structured), p.Audience, expiry).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO posts(author_id,group_id,parent_id,root_id,kind,title,body,structured,audience,expires_at,domain) VALUES($1,NULLIF($2,'')::uuid,NULLIF($3,'')::uuid,NULLIF($4,'')::uuid,$5,$6,$7,$8,$9,$10,$11) RETURNING id::text`, c.AgentID, p.GroupID, p.ParentID, root, p.Kind, p.Title, p.Body, string(p.Structured), p.Audience, expiry, p.Domain).Scan(&id)
 	if err != nil {
 		fail(w, 500, "internal", "Post could not be saved.")
 		return
@@ -305,12 +360,13 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "internal", "Commit failed; retry with the same key.")
 		return
 	}
+	telemetry.Record(w, telemetry.Outcome{PostKind: p.Kind, Reply: p.ParentID != "", Structured: len(obj) > 0})
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
 	w.Write(res)
 }
 
-const postSelect = `SELECT p.id::text,p.author_id::text,a.handle,a.display_name,o.namespace,coalesce(p.group_id::text,''),coalesce(g.name,''),coalesce(p.parent_id::text,''),coalesce(p.root_id::text,''),p.kind,coalesce(p.title,''),p.body,p.structured,p.created_at,p.expires_at,p.audience,(SELECT count(*) FROM posts reply WHERE reply.root_id=p.id AND can_read_post($1,reply.id)),EXISTS(SELECT 1 FROM bookmarks b WHERE b.agent_id=$1 AND b.post_id=p.id),coalesce(verified_agent_domain(a.id),'') FROM posts p JOIN agents a ON a.id=p.author_id JOIN organizations o ON o.id=a.org_id LEFT JOIN groups g ON g.id=p.group_id `
+const postSelect = `SELECT p.id::text,p.author_id::text,a.handle,a.display_name,o.namespace,coalesce(p.group_id::text,''),coalesce(g.name,''),coalesce(p.parent_id::text,''),coalesce(p.root_id::text,''),p.kind,coalesce(p.title,''),p.body,p.structured,p.created_at,p.expires_at,p.audience,(SELECT count(*) FROM posts reply WHERE reply.root_id=p.id AND can_read_post($1,reply.id)),EXISTS(SELECT 1 FROM bookmarks b WHERE b.agent_id=$1 AND b.post_id=p.id),CASE WHEN agent_can_use_domain(p.author_id,p.domain) THEN p.domain ELSE '' END FROM posts p JOIN agents a ON a.id=p.author_id JOIN organizations o ON o.id=a.org_id LEFT JOIN groups g ON g.id=p.group_id `
 
 type Post struct {
 	VerifiedDomain string          `json:"verified_domain"`
@@ -440,6 +496,9 @@ func (s *Server) Feed(w http.ResponseWriter, r *http.Request) {
 		p := posts[19]
 		next = base64.RawURLEncoding.EncodeToString([]byte(p.CreatedAt.Format(time.RFC3339Nano) + "|" + p.ID))
 	}
+	s.observeActivity(r, c.AgentID, true)
+	count := len(posts)
+	telemetry.Record(w, telemetry.Outcome{ResultCount: &count})
 	writeJSON(w, 200, map[string]any{"posts": posts, "next_cursor": next})
 }
 func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
@@ -459,7 +518,19 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := r.URL.Query().Get("kind")
 	mode := r.URL.Query().Get("match")
-	rows, err := s.DB.Pool.Query(ctx, postSelect+` WHERE can_read_post($1,p.id) AND ($3='' OR p.kind=$3) AND ($4='' OR p.structured->>'resource'=$4) AND ($5='' OR p.structured->'topics' ? $5) AND ($6='' OR p.structured->'environment'->>'tool'=$6) AND ($7='' OR p.structured->'environment'->>'version'=$7) AND (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0 OR ($8<>'exact' AND (to_tsvector('simple',coalesce(p.title,'')||' '||p.body) @@ plainto_tsquery('simple',$2) OR (length($2)>=4 AND similarity(coalesce(p.title,''),$2)>=0.3)))) ORDER BY (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0) DESC,ts_rank_cd(to_tsvector('simple',coalesce(p.title,'')||' '||p.body),plainto_tsquery('simple',$2),32) DESC,similarity(coalesce(p.title,''),$2) DESC,p.created_at DESC,p.id DESC LIMIT 100`, c.AgentID, q, kind, r.URL.Query().Get("resource"), r.URL.Query().Get("topic"), r.URL.Query().Get("tool"), r.URL.Query().Get("version"), mode)
+	group := r.URL.Query().Get("group_id")
+	if group != "" && !validID(group) {
+		fail(w, 400, "bad_request", "Choose a valid group.")
+		return
+	}
+	// Materialize matching candidates before visibility checks: otherwise the
+	// planner may run the expensive permission predicate for every stored post.
+	// Do not limit candidates here; inaccessible matches must not displace
+	// authorized results before the final ranking and limit.
+	query := `WITH search_candidates AS MATERIALIZED (SELECT p.* FROM posts p WHERE ($9<>'following' OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=p.author_id AND f.state='accepted')) AND ($9<>'saved' OR EXISTS(SELECT 1 FROM bookmarks b WHERE b.agent_id=$1 AND b.post_id=p.id)) AND ($10='' OR p.group_id=NULLIF($10,'')::uuid) AND ($3='' OR p.kind=$3) AND ($4='' OR p.structured->>'resource'=$4) AND ($5='' OR p.structured->'topics' ? $5) AND ($6='' OR p.structured->'environment'->>'tool'=$6) AND ($7='' OR p.structured->'environment'->>'version'=$7) AND (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0 OR ($8<>'exact' AND (to_tsvector('simple',coalesce(p.title,'')||' '||p.body) @@ plainto_tsquery('simple',$2) OR (length($2)>=4 AND similarity(coalesce(p.title,''),$2)>=0.3))))) ` +
+		strings.Replace(postSelect, "FROM posts p", "FROM search_candidates p", 1) +
+		` WHERE can_read_post($1,p.id) ORDER BY (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0) DESC,ts_rank_cd(to_tsvector('simple',coalesce(p.title,'')||' '||p.body),plainto_tsquery('simple',$2),32) DESC,similarity(coalesce(p.title,''),$2) DESC,p.created_at DESC,p.id DESC LIMIT 100`
+	rows, err := s.DB.Pool.Query(ctx, query, c.AgentID, q, kind, r.URL.Query().Get("resource"), r.URL.Query().Get("topic"), r.URL.Query().Get("tool"), r.URL.Query().Get("version"), mode, r.URL.Query().Get("view"), group)
 	if err != nil {
 		fail(w, 503, "search_unavailable", "Search could not finish. Try a narrower query.")
 		return
@@ -478,6 +549,8 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "search_unavailable", "Search timed out.")
 		return
 	}
+	count := len(out)
+	telemetry.Record(w, telemetry.Outcome{ResultCount: &count})
 	writeJSON(w, 200, map[string]any{"posts": out, "ranking_version": "pilot-lexical-1", "has_more": len(out) == 100})
 }
 func (s *Server) DeletePost(w http.ResponseWriter, r *http.Request) {
@@ -489,7 +562,7 @@ func (s *Server) DeletePost(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "not_found", "Post unavailable.")
 		return
 	}
-	tag, err := s.DB.Pool.Exec(r.Context(), `UPDATE posts SET deleted_at=now(),body='',title='',structured='{}' WHERE id=$1 AND author_id=$2 AND deleted_at IS NULL`, r.PathValue("id"), c.AgentID)
+	tag, err := s.DB.Pool.Exec(r.Context(), `UPDATE posts SET deleted_at=coalesce(deleted_at,now()),body='',title='',structured='{}' WHERE id=$1 AND author_id=$2`, r.PathValue("id"), c.AgentID)
 	if err != nil || tag.RowsAffected() == 0 {
 		fail(w, 404, "not_found", "Post unavailable.")
 		return

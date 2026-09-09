@@ -5,6 +5,7 @@ import (
 	"ajent/internal/bootstrap"
 	"ajent/internal/jobs"
 	"ajent/internal/store"
+	"ajent/internal/telemetry"
 	"ajent/internal/web"
 	"ajent/migrations"
 	"context"
@@ -16,12 +17,15 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	loadChatEnv(".env")
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
 	demo := flag.Bool("seed-demo", false, "seed explicitly labelled sample community")
@@ -92,6 +96,15 @@ func main() {
 	if e != nil {
 		log.Fatal(e)
 	}
+	// Keep the previous HTTPS origin usable while installed agents migrate.
+	legacy := os.Getenv("AJENT_LEGACY_ORIGIN")
+	if legacy != "" {
+		old, err := url.Parse(legacy)
+		if err != nil || old.Scheme != "https" || old.Host == "" || old.User != nil || old.Path != "" || old.RawQuery != "" || old.ForceQuery || old.Fragment != "" || !secure {
+			log.Fatal("AJENT_LEGACY_ORIGIN must be an HTTPS origin without a path")
+		}
+		w.LegacyOrigin = legacy
+	}
 	m := http.NewServeMux()
 	a.Routes(m)
 	w.Routes(m)
@@ -105,7 +118,7 @@ func main() {
 		w.Write([]byte("ok"))
 	})
 	jobsDone := jobs.Start(ctx, db.Pool)
-	srv := &http.Server{Addr: *addr, Handler: headers(limit(m, trusted)), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	srv := &http.Server{Addr: *addr, Handler: headers(limit(m, trusted), m), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	shutdownDone := make(chan struct{})
 	go func() {
 		defer close(shutdownDone)
@@ -130,23 +143,50 @@ func main() {
 	}
 
 }
-func headers(next http.Handler) http.Handler {
+func headers(next http.Handler, routes *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := &responseStatus{ResponseWriter: w}
 		w = response
 		requestID := uuid.NewString()
 		started := time.Now()
+		// Resolve before downstream middleware clones the request or rejects it.
+		// Never fall back to URL.Path: it can contain identifiers and secrets.
+		_, route := routes.Handler(r)
+		// All Ajent registrations include a method. ServeMux can return a raw
+		// redirect path for CONNECT requests; that is not a route template.
+		if !strings.Contains(route, " ") {
+			route = "unmatched"
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 		defer cancel()
 		r = r.WithContext(ctx)
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				slog.Error("request panic", "request_id", requestID)
+				response.outcome.ErrorCode = "panic"
 				if response.status == 0 {
 					http.Error(w, "Internal server error.", 500)
 				}
 			}
-			slog.Info("request", "request_id", requestID, "method", r.Method, "route", r.Pattern, "status", response.status, "duration_ms", time.Since(started).Milliseconds())
+			if response.status == 0 {
+				response.status = http.StatusOK
+			}
+			if response.outcome.ErrorCode == "" && response.status >= 400 {
+				response.outcome.ErrorCode = "http_" + strconv.Itoa(response.status)
+			}
+			attrs := []any{"schema_version", 1, "request_id", requestID, "method", requestMethod(r.Method), "route", route, "status", response.status, "duration_ms", time.Since(started).Milliseconds(), "release", releaseRevision, "traffic", requestTraffic(route, r), "client", clientClass(r.Header.Get("X-Ajent-Client"))}
+			if response.outcome.ErrorCode != "" {
+				attrs = append(attrs, "error_code", response.outcome.ErrorCode)
+			}
+			if response.outcome.ResultCount != nil {
+				attrs = append(attrs, "result_count", *response.outcome.ResultCount)
+			}
+			if response.outcome.PostKind != "" {
+				attrs = append(attrs, "post_kind", response.outcome.PostKind, "reply", response.outcome.Reply, "structured", response.outcome.Structured)
+			}
+			if response.outcome.Replayed {
+				attrs = append(attrs, "replayed", true)
+			}
+			slog.Info("request", attrs...)
 		}()
 		w.Header().Set("X-Request-ID", requestID)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -161,7 +201,56 @@ func headers(next http.Handler) http.Handler {
 
 type responseStatus struct {
 	http.ResponseWriter
-	status int
+	status  int
+	outcome telemetry.Outcome
+}
+
+func (w *responseStatus) RecordOutcome(outcome telemetry.Outcome) { w.outcome = outcome }
+
+// buildRevision is set by release container builds, which exclude .git.
+var buildRevision string
+
+var releaseRevision = func() string {
+	if buildRevision != "" {
+		return buildRevision
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" {
+				return setting.Value
+			}
+		}
+	}
+	return "unknown"
+}()
+
+func requestMethod(method string) string {
+	switch method {
+	case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS":
+		return method
+	default:
+		return "other"
+	}
+}
+
+func clientClass(value string) string {
+	switch value {
+	case "python-cli", "mcp", "probe":
+		return value
+	default:
+		return "unknown"
+	}
+}
+
+func trafficClass(route string) string {
+	switch route {
+	case "GET /healthz":
+		return "health"
+	case "GET /static/":
+		return "asset"
+	default:
+		return "application"
+	}
 }
 
 func (w *responseStatus) WriteHeader(code int) {
@@ -177,3 +266,10 @@ func (w *responseStatus) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 func (w *responseStatus) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func requestTraffic(route string, r *http.Request) string {
+	if trafficClass(route) == "application" && clientClass(r.Header.Get("X-Ajent-Client")) == "probe" {
+		return "probe"
+	}
+	return trafficClass(route)
+}
