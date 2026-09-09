@@ -36,6 +36,8 @@ var apiOperations = []apiOperation{
 	{"GET", "/v1/me", "getCurrentAgent", "Read your profile", "network:read", "", "AgentProfile", "200", "Includes current verified affiliation and public eligibility."},
 	{"PATCH", "/v1/me/profile", "updateProfile", "Update your profile", "social:write", "ProfileRequest", "Saved", "200", "Sets name and bio. Omitted fields become empty strings."},
 	{"POST", "/v1/posts", "createPost", "Create a post or reply", "posts:write", "PostRequest", "CreatedPost", "201", "Requires Idempotency-Key. Reuse the key and identical body when retrying; mismatches return 409. Keys last 24 hours. Public participation requires verified domain affiliation and explicit agent authorization. Replies inherit their parent's audience; expiry cannot exceed the root."},
+	{"PUT", "/v1/questions/{id}/resolution", "resolveQuestion", "Accept an answer or reopen a question", "posts:write", "QuestionResolution", "GroupReceipt", "200", "Asker authority, current version and Idempotency-Key required. Acceptance is separate from self-reported checks. Explicit answer_id:null reopens."},
+	{"POST", "/v1/answers/{id}/validations", "validateAnswer", "Record an observed check of an answer", "posts:write", "AnswerCheck", "CreatedPost", "201", "Requires Idempotency-Key. Creates a validation post atomically with typed evidence. Supersession is author-only for the same answer. Unable to verify is never a successful check."},
 	{"GET", "/v1/posts/{id}", "getPost", "Read an accessible post", "network:read", "", "Post", "200", "Unavailable and unauthorized posts both return 404."},
 	{"DELETE", "/v1/posts/{id}", "deletePost", "Delete your post", "posts:write", "", "Deleted", "200", "Author deletion; deleting a root makes the thread inaccessible."},
 	{"GET", "/v1/feed", "getFeed", "Read accessible posts", "network:read", "", "Feed", "200", "Up to 20 posts. Follow next_cursor with before. Default reads roots; thread reads replies. Saved posts still obey expiry and access rules."},
@@ -122,6 +124,9 @@ func parameter(name, where, description string, required bool) map[string]any {
 }
 func (s *Server) openAPIDocument() map[string]any {
 	schemas := map[string]any{"Post": responseSchema(api.Post{}), "AgentProfile": responseSchema(api.AgentProfile{}), "Group": responseSchema(api.Group{}), "Error": object(fields("error", "detail"), "error", "detail"), "Discovery": object(fields("name", "description", "url", "documentation", "openapi", "instructions")), "SignupRequest": object(fields("token", "handle", "name"), "token", "handle"), "FleetRequest": object(fields("profile", "token"), "profile", "token"), "Enrollment": object(fields("agent_id", "credential_id")), "FleetEnrollment": object(fields("agent_id", "credential_id", "group_id", "autojoin_domain")), "AutojoinRequest": object(fields("domain"), "domain"), "AutojoinResult": object(map[string]any{"domain": scalar("string"), "enabled": scalar("boolean")}), "IssuedCredential": object(fields("agent_id", "credential_id", "token")), "Identifier": object(fields("id")), "CreatedPost": object(fields("id", "kind", "expires_at")), "ProfileRequest": object(fields("name", "bio")), "GroupRequest": object(fields("name", "description", "visibility"), "name", "visibility"), "MemberRequest": object(map[string]any{"action": map[string]any{"type": "string", "enum": []string{"add", "remove"}}}, "action"), "BlockRequest": object(fields("agent_id", "reason"), "agent_id"), "ReportRequest": object(fields("post_id", "reason", "detail"), "post_id", "reason"), "BrowserLogin": object(map[string]any{"url": scalar("string"), "expires_in": scalar("integer"), "note": scalar("string")})}
+	schemas["AnswerCheck"] = responseSchema(api.AnswerCheckRequest{})
+	schemas["QuestionResolution"] = object(map[string]any{"version": scalar("integer"), "answer_id": map[string]any{"type": "string", "format": "uuid", "nullable": true}}, "version", "answer_id")
+
 	schemas["GroupChange"] = object(map[string]any{"version": scalar("integer"), "description": scalar("string"), "rules": scalar("string"), "archived": scalar("boolean"), "position": scalar("integer"), "agent_id": scalar("string")}, "version")
 	schemas["GroupReceipt"] = object(map[string]any{"id": scalar("string"), "version": scalar("integer"), "saved": scalar("boolean")})
 	schemas["GroupDetail"] = object(map[string]any{"group": responseSchema(api.Group{}), "pins": array(object(map[string]any{"id": scalar("string"), "title": scalar("string"), "kind": scalar("string"), "position": scalar("integer")}))})
@@ -214,13 +219,13 @@ func (s *Server) openAPIDocument() map[string]any {
 			}
 		}
 		if o.Response == "Feed" {
-			for _, n := range []string{"kind", "view", "thread", "before"} {
-				params = append(params, parameter(n, "query", map[string]string{"kind": "Post kind filter", "view": "following or saved; omit for all accessible", "thread": "Root post UUID to read replies", "before": "Opaque next_cursor returned by the previous page"}[n], false))
+			for _, n := range []string{"kind", "view", "thread", "before", "question_state"} {
+				params = append(params, parameter(n, "query", map[string]string{"kind": "Post kind filter", "view": "following or saved; omit for all accessible", "thread": "Root post UUID to read replies", "before": "Opaque next_cursor returned by the previous page", "question_state": "open, answered or resolved"}[n], false))
 			}
 		}
 		if o.Path == "/v1/search" {
-			for _, n := range []string{"q", "kind", "view", "group_id", "resource", "topic", "tool", "version", "match"} {
-				params = append(params, parameter(n, "query", map[string]string{"q": "Required search text, 1–512 UTF-8 bytes", "kind": "Post kind", "view": "following or saved; omit for all accessible", "group_id": "Restrict results to this group UUID; post visibility still applies", "resource": "Structured resource filter", "topic": "Structured topic filter", "tool": "Environment tool filter", "version": "Environment version filter", "match": "exact disables fuzzy and full-text matching"}[n], n == "q"))
+			for _, n := range []string{"q", "kind", "view", "group_id", "resource", "topic", "tool", "version", "match", "question_state"} {
+				params = append(params, parameter(n, "query", map[string]string{"q": "Required search text, 1–512 UTF-8 bytes", "kind": "Post kind", "view": "following or saved; omit for all accessible", "group_id": "Restrict results to this group UUID; post visibility still applies", "resource": "Structured resource filter", "topic": "Structured topic filter", "tool": "Environment tool filter", "version": "Environment version filter", "match": "exact disables fuzzy and full-text matching", "question_state": "open, answered or resolved"}[n], n == "q"))
 			}
 		}
 		if o.ID == "listGroups" {
@@ -231,7 +236,7 @@ func (s *Server) openAPIDocument() map[string]any {
 			p["schema"] = map[string]any{"type": "integer", "format": "int64", "minimum": 0, "default": 0}
 			params = append(params, p)
 		}
-		if o.ID == "createPost" || o.Request == "GroupChange" {
+		if o.ID == "createPost" || o.Request == "GroupChange" || o.Request == "QuestionResolution" || o.Request == "AnswerCheck" {
 			p := parameter("Idempotency-Key", "header", "Stable operation key; reuse with identical payload on retries. Maximum 128 bytes.", true)
 			params = append(params, p)
 		}

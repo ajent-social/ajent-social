@@ -18,7 +18,7 @@ async function check(name,run){await run();checks.push(name);console.log('PASS '
 const keyword='browser'+randomBytes(6).toString('hex');
 async function publish(title,kind='finding'){
  const composer=page.locator('.composer');
- if(!await composer.evaluate(el=>el.open))await composer.locator('summary').click();
+ if(!await composer.evaluate(el=>el.open))await composer.locator(':scope > summary').click();
  await composer.getByRole('combobox',{name:'Post type',exact:true}).selectOption(kind);
  await composer.getByLabel('Title',{exact:true}).fill(title);
  await composer.getByLabel('Your finding or question',{exact:true}).fill(keyword+' synthetic evidence for browser verification.');
@@ -43,7 +43,7 @@ try{
  });
  await check('unfinished post survives search and reload',async()=>{
   const composer=page.locator('.composer');
-  await composer.locator('summary').click();
+  await composer.locator(':scope > summary').click();
   await composer.getByLabel('Title',{exact:true}).fill(keyword+' draft');
   await composer.getByLabel('Your finding or question',{exact:true}).fill('An unfinished synthetic finding.');
   const requestKey=await composer.locator('[name="request_key"]').inputValue();
@@ -159,11 +159,11 @@ try{
  await check('drafts stay with their conversation',async()=>{
   const groupURL=page.url();
   const composer=page.locator('.composer');
-  if(!await composer.evaluate(el=>el.open))await composer.locator('summary').click();
+  if(!await composer.evaluate(el=>el.open))await composer.locator(':scope > summary').click();
   await composer.getByLabel('Your finding or question',{exact:true}).fill('Group draft only.');
   await page.goto(origin+'/app');
   assert.equal(await composer.locator('[name="body"]').inputValue(),'');
-  if(!await composer.evaluate(el=>el.open))await composer.locator('summary').click();
+  if(!await composer.evaluate(el=>el.open))await composer.locator(':scope > summary').click();
   await composer.getByLabel('Your finding or question',{exact:true}).fill('General feed draft only.');
   await page.goto(groupURL);
   assert.equal(await composer.locator('[name="body"]').inputValue(),'Group draft only.');
@@ -177,7 +177,7 @@ try{
  });
  await check('blocked draft storage warns before leaving',async()=>{
   const composer=page.locator('.composer');
-  if(!await composer.evaluate(el=>el.open))await composer.locator('summary').click();
+  if(!await composer.evaluate(el=>el.open))await composer.locator(':scope > summary').click();
   await page.evaluate(()=>{window.originalDraftSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException('Test storage unavailable','QuotaExceededError');};});
   await composer.getByLabel('Your finding or question',{exact:true}).fill('Keep this unfinished draft.');
   await composer.getByRole('status').filter({hasText:'Draft could not be saved.'}).waitFor();
@@ -218,7 +218,7 @@ try{
  });
  await check('sign-out clears drafts from this tab',async()=>{
   const composer=page.locator('.composer');
-  if(!await composer.evaluate(el=>el.open))await composer.locator('summary').click();
+  if(!await composer.evaluate(el=>el.open))await composer.locator(':scope > summary').click();
   await composer.getByLabel('Your finding or question',{exact:true}).fill('Clear this on sign-out.');
   await page.getByRole('button',{name:'Sign out',exact:true}).click();
   await page.waitForURL(origin+'/');

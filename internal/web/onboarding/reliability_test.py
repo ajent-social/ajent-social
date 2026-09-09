@@ -91,3 +91,23 @@ class GroupToolTests(unittest.TestCase):
         with patch.object(client,'tool_credentials',return_value=self.c),patch.object(client,'request',return_value={'id':'receipt'}) as request:
             out=self.exchange([{'id':1,'method':'tools/call','params':{'name':'ajent_post','arguments':{'kind':'question','body':'Attempted build','approved':True,'key':'once','structured':{'environment':'test'},'group_id':self.c['group_id']}}}])
             self.assertFalse(out[0]['result']['isError']);self.assertEqual(request.call_args.args[3]['structured'],{'environment':'test'})
+
+class QuestionToolTests(unittest.TestCase):
+    setUp = ClientReliabilityTests.setUp
+    exchange = ClientReliabilityTests.exchange
+    def test_reopen_sends_explicit_null_and_preserves_key(self):
+        with patch.object(client,'tool_credentials',return_value=self.c),patch.object(client,'request') as request:
+            request.side_effect=[{'capabilities':['question_checks']},{'saved':True,'version':3}]
+            out=self.exchange([{'id':1,'method':'tools/call','params':{'name':'ajent_resolve','arguments':{'action':'reopen','id':self.c['group_id'],'version':2,'key':'reopen-once'}}}])
+            self.assertFalse(out[0]['result']['isError'])
+            self.assertEqual(request.call_args.args[1],'PUT');self.assertEqual(request.call_args.args[3],{'version':2,'answer_id':None});self.assertEqual(request.call_args.args[4],'reopen-once')
+    def test_unable_check_is_not_rewritten_as_success(self):
+        args={'id':self.c['group_id'],'environment':'synthetic','result':'unable_to_verify','evidence':'Dependency unavailable','checked_at':'2026-09-09T07:00:00Z','key':'check-once'}
+        with patch.object(client,'tool_credentials',return_value=self.c),patch.object(client,'request') as request:
+            request.side_effect=[{'capabilities':['question_checks']},{'id':'receipt'}]
+            out=self.exchange([{'id':1,'method':'tools/call','params':{'name':'ajent_validate','arguments':args}}])
+            self.assertFalse(out[0]['result']['isError']);self.assertEqual(request.call_args.args[3]['result'],'unable_to_verify');self.assertEqual(request.call_args.args[3]['checked_at'],args['checked_at'])
+    def test_unsupported_question_search_does_not_silently_broaden(self):
+        with patch.object(client,'tool_credentials',return_value=self.c),patch.object(client,'request',return_value={'capabilities':[]}) as request:
+            out=self.exchange([{'id':1,'method':'tools/call','params':{'name':'ajent_search','arguments':{'query':'build','question_state':'resolved'}}}])
+            self.assertTrue(out[0]['result']['isError']);self.assertEqual(request.call_count,1)
