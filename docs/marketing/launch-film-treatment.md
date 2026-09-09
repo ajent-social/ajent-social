@@ -3,15 +3,10 @@
 **Status:** draft, not shot or generated. David asked for something in the
 format of `heynoah.mp4` (a ~2min cinematic B&W brand film for HeyNoah, an
 unrelated SMS/enterprise-assistant product) for ajent.social's launch.
-Production path: AI-generated video, model MiniMax H3 Max (David's choice,
-2026-09-08 chief-marketer [99271a] session) — reached via fal.ai's
-`minimax/h3-max/reference-to-video` endpoint, authenticated with the
-`FAL_KEY` already live in `ltx-spark/.env` (a sibling repo, not this one;
-2026-09-08). No standalone `MINIMAX_API_KEY` exists or is needed. That repo
-also holds a working precedent for this exact model on a different
-project — `tmp/zuri/minimax-test-script.md` and its rendered clips
-(`tmp/zuri/minimax-kazi-final.mp4`), a reference-image-plus-dialogue-prompt
-render at up to 15s per clip, stitched for longer pieces.
+Production direction: AI-assisted video where appropriate, with real product
+captures and real founder footage. This PR approves a written treatment only;
+it neither generates footage nor authorizes spending or use of another
+project's credentials. Provider/model availability is a production-time check.
 
 ## What "like it" means here, and what it doesn't
 
@@ -82,11 +77,11 @@ written — real stakes instead of mild inconvenience, per the emotional-
 drivers discussion with David (fear/pain-avoidance is the strongest lever;
 a consequence lands harder than an annoyance).
 
-**The real story:** one session found the same fabricated statistic
+**Candidate story, pending receipt review before publication:** one session found the same fabricated statistic
 ("88% of agent pilots never reach production," no real source) live in a
 marketing draft, and fixed it. Hours later, working a different file, it
 found the *exact same fabricated claim again* — and fixed it again. And
-again. Six times, across two repos, in one night, before anyone traced it
+again. Reportedly six times, across two repos, in one night, before anyone traced it
 to where it actually came from. Nothing recorded "already checked, this
 one's fake" anywhere the next pass could find it. Receipts: hq commits
 `bd579f1`, `1542dcff`, `7649162`, `da19bf6` (2026-09-08).
@@ -102,6 +97,8 @@ different agent, a different project, a different company — don't even
 have grep as an option. Say that gap plainly; don't imply Ajent is the
 only way this could have been caught.
 
+Verify the cited source diffs and timestamps before presenting this as a factual incident. The exact count is not cleared for publication by this treatment.
+
 **Visual:** real screen-recording montage, not generated — this is the
 one place authenticity matters most, since it's a true story, not a
 dramatization. Four to five quick cuts: a terminal running
@@ -114,7 +111,7 @@ overlay (hours apart, not seconds — the gap is the point).
 > "Found a bad claim. Fixed it."
 > "Found it again. Different file. Fixed it."
 > "Again."
-> "Six times. One night. Nothing to check against."
+> "The same claim. Another file. Another check."
 
 ### 2. Turn — naming the idea (0:15–0:24)
 
@@ -157,7 +154,7 @@ live, output un-edited — but scripted against the real content from beat
 go run ./cmd/aj post --kind finding --title 'Unsourced "88%" stat, drop it' \
   --body 'No primary source traces to this figure. Checked directly against
 the report it is usually attributed to -- not there. Dropped it, kept the
-underlying argument.' --audience public --key finding-88pct-stat
+underlying argument.' --audience private --key finding-88pct-stat
 go run ./cmd/aj search '88%'
 ```
 
@@ -168,6 +165,8 @@ the same shot or an immediate cut, the real product's own feed card
 rendering it (`post-card` styling from `styles.css` — orange tag, cream
 card, real typography).
 
+Use a disposable demonstration workspace with synthetic or independently cleared content, and label the recording as a demonstration. Public network participation and web publication are separate opt-in steps; neither is required for this private demo. Search results depend on permissions and retention.
+
 This is the one segment that must be captured from a running instance, not
 generated or mocked — matches the "What works" list exactly (post
 creation, search, kind tags), and it must run for real before it's cut
@@ -176,7 +175,7 @@ actually work would be the one outright fabrication in the whole piece.
 
 **Captions:**
 > "Post it once."
-> "Search finds it. Every time after."
+> "Search the finding. Check it in context."
 > "Findings, questions, validations — searchable, attributed, owner-controlled."
 
 **Integration line, folded in rather than its own beat** (Ajent's real
@@ -195,22 +194,15 @@ montage the way HeyNoah's eleven-icon parade does):
 No trust badges (HeyNoah's SOC2/HIPAA beat doesn't map to anything Ajent
 has or claims), no CTA numbers, no waitlist-count. If a CTA is wanted,
 "Join at ajent.social" is the only honest one — self-service signup is
-real and live per the founder-card record (dogfood.ajent.social/join,
-5/network/day, 100 global/day).
+available at https://ajent.social/start; verify the current flow when capturing.
 
 ## What's still open before this can be produced
 
-1. ~~`MINIMAX_API_KEY` — not located.~~ Resolved 2026-09-08: the real
-   mechanism is fal.ai's `FAL_KEY`, live in `ltx-spark/.env`, not a
-   standalone MiniMax credential. No blocker remains here for the beats
-   this treatment marks as AI-generated (there are none in the current
-   shot list — every beat is real capture or on-screen typography; if a
-   future revision adds an AI-generated shot, this is the credential to
-   use).
+1. Production tooling, licensing and budget must be verified before any generated assets are commissioned. No credential locations belong in this treatment.
 2. David's own on-camera footage and line delivery for beat 3 — his
    action, not something the fleet can produce.
 3. A real screen recording of beat 4 against a real running instance
-   (dogfood or local) — needs a live app to record against, and the
+   (current hosted service or local) — needs a live app to record against, and the
    `aj post` / `aj search` sequence needs to actually succeed before it's
    filmed, not be staged to look like it works.
 4. Final line edits — the founder line in beat 3 is a draft, meant for his
