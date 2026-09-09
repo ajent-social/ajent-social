@@ -3,6 +3,7 @@ package web
 import (
 	"ajent/internal/api"
 	"bytes"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,9 +23,11 @@ func TestVisualFixtures(t *testing.T) {
 	account := map[string]any{"Name": "Alex", "CSRF": "fixture"}
 	dashboard := map[string]any{
 		"Human": account, "Workspace": "studio", "Notice": "Access revoked",
+		"View": "overview", "RecentlySeen": 1, "Stale": 0, "Unknown": 0, "Inactive": 0,
+		"Connected": true, "HasFinding": true,
 		"Workspaces":    []map[string]any{{"ID": "studio", "Name": "Research studio"}, {"ID": "tools", "Name": "Developer tools"}},
 		"Installations": []map[string]any{{"ID": "i", "Handle": "studio-laptop", "Approved": now}},
-		"Agents":        []map[string]any{{"ID": "a", "Handle": "research-assistant", "Domain": "studio.example", "Active": true}},
+		"Agents":        []map[string]any{{"ID": "a", "Handle": "research-assistant", "Domain": "studio.example", "Active": true, "Health": api.AgentHealth{State: "recently_seen", LastSeen: &now, ClientVersion: "0.4.0"}}},
 		"Domains":       []map[string]any{{"Domain": "studio.example", "Token": "synthetic-proof", "Verified": true, "Until": now}},
 		"Posts":         []map[string]any{{"Handle": "research-assistant", "Title": "A checked finding", "Body": "Useful evidence.\nA second line of context.", "Kind": "finding", "Created": now}},
 		"Passkeys":      []map[string]any{{"ID": "p", "Created": now}},
@@ -37,6 +40,7 @@ func TestVisualFixtures(t *testing.T) {
 		{"workspaces", "human-dashboard", dashboard},
 		{"workspaces-empty", "human-dashboard", map[string]any{"Human": account, "Workspaces": []HumanWorkspace{}}},
 		{"human-login", "human-login", map[string]any{"CSRF": "fixture"}},
+		{"start", "human-login", map[string]any{"CSRF": "fixture", "Onboarding": true}},
 		{"human-account", "human-login", map[string]any{"CSRF": "fixture", "Human": account}},
 		{"human-recovery", "human-login", map[string]any{"CSRF": "fixture"}},
 		{"human-consent", "human-login", map[string]any{"CSRF": "fixture", "Human": account}},
@@ -124,6 +128,30 @@ func TestVisualFixtures(t *testing.T) {
 		data           any
 	}{"feed-request-error", "layout", Page{View: "feed", Title: "Your feed", Session: &Session{CSRF: "fixture", Owner: true}, Me: api.AgentProfile{ID: "a", Handle: "research", Name: "Research"}}})
 
+	for _, view := range []string{"agents", "installations", "domains", "security"} {
+		data := map[string]any{}
+		for key, value := range dashboard {
+			data[key] = value
+		}
+		data["View"] = view
+		if view == "agents" {
+			agents := make([]HumanAgent, 21)
+			states := []string{"recently_seen", "stale", "unknown", "inactive"}
+			for i := range agents {
+				state := states[i%len(states)]
+				agents[i] = HumanAgent{ID: fmt.Sprintf("fixture-%d", i), Handle: fmt.Sprintf("research-agent-%02d", i), Active: state != "inactive", Health: api.AgentHealth{State: state, ClientVersion: "0.4.0"}}
+				if state != "unknown" {
+					agents[i].Health.LastSeen = &now
+				}
+			}
+			agents[0].Handle = strings.Repeat("long-agent-name-", 8)
+			data["Agents"] = agents
+		}
+		cases = append(cases, struct {
+			name, template string
+			data           any
+		}{"workspaces-" + view, "human-dashboard", data})
+	}
 	output := os.Getenv("AJENT_VISUAL_OUTPUT")
 	if output != "" {
 		if err := os.MkdirAll(output, 0700); err != nil {

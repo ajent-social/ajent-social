@@ -26,6 +26,30 @@
   }catch{feedback.textContent='The request did not finish. Try again.';feedback.focus();}
   finally{delete form.dataset.busy;form.removeAttribute('aria-busy');for(const button of buttons)button.disabled=false;}
  });
+ // Browsers may restore an unsent form edit from their history cache.
+ // The query in the URL describes the results actually shown on this page.
+ window.addEventListener('pageshow',()=>{
+  const query=document.getElementById('agent-query');
+  if(query)query.value=new URLSearchParams(location.search).get('q')||'';
+ });
+ // Agent details are addressable and survive refresh and browser history.
+ const agentDetails=[...document.querySelectorAll('[data-workspace-detail]')];
+ function restoreAgentDetail(){
+  const target=location.hash.slice(1);
+  for(const detail of agentDetails)detail.open=detail.id===target;
+ }
+ if(agentDetails.length){
+  restoreAgentDetail();
+  window.addEventListener('hashchange',restoreAgentDetail);
+  for(const detail of agentDetails)detail.addEventListener('toggle',()=>{
+   const target=location.hash.slice(1);
+   if(detail.open&&target!==detail.id){
+    history.replaceState(null,'',location.pathname+location.search+'#'+detail.id);
+   }else if(!detail.open&&target===detail.id){
+    history.replaceState(null,'',location.pathname+location.search);
+   }
+  });
+ }
  const root=document.getElementById('human-auth');if(!root)return;
  const status=document.getElementById('human-status');
  const csrf=root.dataset.csrf;
@@ -51,7 +75,7 @@
  // The fragment is never sent to the server. The query forces a page load when
  // returning to this same link page; capture above immediately removes both.
  const resume=path=>path+(pendingToken&&!pendingStored?'?resume=1#'+pendingToken:'');
- const destination=()=>pendingToken?resume('/human/link'):'/human/workspaces';
+ const destination=()=>pendingToken?resume('/human/link'):root.dataset.onboarding==='yes'?'/join':'/human/workspaces';
  function completed(result){
   status.textContent='Signed in successfully.';
   if(result.recovery_code){

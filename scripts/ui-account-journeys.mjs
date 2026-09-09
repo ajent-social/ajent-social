@@ -51,10 +51,11 @@ try{
   assert.equal(await page.locator('#recovery-saved').evaluate(el=>el===document.activeElement),true);
   await page.getByRole('button',{name:'I have saved this code'}).click();
   await page.waitForURL('**/human/workspaces');
-  await page.getByRole('heading',{name:'Connect your first installation'}).waitFor();
+  await page.getByRole('heading',{name:'Next, connect your coding agent.'}).waitFor();
  });
  await check('explain why the only passkey cannot be removed',async()=>{
   assert.equal(await page.getByRole('button',{name:'Remove passkey',exact:true}).count(),0);
+  await page.getByRole('link',{name:'Manage passkeys',exact:true}).click();
   await page.getByText('Your only passkey. Add another before removing it.',{exact:true}).waitFor();
  });
  await check('public pages return a human account to its workspaces',async()=>{
@@ -73,18 +74,41 @@ try{
  await check('approve first installation',async()=>{await linkInstallation('First test workspace');});
  await check('approval opens the newly connected workspace',async()=>{
   await linkInstallation('Second test workspace');
-  assert.equal(await page.locator('.workspace-tab[aria-current="page"]').textContent(),'↗Second test workspace');
+  assert.equal(await page.locator('#workspace-select option:checked').textContent(),'Second test workspace');
   assert.ok(new URL(page.url()).searchParams.get('workspace'));
+ });
+ await check('agent search, details, refresh and Back preserve the selected view',async()=>{
+  await page.getByRole('link',{name:'Agents',exact:true}).click();
+  const row=page.locator('.agent-row').first();
+  const handle=(await row.locator('.agent-identity strong').textContent()).slice(1);
+  await row.locator('summary').click();
+  await page.waitForURL(url=>url.hash.startsWith('#agent-'));
+  await page.reload();
+  assert.equal(await page.locator('.agent-row').first().getAttribute('open'),'');
+  await page.getByLabel('Search agents',{exact:true}).fill(handle);
+  await page.getByLabel('Search agents',{exact:true}).press('Enter');
+  await page.waitForURL(url=>url.searchParams.get('q')===handle);
+  assert.equal(await page.locator('.agent-row').count(),1);
+  await page.getByLabel('Search agents',{exact:true}).fill('no-matching-agent');
+  await page.getByRole('button',{name:'Search',exact:true}).click();
+  await page.getByRole('heading',{name:'No matching agents',exact:true}).waitFor();
+  await page.goBack();
+  assert.equal(await page.getByLabel('Search agents',{exact:true}).inputValue(),handle);
+  assert.equal(await page.locator('.agent-row').count(),1);
  });
  await check('revocation keeps the selected workspace',async()=>{
   const workspace=new URL(page.url()).searchParams.get('workspace');
+  await page.getByRole('link',{name:'Installations',exact:true}).click();
+  await page.getByText('Manage installation',{exact:true}).click();
   page.once('dialog',dialog=>dialog.accept());
   await page.getByRole('button',{name:'Revoke installation and agents',exact:true}).click();
   await page.waitForURL(url=>url.searchParams.get('notice')==='Access revoked');
   assert.equal(new URL(page.url()).searchParams.get('workspace'),workspace);
-  assert.match(await page.locator('.human-card').first().textContent(),/revoked/);
+  assert.equal(new URL(page.url()).searchParams.get('view'),'installations');
+  assert.match(await page.locator('.installation-row').first().textContent(),/Revoked/);
  });
  await check('invalid domain keeps the form and focuses its error',async()=>{
+  await page.getByRole('link',{name:'Domains',exact:true}).click();
   await page.getByLabel('Domain',{exact:true}).fill('not a domain');
   await page.getByRole('button',{name:'Create DNS proof',exact:true}).click();
   await page.getByRole('status').filter({hasText:'Enter a DNS domain.'}).waitFor();
@@ -92,7 +116,8 @@ try{
   assert.equal(await page.locator('[data-form-status]').evaluate(el=>el===document.activeElement),true);
   await page.getByLabel('Domain',{exact:true}).fill('browser.example');
   await page.getByLabel('Domain',{exact:true}).press('Enter');
-  await page.getByRole('heading',{name:'browser.example',exact:true}).waitFor();
+  await page.locator('.domain-row summary').filter({hasText:'browser.example'}).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('view'),'domains');
  });
  await check('sign out and sign in update public navigation on tab-return events',async()=>{
   const publicPage=await context.newPage();publicPage.setDefaultTimeout(10000);
@@ -140,5 +165,5 @@ try{
  await writeFile(output+'/results.json',JSON.stringify({suite:'account journeys',executed:checks.length,checks},null,2));
  await browser.close();
 }
-assert.equal(checks.length,10,'all account journeys must execute');
+assert.equal(checks.length,11,'all account journeys must execute');
 console.log(JSON.stringify({suite:'account journeys',executed:checks.length,failed:0}));

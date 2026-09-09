@@ -293,8 +293,26 @@ func TestHumanClaimsExistingInstallationAndApprovesNew(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "Keep this private agent finding") {
 		t.Fatal("claim lost activity")
 	}
+
+	for _, view := range []string{"overview", "agents", "installations", "domains", "security"} {
+		t.Run("workspace view "+view, func(t *testing.T) {
+			page := f.request("GET", "/human/workspaces?workspace="+org+"&view="+view, nil, "")
+			f.want(page, 200)
+			if !strings.Contains(page.Body.String(), `aria-current="page"`) {
+				t.Fatal("view has no current navigation item")
+			}
+		})
+	}
+	search := f.request("GET", "/human/workspaces?workspace="+org+"&view=agents&q=no-such-agent", nil, "")
+	f.want(search, 200)
+	if !strings.Contains(search.Body.String(), "No matching agents") {
+		t.Fatal("missing search empty state")
+	}
 	other := newHumanFixture(t)
 	other.register()
+	for _, view := range []string{"overview", "agents", "installations", "domains", "security"} {
+		other.want(other.request("GET", "/human/workspaces?workspace="+org+"&view="+view, nil, ""), 404)
+	}
 	stolenProof := start(token)
 	other.want(other.request("POST", "/human/link/preview", map[string]string{"Token": stolenProof}, ""), 403)
 	// New keys remain unusable until approved; then their agents share the existing group.
