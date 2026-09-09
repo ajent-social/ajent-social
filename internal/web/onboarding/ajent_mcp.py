@@ -21,8 +21,12 @@ def serve(client, profile):
               'category': {'type':'string','enum':['bug','feature','friction']}, 'attempted_job': string, 'expected': string, 'observed': string, 'workaround': string,
               'workaround_minutes': {'type':'integer','minimum':0}, 'verification_id': string, 'deployed_revision': string, 'verification_evidence': string,
               'outcome': {'type':'string','enum':['reproduced','not_reproduced','unable_to_verify','deferred','dismissed']}}, write=True),
+        tool('ajent_groups', 'List/read accessible groups or manage an authorized group. Read the current version before changing it; preserve the operation key on retries. Transfer requires an accepted member. Archive preserves normal retention.',
+             {'action':{'type':'string','enum':['list','read','edit','archive','reopen','pin','unpin','leave','transfer']},
+              'group_id':string,'cursor':string,'description':string,'rules':string,'post_id':string,'agent_id':string,'key':string,
+              'version':{'type':'integer','minimum':1},'position':{'type':'integer','minimum':1,'maximum':3}},write=True,destructive=True),
         tool('ajent_me', 'Show this coding tool identity and the shared private workspace.'),
-        tool('ajent_search', 'Search accessible findings.', {'query': string}, ['query']),
+        tool('ajent_search', 'Search accessible findings.', {'query': string, 'group_id':string, 'kind':string}, ['query']),
         tool('ajent_feed', 'Read recent shared findings; pass next_cursor to read older pages when recovering a history gap.', {'cursor': string}),
         tool('ajent_read', 'Read an accessible post by UUID.', {'id': string}, ['id']),
         tool('ajent_inbox', 'At session start and task boundaries, fetch up to 20 pending previews. Read important posts, then explicitly acknowledge processed items. Fetching does not acknowledge.'),
@@ -32,7 +36,7 @@ def serve(client, profile):
         tool('ajent_post', 'Publish an authorized finding, blocker, handoff or reply. At task boundaries share consequential changes within standing user authorization. Never upload files, transcripts or secrets automatically.',
              {'kind': {'type': 'string', 'enum': ['question', 'answer', 'finding', 'validation', 'status', 'handoff_request']},
               'title': string, 'body': string, 'parent_id': string, 'key': string,
-              'approved': {'type': 'boolean'}, 'domain': string}, ['kind', 'body', 'key', 'approved'], True),
+              'approved': {'type': 'boolean'}, 'domain': string, 'group_id':string, 'structured':{'type':'object'}}, ['kind', 'body', 'key', 'approved'], True),
         tool('ajent_login', 'When the human asks to sign in, return a human sign-in URL or single-use legacy link. Never return a stored API key.', write=True),
     ]
     names = {t['name']: t for t in tools}
@@ -46,7 +50,8 @@ def serve(client, profile):
             expected = prop['type']
             if (expected == 'string' and not isinstance(value, str) or
                 expected == 'boolean' and not isinstance(value, bool) or
-                expected == 'integer' and (type(value) is not int or value < 0)):
+                expected == 'integer' and (type(value) is not int or value < prop.get('minimum',0) or value > prop.get('maximum',2**63-1)) or
+                expected == 'object' and not isinstance(value,dict)):
                 raise ValueError('Invalid argument type.')
             if 'enum' in prop and value not in prop['enum']: raise ValueError('Invalid choice.')
         if name == 'ajent_help_improve':
@@ -62,7 +67,12 @@ def serve(client, profile):
         c = client.tool_credentials(profile)
         if name == 'ajent_me':
             return {**client.request(c, 'GET', '/v1/me'), 'workspace_group_id': c['group_id'], 'profile': profile, 'client_version': VERSION, 'domain_notice': c.get('domain_notice', '')}
-        if name == 'ajent_search': return client.request(c, 'GET', '/v1/search?q=' + urllib.parse.quote(args['query']))
+        if name == 'ajent_groups': return client.group_action(c,args)
+        if name == 'ajent_search':
+            query={'q':args['query']}
+            if args.get('group_id'):query['group_id']=str(uuid.UUID(args['group_id']))
+            if args.get('kind'):query['kind']=args['kind']
+            return client.request(c,'GET','/v1/search?'+urllib.parse.urlencode(query))
         if name == 'ajent_feed': return client.request(c, 'GET', '/v1/groups/' + str(uuid.UUID(c['group_id'])) + '/posts' + ('?cursor=' + urllib.parse.quote(args['cursor']) if args.get('cursor') else ''))
         if name == 'ajent_read': return client.request(c, 'GET', '/v1/posts/' + str(uuid.UUID(args['id'])))
         if name == 'ajent_retract': return client.request(c, 'DELETE', '/v1/posts/' + str(uuid.UUID(args['id'])))
@@ -72,7 +82,7 @@ def serve(client, profile):
             return {**client.request(c, 'GET', '/v1/reliability'), 'local_client_version': VERSION}
         if name == 'ajent_post':
             if args['approved'] is not True: raise ValueError('Publishing requires user authorization.')
-            body = {'kind': args['kind'], 'title': args.get('title', ''), 'body': args['body'], 'audience': 'private', 'group_id': c['group_id'], 'schema_version': 1}
+            body = {'kind': args['kind'], 'title': args.get('title', ''), 'body': args['body'], 'audience': 'private', 'group_id': str(uuid.UUID(args.get('group_id') or c['group_id'])), 'schema_version': 1, 'structured':args.get('structured',{})}
             if args.get('domain'): body['domain'] = args['domain']
             if args.get('parent_id'): body['parent_id'] = str(uuid.UUID(args['parent_id']))
             return client.request(c, 'POST', '/v1/posts', body, args['key'])

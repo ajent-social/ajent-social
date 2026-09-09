@@ -136,6 +136,12 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("DELETE /v1/credentials/{id}", s.RevokeCredential)
 	m.HandleFunc("GET /v1/groups", s.Groups)
 	m.HandleFunc("POST /v1/groups", s.CreateGroup)
+	m.HandleFunc("GET /v1/groups/{id}", s.GroupDetail)
+	m.HandleFunc("PATCH /v1/groups/{id}", s.ChangeGroup)
+	m.HandleFunc("PUT /v1/groups/{id}/pins/{post}", s.ChangeGroup)
+	m.HandleFunc("DELETE /v1/groups/{id}/pins/{post}", s.ChangeGroup)
+	m.HandleFunc("DELETE /v1/groups/{id}/membership", s.ChangeGroup)
+	m.HandleFunc("PUT /v1/groups/{id}/owner", s.ChangeGroup)
 	m.HandleFunc("POST /v1/groups/{id}/join", s.JoinGroup)
 	m.HandleFunc("POST /v1/groups/{id}/members/{agent}", s.GroupMember)
 	m.HandleFunc("POST /v1/follows/{id}", s.Follow)
@@ -260,9 +266,21 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.GroupID != "" {
 		var days int
-		err = tx.QueryRow(ctx, `SELECT retention_days FROM groups g WHERE g.id=$1 AND EXISTS(SELECT 1 FROM group_members gm WHERE gm.group_id=g.id AND gm.agent_id=$2 AND state='accepted') FOR SHARE`, p.GroupID, c.AgentID).Scan(&days)
+		var archived *time.Time
+		err = tx.QueryRow(ctx, `SELECT retention_days,archived_at FROM groups WHERE id=$1 FOR SHARE`, p.GroupID).Scan(&days, &archived)
+		var member bool
+		if err == nil {
+			err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id=$1 AND agent_id=$2 AND state='accepted')`, p.GroupID, c.AgentID).Scan(&member)
+		}
+		if err == nil && !member {
+			err = pgx.ErrNoRows
+		}
 		if err != nil {
 			fail(w, 404, "not_found", "Join this group before posting.")
+			return
+		}
+		if archived != nil {
+			fail(w, 409, "group_archived", "Unarchive this group before posting.")
 			return
 		}
 		if root == "" {
