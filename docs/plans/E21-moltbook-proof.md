@@ -5,12 +5,15 @@ Acceptance: a sourced positioning brief, honest existing-demo release option, re
 
 All owners are roles. Estimates are focused effort. Task details are implementation/preparation acceptance; the linked live gate closes the user-facing deliverable. Follow the master plan's release, publication and evidence rules.
 
-- [ ] T21.1 Reconcile existing work and source precedence  Owner: coordinator  Est: 45m  kind: agent  deps: []  delivers: [current work and evidence matrix]
+- [x] T21.1 Reconcile existing work and source precedence  Owner: coordinator  Est: 45m  kind: agent  deps: []  delivers: [current work and evidence matrix]
   Area: docs/marketing/moltbook-readiness.md (new), current launch packet and source manifest. Recheck main, open PRs, issues 16-20 and served assets. Record implemented, tested, deployed, customer-used separately. Retain the September 8 scripted-demo option; mark older paid-spend, broad-channel and deposit suggestions as historical. No duplicate work for already-merged changes.
-- [ ] T21.2 Freeze audience, problem and exclusions  Owner: marketing  Est: 60m  kind: agent  deps: [T21.1]  delivers: [audience and problem brief]
+  Done 2026-09-08 (chief-marketer, ajent-social#33): PR #25 confirmed implemented+tested but not deployed (founder publish decision pending); E21/E22 confirmed genuinely unstarted; /join and /explore live-checked, unchanged from the plan's Sept 7 findings.
+- [x] T21.2 Freeze audience, problem and exclusions  Owner: marketing  Est: 60m  kind: agent  deps: [T21.1]  delivers: [audience and problem brief]
   Area: docs/marketing/moltbook-audience.md (new). Specify two tools, recent relay incident, workaround, expected next task, five interview prompts and disqualifiers. Separate evidence from hypothesized motivation. Use approved positioning as a working hypothesis; avoid unsupported savings or network claims.
-- [ ] T21.3 Write claim-to-evidence matrix  Owner: marketing  Est: 60m  kind: agent  deps: [T21.2]  delivers: [reviewable product claims]
+  Done 2026-09-08 (chief-marketer, ajent-social#33): audience anchored on the dogfood review's one confirmed relay incident plus David's own operator-as-courier case; evidence/hypothesis kept in separate columns.
+- [x] T21.3 Write claim-to-evidence matrix  Owner: marketing  Est: 60m  kind: agent  deps: [T21.2]  delivers: [reviewable product claims]
   Area: docs/marketing/moltbook-claims.md (new). Map each headline, screenshot label, limitation and CTA to current source or evidence. Explicitly distinguish scripted clients, actual harnesses, internal fleet and independent customer outcomes. Mark no-evidence claims unusable.
+  Done 2026-09-08 (chief-marketer, ajent-social#33): two-harness, time-saved, and network-effect claims marked unusable until T21.7/E22 land; "checked exchange" and retraction copy scoped to issues #17/#18's actual current state.
 - [ ] T21.4 Specify matched demonstration tasks  Owner: researcher  Est: 90m  kind: agent  deps: [T21.2]  delivers: [reproducible demo and baseline protocol]
   Area: docs/marketing/moltbook-demo.md (new). Choose a deliberately shareable repository and two comparable failures; freeze expected checks before runs. Describe relay baseline, counterbalanced order where feasible, timing boundaries, cost fields, manual-assistance log and failure recording. Do not use private fleet content as a public fixture.
 - [ ] T21.5 Preserve and inspect existing proof assets  Owner: content  Est: 45m  kind: agent  deps: [T21.1]  delivers: [existing-demo evidence inventory]

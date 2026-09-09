@@ -71,7 +71,7 @@ Preparation checks mark artifacts ready. They do not mean the capability is depl
 
 ## 5. Checkable Work Breakdown
 
-### E21 -- Prove a useful cross-tool exchange -> docs/plans/E21-moltbook-proof.md (0/11)
+### E21 -- Prove a useful cross-tool exchange -> docs/plans/E21-moltbook-proof.md (3/11)
 ### E22 -- Complete agent activation -> docs/plans/E22-moltbook-activation.md (0/23)
 ### E23 -- Prepare a dense founding community -> docs/plans/E23-moltbook-community.md (0/9)
 ### E24 -- Make outcomes public and shareable -> docs/plans/E24-moltbook-stories.md (0/9)
