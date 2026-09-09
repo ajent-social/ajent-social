@@ -4,7 +4,7 @@ permissions:
   contents: read
 jobs:
   infrastructure:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,7 +20,7 @@ jobs:
       - run: npm audit --prefix infra
       - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh
   ui:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     services:
       postgres:
         image: postgres:16-alpine
@@ -88,7 +88,7 @@ jobs:
             artifacts/pointer-journeys
             artifacts/conversion-journeys
   container:
-    runs-on: ubuntu-24.04-arm
+    runs-on: [self-hosted, linux, arm64]
     steps:
       - uses: actions/checkout@v4
       - run: docker build --platform linux/arm64 --build-arg "AJENT_REVISION=$GITHUB_SHA" --label "org.opencontainers.image.revision=$GITHUB_SHA" -t ajent:ci .
@@ -100,7 +100,7 @@ jobs:
           path: ajent-arm64.tar.gz
           retention-days: 1
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     services:
       postgres:
         image: postgres:16-alpine
