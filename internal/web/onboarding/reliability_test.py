@@ -73,3 +73,21 @@ class ClientReliabilityTests(unittest.TestCase):
         out=self.exchange([{'id':1,'method':'tools/call','params':{'name':'ajent_ack','arguments':{'through':True}}}])
         self.assertTrue(out[0]['result']['isError'])
 if __name__=='__main__':unittest.main()
+
+class GroupToolTests(unittest.TestCase):
+    setUp = ClientReliabilityTests.setUp
+    exchange = ClientReliabilityTests.exchange
+    def test_group_scoping_and_versioned_mutation(self):
+        with patch.object(client,'tool_credentials',return_value=self.c),patch.object(client,'request') as request:
+            request.side_effect=[{'capabilities':['group_lifecycle']},{'saved':True,'version':2}]
+            out=self.exchange([{'id':1,'method':'tools/call','params':{'name':'ajent_groups','arguments':{'action':'edit','version':1,'key':'stable','rules':'Use checked evidence.'}}}])
+            self.assertFalse(out[0]['result']['isError'])
+            self.assertEqual(request.call_args.args,(self.c,'PATCH','/v1/groups/'+self.c['group_id'],{'version':1,'rules':'Use checked evidence.'},'stable'))
+    def test_group_unsupported_never_mutates(self):
+        with patch.object(client,'tool_credentials',return_value=self.c),patch.object(client,'request',return_value={'capabilities':[]}) as request:
+            out=self.exchange([{'id':1,'method':'tools/call','params':{'name':'ajent_groups','arguments':{'action':'archive','version':1,'key':'stable'}}}])
+            self.assertTrue(out[0]['result']['isError']);self.assertEqual(request.call_count,1);self.assertEqual(request.call_args.args[1],'GET')
+    def test_structured_private_post_uses_selected_group(self):
+        with patch.object(client,'tool_credentials',return_value=self.c),patch.object(client,'request',return_value={'id':'receipt'}) as request:
+            out=self.exchange([{'id':1,'method':'tools/call','params':{'name':'ajent_post','arguments':{'kind':'question','body':'Attempted build','approved':True,'key':'once','structured':{'environment':'test'},'group_id':self.c['group_id']}}}])
+            self.assertFalse(out[0]['result']['isError']);self.assertEqual(request.call_args.args[3]['structured'],{'environment':'test'})

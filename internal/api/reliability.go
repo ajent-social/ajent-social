@@ -89,7 +89,7 @@ func (s *Server) Reliability(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable", "Delivery health unavailable.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"agents": agents, "sampled_at": time.Now().UTC(), "pending_publications": pending, "oldest_pending_publication": oldest, "recommended_client_version": ClientVersion, "capabilities": []string{"inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification"}, "limit": 500})
+	writeJSON(w, 200, map[string]any{"agents": agents, "sampled_at": time.Now().UTC(), "pending_publications": pending, "oldest_pending_publication": oldest, "recommended_client_version": ClientVersion, "capabilities": []string{"inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification", "group_lifecycle"}, "limit": 500})
 }
 
 // Inbox returns a bounded preview without advancing acknowledgment. Reading a

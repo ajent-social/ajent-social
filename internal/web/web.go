@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -59,16 +60,22 @@ type Page struct {
 	Post                                                                                    api.Post
 	Agents                                                                                  []api.AgentProfile
 	Groups                                                                                  []api.Group
+	GroupsNext                                                                              string
+	GroupMembers                                                                            []struct{ ID, Handle string }
 	Group                                                                                   api.Group
-	Notifications                                                                           []Notification
-	Credentials                                                                             []Credential
-	Reports                                                                                 []Report
-	Blocks                                                                                  []Block
-	RequestKey                                                                              string
-	ReturnPath, CurrentPath                                                                 string
-	ReadStatus                                                                              int
-	RetryQuery                                                                              url.Values
-	Demo                                                                                    bool
+	GroupPins                                                                               []struct {
+		ID, Title, Kind string
+		Position        int
+	}
+	Notifications           []Notification
+	Credentials             []Credential
+	Reports                 []Report
+	Blocks                  []Block
+	RequestKey              string
+	ReturnPath, CurrentPath string
+	ReadStatus              int
+	RetryQuery              url.Values
+	Demo                    bool
 }
 type Notification struct {
 	ID        string    `json:"id"`
@@ -239,14 +246,21 @@ func (s *Server) base(r *http.Request, session *Session) Page {
 		p.ReadStatus = status
 	}
 	p.Me = read[api.AgentProfile](b)
-	b, status = s.call(r, session, "GET", "/v1/groups", nil)
+	groupPath := "/v1/groups"
+	if r.URL.Path == "/app/groups" && r.URL.Query().Get("cursor") != "" {
+		groupPath += "?cursor=" + url.QueryEscape(r.URL.Query().Get("cursor"))
+	}
+	b, status = s.call(r, session, "GET", groupPath, nil)
 	if status != 200 {
 		p.Error = "Groups are currently unavailable."
 		p.ReadStatus = status
 	}
-	p.Groups = read[struct {
+	groupResult := read[struct {
 		Groups []api.Group `json:"groups"`
-	}](b).Groups
+		Next   string      `json:"next_cursor"`
+	}](b)
+	p.Groups = groupResult.Groups
+	p.GroupsNext = groupResult.Next
 	return p
 }
 func (s *Server) Landing(w http.ResponseWriter, r *http.Request) {
@@ -468,17 +482,23 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 		}
 	case strings.HasPrefix(path, "/groups/"):
 		p.GroupID = strings.TrimPrefix(path, "/groups/")
-		found := false
-		for _, g := range p.Groups {
-			if g.ID == p.GroupID {
-				p.Group = g
-				p.Title = g.Name
-				found = true
-			}
-		}
-		if !found && p.Error == "" {
-			pageStatus = http.StatusNotFound
+		b, status := s.call(r, v, "GET", "/v1/groups/"+p.GroupID, nil)
+		if status != 200 {
+			pageStatus = status
 			p.Error = "This group is private or unavailable."
+		} else {
+			detail := read[struct {
+				Group api.Group `json:"group"`
+				Pins  []struct {
+					ID, Title, Kind string
+					Position        int
+				} `json:"pins"`
+				Members []struct{ ID, Handle string } `json:"members"`
+			}](b)
+			p.Group = detail.Group
+			p.GroupPins = detail.Pins
+			p.GroupMembers = detail.Members
+			p.Title = p.Group.Name
 		}
 		endpoint = "/v1/groups/" + p.GroupID + "/posts?" + query.Encode()
 	case strings.HasPrefix(path, "/agents/"):
@@ -623,6 +643,52 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 	case "unsave":
 		method = "DELETE"
 		path = "/v1/bookmarks/" + id
+	case "group-settings", "group-archive", "group-leave", "group-owner", "group-pin", "group-unpin":
+		if !validUUID(id) {
+			s.actionError(w, r, v, back, "Invalid group.", 400)
+			return
+		}
+		version, err := strconv.ParseInt(r.FormValue("version"), 10, 64)
+		if err != nil || version < 1 {
+			s.actionError(w, r, v, back, "Refresh the group before changing it.", 400)
+			return
+		}
+		data := map[string]any{"version": version}
+		payload = data
+		path = "/v1/groups/" + id
+		method = "PATCH"
+		switch action {
+		case "group-settings":
+			data["description"] = r.FormValue("description")
+			data["rules"] = r.FormValue("rules")
+		case "group-archive":
+			data["archived"] = r.FormValue("archived") == "true"
+		case "group-leave":
+			method = "DELETE"
+			path += "/membership"
+			back = "/app/groups"
+		case "group-owner":
+			method = "PUT"
+			path += "/owner"
+			data["agent_id"] = r.FormValue("agent_id")
+		case "group-pin", "group-unpin":
+			post := r.FormValue("post_id")
+			if !validUUID(post) {
+				s.actionError(w, r, v, back, "Choose a post from this group.", 400)
+				return
+			}
+			path += "/pins/" + post
+			method = "DELETE"
+			if action == "group-pin" {
+				method = "PUT"
+				position, e := strconv.Atoi(r.FormValue("position"))
+				if e != nil {
+					s.actionError(w, r, v, back, "Choose position 1–3.", 400)
+					return
+				}
+				data["position"] = position
+			}
+		}
 	case "join":
 		path = "/v1/groups/" + id + "/join"
 	case "group":
