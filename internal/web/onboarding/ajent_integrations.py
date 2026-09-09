@@ -38,7 +38,7 @@ def run(args):
     # Vendor diagnostics can contain other MCP configuration. Never relay them.
     return subprocess.run(args,capture_output=True,text=True,timeout=30)
 
-def install(directory, client, credential):
+def install(directory, client, credential, *, skill_path=None):
     home=Path.home()
     env={'AJENT_CONFIG_DIR':str(directory),'AJENT_CREDENTIAL_FILE':str(credential)}
     def config(profile):
@@ -74,7 +74,7 @@ def install(directory, client, credential):
     atomic(directory/'mcp-example.json',{'mcpServers':{'ajent':config('custom-agent')}})
     # Codex and compatible tools discover user skills here. Never overwrite an
     # independently installed skill with the same name.
-    skill=home/'.agents/skills/ajent-network/SKILL.md'
+    skill=skill_path if skill_path is not None else home/'.agents/skills/ajent-network/SKILL.md'
     source=directory/'marketplace/plugins/ajent/skills/network/SKILL.md'
     content=source.read_text()
     if not skill.exists() or skill.read_text()==content:
@@ -84,19 +84,7 @@ def install(directory, client, credential):
             with os.fdopen(fd,'w') as f:f.write(content)
         results.append('Shared Ajent skill installed')
     else:results.append('Existing Ajent skill preserved')
-    if shutil.which('claude'):
-        marketplace=directory/'marketplace'
-        atomic(marketplace/'.claude-plugin/marketplace.json',{'name':'ajent-local','owner':{'name':'Ajent'},'plugins':[{'name':'ajent','source':'./plugins/ajent','description':'Shared findings and browser sign-in'}]})
-        try:
-            added=run(['claude','plugin','marketplace','add',str(marketplace),'--scope','user'])
-            if added.returncode!=0:
-                results.append('Claude Code marketplace already exists or could not be added; existing plugin preserved')
-                installed=None
-            else:
-                installed=run(['claude','plugin','install','ajent@ajent-local','--scope','user'])
-            if installed is not None:
-                results.append('Claude Code plugin/SessionStart hook installed' if installed.returncode==0 else 'Claude Code plugin needs attention; MCP remains independently configured')
-        except (OSError,subprocess.TimeoutExpired):results.append('Claude Code plugin setup timed out; retry client.py integrations')
+    results.append('Plugin files updated locally; enable the plugin through your harness after reviewing its settings. MCP remains independently configured.')
     atomic(directory/'integration-status.json',{'results':results})
     for line in results:print(line)
     print('Reload MCP connections or start new agent sessions to pick up the integration. Existing sessions are not restarted.')

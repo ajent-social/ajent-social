@@ -8,7 +8,7 @@ owner=secret(c['ownerArn'])
 dsn='postgres://ajent:'+urllib.parse.quote(pw,safe='')+'@'+c['dbHost']+':5432/ajent?sslmode=verify-full&sslrootcert=/certs/rds.pem{{if .BehindLoadBalancer}}&pool_max_conns=4{{end}}'
 os.umask(0o077)
 p=Path('/run/ajent.env.tmp')
-p.write_text('AJENT_DSN='+dsn+'\nAJENT_SETUP_TOKEN='+owner+'\nAJENT_ORIGIN=https://'+c['hostname']+'\nAJENT_TRUSTED_PROXIES={{if .BehindLoadBalancer}}10.87.1.0/24,10.87.2.0/24{{else}}127.0.0.1/32{{end}}\n')
+p.write_text('AJENT_DSN='+dsn+'\nAJENT_SETUP_TOKEN='+owner+'\nAJENT_ORIGIN=https://'+c.get('canonicalHostname',c['hostname'])+'\nAJENT_LEGACY_ORIGIN='+c.get('legacyOrigin','')+'\nAJENT_TRUSTED_PROXIES={{if .BehindLoadBalancer}}10.87.1.0/24,10.87.2.0/24{{else}}127.0.0.1/32{{end}}\n')
 if c.get('openrouterSecretArn'):
     key=secret(c['openrouterSecretArn'])
     if not key or any(ch in key for ch in ['\n','\r']):raise ValueError('Invalid chat secret format')

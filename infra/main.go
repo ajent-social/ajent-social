@@ -182,7 +182,7 @@ func deploy(ctx *pulumi.Context, s settings) error {
 				map[string]any{"Effect": "Allow", "Action": []string{"ecr:GetAuthorizationToken"}, "Resource": "*"},
 				map[string]any{"Effect": "Allow", "Action": []string{"ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:BatchCheckLayerAvailability"}, "Resource": v[2]},
 				map[string]any{"Effect": "Allow", "Action": []string{"logs:CreateLogStream", "logs:PutLogEvents"}, "Resource": v[3].(string) + ":*"},
-				map[string]any{"Effect": "Allow", "Action": []string{"cloudwatch:PutMetricData"}, "Resource": "*", "Condition": map[string]any{"StringEquals": map[string]string{"cloudwatch:namespace": "Ajent/Dogfood"}}},
+				map[string]any{"Effect": "Allow", "Action": []string{"cloudwatch:PutMetricData"}, "Resource": "*", "Condition": map[string]any{"StringEquals": map[string]string{"cloudwatch:namespace": "Ajent/Production"}}},
 			}}
 			b, err := json.Marshal(policy)
 			return string(b), err
@@ -227,7 +227,7 @@ func deploy(ctx *pulumi.Context, s settings) error {
 			name, metric, comparison, statistic string
 			threshold                           float64
 		}{{"http-health", "Healthy", "LessThanThreshold", "Minimum", 1}, {"host-disk", "DiskUsedPercent", "GreaterThanThreshold", "Maximum", 85}} {
-			if _, err = cloudwatch.NewMetricAlarm(ctx, a.name, &cloudwatch.MetricAlarmArgs{Namespace: pulumi.String("Ajent/Dogfood"), MetricName: pulumi.String(a.metric), Dimensions: pulumi.StringMap{"Stack": pulumi.String(s.Stack)}, Statistic: pulumi.String(a.statistic), Period: pulumi.Int(60), EvaluationPeriods: pulumi.Int(3), Threshold: pulumi.Float64(a.threshold), ComparisonOperator: pulumi.String(a.comparison), TreatMissingData: pulumi.String("breaching"), AlarmActions: pulumi.StringArray{alerts.Arn}, OkActions: pulumi.StringArray{alerts.Arn}, Tags: tags}); err != nil {
+			if _, err = cloudwatch.NewMetricAlarm(ctx, a.name, &cloudwatch.MetricAlarmArgs{Namespace: pulumi.String("Ajent/Production"), MetricName: pulumi.String(a.metric), Dimensions: pulumi.StringMap{"Stack": pulumi.String(s.Stack)}, Statistic: pulumi.String(a.statistic), Period: pulumi.Int(60), EvaluationPeriods: pulumi.Int(3), Threshold: pulumi.Float64(a.threshold), ComparisonOperator: pulumi.String(a.comparison), TreatMissingData: pulumi.String("breaching"), AlarmActions: pulumi.StringArray{alerts.Arn}, OkActions: pulumi.StringArray{alerts.Arn}, Tags: tags}); err != nil {
 				return err
 			}
 		}
@@ -240,7 +240,7 @@ func deploy(ctx *pulumi.Context, s settings) error {
 			} else {
 				content = address.PublicIp
 			}
-			if _, err = cloudflare.NewDnsRecord(ctx, "dogfood-dns", &cloudflare.DnsRecordArgs{ZoneId: pulumi.String(s.CloudflareZoneID), Name: pulumi.String(s.Hostname), Type: pulumi.String(kind), Content: content, Ttl: pulumi.Float64(300), Proxied: pulumi.Bool(false), Comment: pulumi.String("Ajent service; DNS-only")}); err != nil {
+			if _, err = cloudflare.NewDnsRecord(ctx, "production-dns", &cloudflare.DnsRecordArgs{ZoneId: pulumi.String(s.CloudflareZoneID), Name: pulumi.String(s.Hostname), Type: pulumi.String(kind), Content: content, Ttl: pulumi.Float64(300), Proxied: pulumi.Bool(false), Comment: pulumi.String("Ajent service; DNS-only")}, pulumi.Aliases([]pulumi.Alias{{Name: pulumi.String("dogfood-dns")}})); err != nil {
 				return err
 			}
 		}
@@ -275,6 +275,13 @@ func deploy(ctx *pulumi.Context, s settings) error {
 
 func (c foundation) userData(rolling bool) pulumi.StringOutput {
 	return pulumi.All(c.DB.Address, c.DBSecret.Arn, c.OwnerSecret.Arn, c.Repository.RepositoryUrl, c.Logs.Name).ApplyT(func(v []any) (string, error) {
-		return bootstrap(hostConfig{OpenrouterSecretARN: c.Settings.OpenrouterSecretARN, Hostname: c.Settings.Hostname, Region: c.Settings.Region, DBHost: v[0].(string), DBARN: v[1].(string), OwnerARN: v[2].(string), Image: v[3].(string) + "@" + c.Settings.ImageDigest, CaddyImage: c.Settings.CaddyImage, LogGroup: v[4].(string), Stack: c.Settings.Stack, BehindLoadBalancer: rolling})
+		config := hostConfig{OpenrouterSecretARN: c.Settings.OpenrouterSecretARN, Hostname: c.Settings.Hostname, Region: c.Settings.Region, DBHost: v[0].(string), DBARN: v[1].(string), OwnerARN: v[2].(string), Image: v[3].(string) + "@" + c.Settings.ImageDigest, CaddyImage: c.Settings.CaddyImage, LogGroup: v[4].(string), Stack: c.Settings.Stack, BehindLoadBalancer: rolling}
+		if rolling {
+			config.CanonicalHostname = c.Settings.CanonicalHostname
+			if config.CanonicalHostname != "" {
+				config.LegacyOrigin = "https://" + c.Settings.Hostname
+			}
+		}
+		return bootstrap(config)
 	}).(pulumi.StringOutput)
 }

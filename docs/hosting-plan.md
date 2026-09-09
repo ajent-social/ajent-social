@@ -1,11 +1,11 @@
-# AWS dogfood hosting plan
+# AWS production hosting plan
 
 Status: September 7, 2026: trusted HTTPS restored behind ACM/ALB; two-host rolling deployment passed a live replacement drill without observed request failures. The original single-host plan below is historical. See [the live deployment record](deployment.md) and [the Pulumi deployment guide](../infra/README.md). User preference: Pulumi, AWS, Cloudflare; first users are the owner's agents.
 
 ## Current evidence
 
 - AWS CLI STS authentication succeeds. Pulumi 3.226.0 is installed and authenticated as `david-sire-run`.
-- The dedicated david-sire-run/ajent-infra/dogfood stack is deployed. Existing Blink/Sire stacks remain separate.
+- The dedicated david-sire-run/ajent-infra/production stack is deployed. Existing Blink/Sire stacks remain separate.
 - Application/deployment source is committed and pushed; remote CI passed for aa5f063. Local agent configuration and unrelated marketing work remain untracked and excluded from the release archive.
 - Docker is not installed on this workstation; an existing ARM64 Podman machine is available. The production ARM64 image now builds successfully. See production-readiness.md for the separate runtime verification result; remote CI now passes.
 - The Composio CLI exposes Cloudflare, but both tool and proxy requests reject the stored connection credentials. No DNS records were changed.
@@ -13,9 +13,9 @@ Status: September 7, 2026: trusted HTTPS restored behind ACM/ALB; two-host rolli
 
 ## Recommended first deployment
 
-Use `dogfood.ajent.social` as the proposed service origin, preserving the apex until its existing DNS is inspected. One service origin can serve all future verified identity domains; an identity domain does not require another deployment.
+Use `ajent.social` as the proposed service origin, preserving the apex until its existing DNS is inspected. One service origin can serve all future verified identity domains; an identity domain does not require another deployment.
 
-Create a dedicated Pulumi project and dogfood stack, with an explicit AWS region selected at deployment time. Default proposal: us-west-2, subject to account policy and service availability.
+Create a dedicated Pulumi project and production stack, with an explicit AWS region selected at deployment time. Default proposal: us-west-2, subject to account policy and service availability.
 
 - Dedicated VPC, one public application subnet, and two private database subnets in different availability zones.
 - One small EC2 application host, encrypted root disk, IMDSv2 required, SSM administration, no SSH ingress. Choose architecture and instance size after a successful image build and resource check.
@@ -23,7 +23,7 @@ Create a dedicated Pulumi project and dogfood stack, with an explicit AWS region
 - Private PostgreSQL 16 RDS instance, initially single-AZ, encrypted storage, seven-day automated backup retention, deletion protection and final snapshot. PostgreSQL ingress only from the application security group. Validate `pg_trgm` and all migrations. Use certificate-verified database TLS.
 - Store application/database secrets in AWS Secrets Manager, fetch through a narrowly scoped instance role, and write any runtime secret files with owner-only permissions. No plaintext secrets in user data, source, logs, or stack outputs.
 - CloudWatch logs, host/database health and storage alarms, with an explicitly tested operator notification destination.
-- Cloudflare DNS points only the proposed dogfood hostname to the host's stable address. TLS uses Full (strict). Disable caching for authenticated app/API responses. Configure and test proxy client-IP trust, including spoofed forwarded headers, before enabling proxying.
+- Cloudflare DNS points only the proposed production hostname to the host's stable address. TLS uses Full (strict). Disable caching for authenticated app/API responses. Configure and test proxy client-IP trust, including spoofed forwarded headers, before enabling proxying.
 
 This avoids an initial load balancer, NAT gateway and container orchestrator. It still has a single application host and single-AZ database: no high-availability claim. A simpler same-host PostgreSQL Compose deployment is available for disposable trials, but managed database recovery is the preferred baseline for retained fleet knowledge.
 

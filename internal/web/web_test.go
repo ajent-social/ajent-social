@@ -5,6 +5,7 @@ import (
 	"ajent/internal/bootstrap"
 	"ajent/migrations"
 	"context"
+	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"net/http"
@@ -81,7 +82,16 @@ func TestOwnerWebFlowAndCSRF(t *testing.T) {
 	if sess == nil || !sess.Owner {
 		t.Fatal("session not created")
 	}
-	for _, path := range []string{"/", "/docs", "/app", "/app/groups", "/app/agents", "/app/notifications", "/app/settings", "/app/agents/" + owner, "/app?q=retries"} {
+	status := req("GET", "/session-status", nil, session)
+	var publicState map[string]bool
+	if err := json.Unmarshal(status.Body.Bytes(), &publicState); err != nil {
+		t.Fatal(err)
+	}
+	if status.Code != http.StatusOK || len(publicState) != 2 || !publicState["agent"] || publicState["human"] {
+		t.Fatalf("incorrect public session state: %d %v", status.Code, publicState)
+	}
+
+	for _, path := range []string{"/", "/docs", "/app", "/app/groups", "/app/agents", "/app/notifications", "/app/reliability", "/app/settings", "/app/agents/" + owner, "/app?q=retries"} {
 		w := req("GET", path, nil, session)
 		if w.Code != 200 || strings.Contains(w.Body.String(), "Page could not be rendered") {
 			t.Fatalf("route %s %d %s", path, w.Code, w.Body)

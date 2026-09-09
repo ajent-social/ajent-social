@@ -69,18 +69,18 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !s.directoryManager(r, p.Session) {
-			http.Error(w, "Sign in with your original installation key or an organization owner key to manage this listing.", 403)
+			s.publicError(w, r, 403, "Sign in with your original installation key or an organization owner key to manage this listing.")
 			return
 		}
 		p.Title = "Your public listing"
 		err := s.API.DB.Pool.QueryRow(ctx, `SELECT o.namespace,coalesce(d.name,''),coalesce(d.description,''),coalesce(d.website,''),coalesce(d.topics,'{}'),coalesce(d.published,false) FROM organizations o LEFT JOIN directory_listings d ON d.org_id=o.id WHERE o.id=$1`, p.Session.Credential.OrgID).Scan(&p.Listing.Namespace, &p.Listing.Name, &p.Listing.Description, &p.Listing.Website, &p.Listing.Topics, &p.Listing.Published)
 		if err != nil {
-			http.Error(w, "Listing unavailable. Please reload.", 503)
+			s.publicError(w, r, 503, "Listing unavailable. Please reload.")
 			return
 		}
 		rows, err := s.API.DB.Pool.Query(ctx, `SELECT a.id::text,a.handle,coalesce(d.name,''),coalesce(d.purpose,''),d.agent_id IS NOT NULL,coalesce(verified_agent_domain(a.id),'') FROM agents a LEFT JOIN directory_agents d ON d.agent_id=a.id AND d.org_id=a.org_id WHERE a.org_id=$1 AND a.status='active' ORDER BY a.handle,a.id LIMIT 101`, p.Session.Credential.OrgID)
 		if err != nil {
-			http.Error(w, "Agent choices unavailable. Please reload.", 503)
+			s.publicError(w, r, 503, "Agent choices unavailable. Please reload.")
 			return
 		}
 		for rows.Next() {
@@ -93,11 +93,11 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 		rowErr := rows.Err()
 		rows.Close()
 		if err != nil || rowErr != nil {
-			http.Error(w, "Agent choices unavailable. Please reload.", 503)
+			s.publicError(w, r, 503, "Agent choices unavailable. Please reload.")
 			return
 		}
 		if len(p.Listing.Agents) > 100 {
-			http.Error(w, "This organization exceeds the current directory editor limit of 100 agents.", 409)
+			s.publicError(w, r, 409, "This organization exceeds the current directory editor limit of 100 agents.")
 			return
 		}
 		if r.URL.Query().Get("saved") == "1" {
@@ -107,21 +107,21 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if utf8.RuneCountInString(p.Q) > 200 || utf8.RuneCountInString(p.Topic) > 40 {
-		http.Error(w, "Search is too long.", 400)
+		s.publicError(w, r, 400, "Search is too long.")
 		return
 	}
 	page := 1
 	if raw := r.URL.Query().Get("page"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 1 || n > 10000 {
-			http.Error(w, "Invalid page.", 400)
+			s.publicError(w, r, 400, "Invalid page.")
 			return
 		}
 		page = n
 	}
 	namespace := r.PathValue("namespace")
 	if len(namespace) > 253 {
-		http.NotFound(w, r)
+		s.publicError(w, r, http.StatusNotFound, "This domain listing is unavailable. Choose a destination below to continue.")
 		return
 	}
 	p.Detail = namespace != ""
@@ -130,7 +130,7 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.API.DB.Pool.Query(ctx, `SELECT o.namespace,d.name,d.description,d.website,d.topics FROM directory_listings d JOIN organizations o ON o.id=d.org_id WHERE d.published AND o.status='active' AND EXISTS(SELECT 1 FROM verified_domains vd WHERE vd.org_id=o.id AND vd.verified_until>now()) AND ($1='' OR o.namespace=$1) AND ($2='' OR strpos(lower(d.name||' '||d.description||' '||o.namespace||' '||array_to_string(d.topics,' ')),lower($2))>0) AND ($3='' OR $3=ANY(d.topics)) ORDER BY lower(d.name),o.namespace LIMIT 21 OFFSET $4`, namespace, p.Q, p.Topic, (page-1)*20)
 	if err != nil {
-		http.Error(w, "Directory unavailable. Please reload this page.", 503)
+		s.publicError(w, r, 503, "Directory unavailable. Please reload this page.")
 		return
 	}
 	for rows.Next() {
@@ -143,19 +143,19 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 	rowErr := rows.Err()
 	rows.Close()
 	if err != nil || rowErr != nil {
-		http.Error(w, "Directory unavailable. Please reload this page.", 503)
+		s.publicError(w, r, 503, "Directory unavailable. Please reload this page.")
 		return
 	}
 	if p.Detail {
 		if len(p.Listings) == 0 {
-			http.NotFound(w, r)
+			s.publicError(w, r, http.StatusNotFound, "This domain listing is unavailable. Choose a destination below to continue.")
 			return
 		}
 		p.Listing = p.Listings[0]
 		p.Title = p.Listing.Name
 		rows, err = s.API.DB.Pool.Query(ctx, `SELECT a.id::text,a.handle,d.name,d.purpose,coalesce(verified_agent_domain(a.id),'') FROM directory_agents d JOIN agents a ON a.id=d.agent_id AND a.org_id=d.org_id JOIN organizations o ON o.id=d.org_id JOIN directory_listings l ON l.org_id=o.id WHERE o.namespace=$1 AND a.status='active' AND o.status='active' AND l.published AND verified_agent_domain(a.id) IS NOT NULL ORDER BY d.name,a.id LIMIT 100`, namespace)
 		if err != nil {
-			http.Error(w, "Listing unavailable. Please reload.", 503)
+			s.publicError(w, r, 503, "Listing unavailable. Please reload.")
 			return
 		}
 		for rows.Next() {
@@ -168,12 +168,12 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 		rowErr = rows.Err()
 		rows.Close()
 		if err != nil || rowErr != nil {
-			http.Error(w, "Listing unavailable. Please reload.", 503)
+			s.publicError(w, r, 503, "Listing unavailable. Please reload.")
 			return
 		}
 		rows, err = s.API.DB.Pool.Query(ctx, `SELECT p.id::text,coalesce(p.title,''),p.body,p.kind,a.handle,d.name,p.created_at,p.expires_at FROM posts p JOIN agents a ON a.id=p.author_id JOIN directory_agents d ON d.agent_id=a.id AND d.org_id=a.org_id JOIN organizations o ON o.id=d.org_id JOIN directory_listings l ON l.org_id=o.id WHERE o.namespace=$1 AND l.published AND o.status='active' AND p.web_published AND can_read_web_post(p.id) ORDER BY p.created_at DESC,p.id DESC LIMIT 10`, namespace)
 		if err != nil {
-			http.Error(w, "Discoveries unavailable. Please reload.", 503)
+			s.publicError(w, r, 503, "Discoveries unavailable. Please reload.")
 			return
 		}
 		for rows.Next() {
@@ -186,7 +186,7 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 		rowErr = rows.Err()
 		rows.Close()
 		if err != nil || rowErr != nil {
-			http.Error(w, "Discoveries unavailable. Please reload.", 503)
+			s.publicError(w, r, 503, "Discoveries unavailable. Please reload.")
 			return
 		}
 	} else {
@@ -210,7 +210,7 @@ func (s *Server) SaveDirectory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.directoryManager(r, v) {
-		http.Error(w, "Organization listing permission required.", 403)
+		s.publicError(w, r, 403, "Organization listing permission required.")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -219,7 +219,7 @@ func (s *Server) SaveDirectory(w http.ResponseWriter, r *http.Request) {
 	if action == "withdraw" {
 		_, err := s.API.DB.Pool.Exec(ctx, `WITH changed AS (UPDATE directory_listings SET published=false,updated_at=now() WHERE org_id=$1 RETURNING org_id) INSERT INTO audit_log(actor,action,object_type,object_id) SELECT $2,'directory.withdrawn','organization',org_id::text FROM changed`, v.Credential.OrgID, v.Credential.AgentID)
 		if err != nil {
-			http.Error(w, "Withdrawal unavailable. Try again.", 503)
+			s.publicError(w, r, 503, "Withdrawal unavailable. Try again.")
 			return
 		}
 		redirect(w, r, "/app/directory?saved=1")
@@ -286,7 +286,7 @@ func (s *Server) SaveDirectory(w http.ResponseWriter, r *http.Request) {
 	}
 	tx, err := s.API.DB.Pool.Begin(ctx)
 	if err != nil {
-		http.Error(w, "Listing unavailable. Try again.", 503)
+		s.publicError(w, r, 503, "Listing unavailable. Try again.")
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -294,12 +294,12 @@ func (s *Server) SaveDirectory(w http.ResponseWriter, r *http.Request) {
 	var org string
 	err = tx.QueryRow(ctx, `SELECT id::text FROM organizations WHERE id=$1 AND status='active' FOR UPDATE`, v.Credential.OrgID).Scan(&org)
 	if err != nil {
-		http.Error(w, "Organization unavailable.", 403)
+		s.publicError(w, r, 403, "Organization unavailable.")
 		return
 	}
 	var verified bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM verified_domains WHERE org_id=$1 AND verified_until>now())`, org).Scan(&verified); err != nil || !verified {
-		http.Error(w, "Verify a domain before publishing a directory listing. Visit /app/verification.", 403)
+		s.publicError(w, r, 403, "Verify a domain before publishing a directory listing. Visit /app/verification.")
 		return
 	}
 	for _, a := range selected {
@@ -310,7 +310,7 @@ func (s *Server) SaveDirectory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err != nil {
-			http.Error(w, "Agent check unavailable.", 503)
+			s.publicError(w, r, 503, "Agent check unavailable.")
 			return
 		}
 	}
@@ -328,7 +328,7 @@ func (s *Server) SaveDirectory(w http.ResponseWriter, r *http.Request) {
 		_, err = tx.Exec(ctx, `INSERT INTO audit_log(actor,action,object_type,object_id) VALUES($1,'directory.published','organization',$2)`, v.Credential.AgentID, org)
 	}
 	if err != nil || tx.Commit(ctx) != nil {
-		http.Error(w, "Listing could not be saved. Please try again.", 503)
+		s.publicError(w, r, 503, "Listing could not be saved. Please try again.")
 		return
 	}
 	redirect(w, r, "/app/directory?saved=1")

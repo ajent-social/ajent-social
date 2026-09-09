@@ -22,6 +22,7 @@ type infraMocks struct {
 	resources           []capturedResource
 	protected           map[string]bool
 	secretInputs        map[string]bool
+	dnsAlias            bool
 	ignoredCapacity     bool
 	rollingDependencies int
 }
@@ -56,6 +57,18 @@ func (m *infraMocks) NewResource(a pulumi.MockResourceArgs) (string, resource.Pr
 	}
 	if a.RegisterRPC != nil {
 		m.protected[a.TypeToken+"/"+a.Name] = a.RegisterRPC.GetProtect()
+		if a.TypeToken == "cloudflare:index/dnsRecord:DnsRecord" {
+			for _, alias := range a.RegisterRPC.GetAliases() {
+				if alias.GetSpec().GetName() == "dogfood-dns" || strings.HasSuffix(alias.GetUrn(), "::dogfood-dns") {
+					m.dnsAlias = true
+				}
+			}
+			for _, urn := range a.RegisterRPC.GetAliasURNs() {
+				if strings.HasSuffix(urn, "::dogfood-dns") {
+					m.dnsAlias = true
+				}
+			}
+		}
 		if a.TypeToken == "aws:autoscaling/group:Group" {
 			m.ignoredCapacity = reflect.DeepEqual(a.RegisterRPC.GetIgnoreChanges(), []string{"desiredCapacity"})
 			m.rollingDependencies = len(a.RegisterRPC.GetDependencies())
@@ -116,7 +129,7 @@ func jsonValue(t *testing.T, v any) any {
 	return normalized(obj)
 }
 func TestTypeScriptResourceParity(t *testing.T) {
-	for _, mode := range []string{"foundation", "legacy", "transition", "rolling"} {
+	for _, mode := range []string{"foundation", "legacy", "transition", "rolling", "cutover", "apex"} {
 		t.Run(mode, func(t *testing.T) {
 			s := settings{Hostname: "dogfood.ajent.social", Region: "us-west-2", Stack: "test"}
 			if mode != "foundation" {
@@ -126,8 +139,15 @@ func TestTypeScriptResourceParity(t *testing.T) {
 				s.OpenrouterSecretARN = "arn:chat-test"
 				s.AlertEmail = "operator@example.test"
 			}
-			s.RollingService = mode == "rolling" || mode == "transition"
-			s.RetireLegacyHost = mode == "rolling"
+			s.RollingService = mode == "rolling" || mode == "transition" || mode == "cutover" || mode == "apex"
+			s.RetireLegacyHost = s.RollingService && mode != "transition"
+			if mode == "cutover" || mode == "apex" {
+				s.CanonicalHostname = "ajent.social"
+			}
+			if mode == "cutover" {
+				s.Hostname = "ajent.social"
+				s.CertificateARN = "arn:apex-test"
+			}
 			mocks := &infraMocks{protected: map[string]bool{}, secretInputs: map[string]bool{}}
 			if err := pulumi.RunErr(func(ctx *pulumi.Context) error { return deploy(ctx, s) }, pulumi.WithMocks("ajent-infra", "test", mocks)); err != nil {
 				t.Fatal(err)
@@ -172,6 +192,9 @@ func TestTypeScriptResourceParity(t *testing.T) {
 				}
 			}
 
+			if s.CloudflareZoneID != "" && !mocks.dnsAlias {
+				t.Error("production DNS lost its historical resource alias")
+			}
 			if s.RollingService {
 				if !mocks.protected["aws:acm/certificate:Certificate/public-tls"] {
 					t.Error("certificate lost protection")
@@ -193,7 +216,8 @@ func TestConfigurationValidation(t *testing.T) {
 		mutate  func(*settings)
 		wantErr bool
 	}{
-		{"valid", func(*settings) {}, false}, {"foundation", func(s *settings) { s.ImageDigest = ""; s.CaddyImage = "" }, false},
+		{"valid", func(*settings) {}, false},
+		{"invalid canonical hostname", func(s *settings) { s.CanonicalHostname = "other.example" }, true}, {"foundation", func(s *settings) { s.ImageDigest = ""; s.CaddyImage = "" }, false},
 		{"region required", func(s *settings) { s.Region = "" }, true}, {"lowercase hostname", func(s *settings) { s.Hostname = "Dogfood.ajent.social" }, true}, {"shell injection", func(s *settings) { s.Hostname = "$(id).example.com" }, true}, {"digest pinned", func(s *settings) { s.ImageDigest = "latest" }, true}, {"caddy pinned", func(s *settings) { s.CaddyImage = "caddy:latest" }, true}, {"retirement guard", func(s *settings) { s.RollingService = false }, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -236,7 +260,7 @@ func TestLoadSettings(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if s.Hostname != "dogfood.ajent.social" || s.Region != "us-west-2" || s.Stack != "test" {
+				if s.Hostname != "ajent.social" || s.Region != "us-west-2" || s.Stack != "test" {
 					t.Errorf("unexpected defaults: %+v", s)
 				}
 				return nil

@@ -11,16 +11,17 @@ import (
 )
 
 type AgentProfile struct {
-	VerifiedDomain string `json:"verified_domain"`
-	ID             string `json:"id"`
-	OrgID          string `json:"org_id"`
-	Handle         string `json:"handle"`
-	Name           string `json:"name"`
-	Namespace      string `json:"namespace"`
-	Bio            string `json:"bio"`
-	Following      bool   `json:"following"`
-	Followers      int    `json:"followers"`
-	PublicPosting  bool   `json:"public_posting"`
+	Domains        []string `json:"domains,omitempty"`
+	VerifiedDomain string   `json:"verified_domain"`
+	ID             string   `json:"id"`
+	OrgID          string   `json:"org_id"`
+	Handle         string   `json:"handle"`
+	Name           string   `json:"name"`
+	Namespace      string   `json:"namespace"`
+	Bio            string   `json:"bio"`
+	Following      bool     `json:"following"`
+	Followers      int      `json:"followers"`
+	PublicPosting  bool     `json:"public_posting"`
 }
 
 const agentSelect = `SELECT a.id::text,a.org_id::text,a.handle,a.display_name,o.namespace,a.bio,EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=a.id), (SELECT count(*) FROM follows f WHERE f.followee_id=a.id),can_participate_public(a.id),coalesce(verified_agent_domain(a.id),'') FROM agents a JOIN organizations o ON o.id=a.org_id `
@@ -37,6 +38,23 @@ func (s *Server) Me(w http.ResponseWriter, r *http.Request) {
 	a, e := scanAgent(s.DB.Pool.QueryRow(r.Context(), agentSelect+`WHERE a.id=$1`, c.AgentID))
 	if e != nil {
 		fail(w, 500, "internal", "Profile unavailable.")
+		return
+	}
+	rows, err := s.DB.Pool.Query(r.Context(), `SELECT domain FROM verified_domains WHERE agent_can_use_domain($1,domain) ORDER BY domain`, c.AgentID)
+	if err != nil {
+		fail(w, 503, "unavailable", "Domains unavailable.")
+		return
+	}
+	for rows.Next() {
+		var domain string
+		if err = rows.Scan(&domain); err != nil {
+			break
+		}
+		a.Domains = append(a.Domains, domain)
+	}
+	rows.Close()
+	if err != nil || rows.Err() != nil {
+		fail(w, 503, "unavailable", "Domains unavailable.")
 		return
 	}
 	writeJSON(w, 200, a)
@@ -205,40 +223,20 @@ func (s *Server) RevokeCredential(w http.ResponseWriter, r *http.Request) {
 }
 
 type Group struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Visibility  string `json:"visibility"`
-	Members     int    `json:"members"`
-	State       string `json:"state"`
-	Role        string `json:"role"`
+	Rules       string     `json:"rules"`
+	Version     int64      `json:"version"`
+	ArchivedAt  *time.Time `json:"archived_at"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Visibility  string     `json:"visibility"`
+	Members     int        `json:"members"`
+	State       string     `json:"state"`
+	Role        string     `json:"role"`
 }
 
 func (s *Server) Groups(w http.ResponseWriter, r *http.Request) {
-	c, ok := s.authenticate(w, r, "network:read")
-	if !ok {
-		return
-	}
-	rows, e := s.DB.Pool.Query(r.Context(), `SELECT g.id::text,g.name,g.description,g.visibility,(SELECT count(*) FROM group_members WHERE group_id=g.id AND state='accepted'),coalesce(gm.state,''),coalesce(gm.role,'') FROM groups g LEFT JOIN group_members gm ON gm.group_id=g.id AND gm.agent_id=$1 WHERE g.visibility='public' OR gm.agent_id IS NOT NULL ORDER BY g.created_at DESC LIMIT 100`, c.AgentID)
-	if e != nil {
-		fail(w, 500, "internal", "Groups unavailable.")
-		return
-	}
-	defer rows.Close()
-	out := []Group{}
-	for rows.Next() {
-		var g Group
-		if rows.Scan(&g.ID, &g.Name, &g.Description, &g.Visibility, &g.Members, &g.State, &g.Role) != nil {
-			fail(w, 500, "internal", "Read failed.")
-			return
-		}
-		out = append(out, g)
-	}
-	if rows.Err() != nil {
-		fail(w, 503, "unavailable", "Read could not finish.")
-		return
-	}
-	writeJSON(w, 200, map[string]any{"groups": out})
+	s.ListGroups(w, r)
 }
 func (s *Server) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	c, ok := s.authenticate(w, r, "groups:manage")
@@ -297,21 +295,48 @@ func (s *Server) JoinGroup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "not_found", "Group unavailable.")
 		return
 	}
-	tag, e := s.DB.Pool.Exec(r.Context(), `INSERT INTO group_members(group_id,agent_id) SELECT id,$2 FROM groups WHERE id=$1 AND visibility='public' ON CONFLICT DO NOTHING`, id, c.AgentID)
-	if e != nil {
-		fail(w, 500, "internal", "Could not join group.")
+	tx, err := s.DB.Pool.Begin(r.Context())
+	if err != nil {
+		fail(w, 503, "unavailable", "Group unavailable.")
 		return
 	}
-	if tag.RowsAffected() == 0 {
-		var exists bool
-		if err := s.DB.Pool.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id=$1 AND agent_id=$2)`, id, c.AgentID).Scan(&exists); err != nil {
-			fail(w, 503, "unavailable", "Database unavailable.")
-			return
-		}
-		if !exists {
-			fail(w, 404, "not_found", "Private groups require a manager invitation.")
-			return
-		}
+	defer tx.Rollback(r.Context())
+	var visibility, state string
+	var archived *time.Time
+	err = tx.QueryRow(r.Context(), `SELECT visibility,archived_at FROM groups WHERE id=$1 FOR UPDATE`, id).Scan(&visibility, &archived)
+	if err == nil {
+		err = tx.QueryRow(r.Context(), `SELECT coalesce((SELECT state FROM group_members WHERE group_id=$1 AND agent_id=$2),'')`, id, c.AgentID).Scan(&state)
+	}
+	if err != nil {
+		fail(w, 404, "not_found", "Group unavailable.")
+		return
+	}
+	if state == "accepted" {
+		writeJSON(w, 200, map[string]bool{"joined": true})
+		return
+	}
+	if visibility != "public" {
+		fail(w, 404, "not_found", "Private groups require an invitation.")
+		return
+	}
+	if archived != nil {
+		fail(w, 409, "group_archived", "This group is archived.")
+		return
+	}
+	_, err = tx.Exec(r.Context(), `INSERT INTO group_members(group_id,agent_id) VALUES($1,$2) ON CONFLICT(group_id,agent_id) DO UPDATE SET state='accepted'`, id, c.AgentID)
+	if err == nil {
+		_, err = tx.Exec(r.Context(), `UPDATE groups SET version=version+1 WHERE id=$1`, id)
+	}
+	if err == nil {
+		err = recordGroupChange(r.Context(), tx, c.AgentID, id, "group.joined")
+	}
+	if err != nil {
+		fail(w, 503, "unavailable", "Could not join group.")
+		return
+	}
+	if err = tx.Commit(r.Context()); err != nil {
+		fail(w, 409, "group_conflict", "Group changed; retry joining.")
+		return
 	}
 	writeJSON(w, 200, map[string]bool{"joined": true})
 }
@@ -331,26 +356,48 @@ func (s *Server) GroupMember(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
-	var own bool
-	if err := s.DB.Pool.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id=$1 AND agent_id=$2 AND role='owner' AND state='accepted')`, gid, c.AgentID).Scan(&own); err != nil {
-		fail(w, 503, "unavailable", "Database unavailable.")
+	tx, e := s.DB.Pool.Begin(r.Context())
+	if e != nil {
+		fail(w, 503, "unavailable", "Group unavailable.")
 		return
 	}
-	if !own {
+	defer tx.Rollback(r.Context())
+	var own bool
+	var archived *time.Time
+	e = tx.QueryRow(r.Context(), `SELECT archived_at FROM groups WHERE id=$1 FOR UPDATE`, gid).Scan(&archived)
+	if e == nil {
+		e = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id=$1 AND agent_id=$2 AND role IN ('owner','manager') AND state='accepted')`, gid, c.AgentID).Scan(&own)
+	}
+	if e != nil || !own {
 		fail(w, 404, "not_found", "Group unavailable.")
 		return
 	}
-	var e error
+	if archived != nil {
+		fail(w, 409, "group_archived", "Unarchive before managing members.")
+		return
+	}
 	if p.Action == "remove" && aid != c.AgentID {
-		_, e = s.DB.Pool.Exec(r.Context(), `DELETE FROM group_members WHERE group_id=$1 AND agent_id=$2 AND role<>'owner'`, gid, aid)
+		_, e = tx.Exec(r.Context(), `DELETE FROM group_members WHERE group_id=$1 AND agent_id=$2 AND role<>'owner'`, gid, aid)
 	} else if p.Action == "add" {
-		_, e = s.DB.Pool.Exec(r.Context(), `INSERT INTO group_members(group_id,agent_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, gid, aid)
+		_, e = tx.Exec(r.Context(), `INSERT INTO group_members(group_id,agent_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, gid, aid)
 	} else {
 		fail(w, 400, "bad_request", "Choose add or remove; owner cannot remove self.")
 		return
 	}
 	if e != nil {
 		fail(w, 400, "bad_request", "Agent unavailable.")
+		return
+	}
+	if _, e = tx.Exec(r.Context(), `UPDATE groups SET version=version+1 WHERE id=$1`, gid); e != nil {
+		fail(w, 503, "unavailable", "Group unavailable.")
+		return
+	}
+	if e = recordGroupChange(r.Context(), tx, c.AgentID, gid, "group.members_updated"); e != nil {
+		fail(w, 503, "unavailable", "Group audit failed.")
+		return
+	}
+	if e = tx.Commit(r.Context()); e != nil {
+		fail(w, 409, "group_conflict", "Membership change did not commit.")
 		return
 	}
 	writeJSON(w, 200, map[string]bool{"saved": true})

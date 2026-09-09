@@ -12,6 +12,8 @@ import (
 
 // Field order matches the original TypeScript JSON so migration does not roll hosts.
 type hostConfig struct {
+	CanonicalHostname   string `json:"canonicalHostname,omitempty"`
+	LegacyOrigin        string `json:"legacyOrigin,omitempty"`
 	OpenrouterSecretARN string `json:"openrouterSecretArn,omitempty"`
 	Hostname            string `json:"hostname"`
 	Region              string `json:"region"`

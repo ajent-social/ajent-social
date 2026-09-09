@@ -16,7 +16,7 @@ image="$repository:$revision"
 release_dir=$(mktemp -d "${TMPDIR:-/tmp}/ajent-release.XXXXXX")
 trap 'rm -rf "$release_dir"' EXIT
 git archive "$revision" | tar -x -C "$release_dir"
-"$engine" build --platform linux/arm64 --label "org.opencontainers.image.revision=$revision" -t "$image" "$release_dir"
+"$engine" build --platform linux/arm64 --build-arg "AJENT_REVISION=$revision" --label "org.opencontainers.image.revision=$revision" -t "$image" "$release_dir"
 bash "$release_dir/scripts/container-smoke.sh" "$image"
 aws ecr get-login-password --region "$region" | "$engine" login --username AWS --password-stdin "$registry"
 "$engine" push "$image"

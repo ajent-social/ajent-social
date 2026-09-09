@@ -11,12 +11,16 @@ import (
 )
 
 func TestBootstrapParityAndSyntax(t *testing.T) {
-	for _, mode := range []string{"legacy", "rolling"} {
+	for _, mode := range []string{"legacy", "rolling", "cutover"} {
 		t.Run(mode, func(t *testing.T) {
 			c := hostConfig{Hostname: "dogfood.ajent.social", Region: "us-west-2", DBHost: "db.example", DBARN: "arn:db", OwnerARN: "arn:owner", Image: "registry/app@sha256:" + strings.Repeat("a", 64), CaddyImage: "caddy@sha256:" + strings.Repeat("b", 64), LogGroup: "logs", Stack: "dogfood"}
-			if mode == "rolling" {
+			if mode != "legacy" {
 				c.BehindLoadBalancer = true
 				c.OpenrouterSecretARN = "arn:chat-test"
+			}
+			if mode == "cutover" {
+				c.CanonicalHostname = "ajent.social"
+				c.LegacyOrigin = "https://dogfood.ajent.social"
 			}
 			script, err := bootstrap(c)
 			if err != nil {

@@ -4,8 +4,8 @@ permissions:
   contents: read
 jobs:
   infrastructure:
-    timeout-minutes: 30
-    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    runs-on: [self-hosted, linux, x64]
     env:
       GOMAXPROCS: '2'
       GOFLAGS: '-p=1'
@@ -32,17 +32,89 @@ jobs:
       - run: python3 -m unittest discover -s infra/tests -p '*_test.py'
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
         working-directory: infra
+      - run: node --test public-site/worker.test.mjs
+      - run: python3 -m unittest discover -s internal/web/onboarding -p '*_test.py'
       - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh
       - uses: actions/cache/save@v4
         if: always()
         with:
           path: ~/.cache/go-build
           key: ${{ steps.infra-cache.outputs.cache-primary-key }}
-  container:
-    runs-on: ubuntu-24.04-arm
+  ui:
+    runs-on: [self-hosted, linux, x64]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ajent_browser
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ajent_browser"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
-      - run: docker build --platform linux/arm64 --label "org.opencontainers.image.revision=$GITHUB_SHA" -t ajent:ci .
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Browser journeys against independent real server sessions
+        run: |
+          mkdir -p artifacts
+          go build -o artifacts/ajentd ./cmd/ajentd
+          # Each suite represents a separate session. Do not let fast, uncached
+          # asset loads from earlier suites consume the next suite's IP budget.
+          for suite in account feed help storage pointer conversion group question; do
+            mkdir -p "artifacts/$suite-journeys"
+            artifacts/ajentd -addr 127.0.0.1:55440 > "artifacts/$suite-journeys/server.log" 2>&1 &
+            server_pid=$!
+            trap 'kill "$server_pid"; wait "$server_pid" || true' EXIT
+            for attempt in {1..100}; do
+              if curl -fsS "$AJENT_BROWSER_ORIGIN/healthz" > /dev/null; then break; fi
+              sleep 0.2
+            done
+            curl -fsS "$AJENT_BROWSER_ORIGIN/healthz"
+            node "scripts/ui-$suite-journeys.mjs"
+            kill "$server_pid"
+            wait "$server_pid" || true
+            trap - EXIT
+          done
+        env:
+          AJENT_DSN: postgres://postgres:test@localhost:5432/ajent_browser?sslmode=disable
+          AJENT_SETUP_TOKEN: synthetic-browser-test-setup-token-only
+          AJENT_ORIGIN: http://localhost:55440
+          AJENT_BROWSER_ORIGIN: http://localhost:55440
+      - run: go test ./internal/web -run '^TestVisualFixtures$' -count=1 -v
+        env:
+          AJENT_VISUAL_OUTPUT: ${{ github.workspace }}/artifacts/ui
+      - run: node scripts/ui-contrast.mjs
+        env:
+          AJENT_UI_BROWSERS: chromium,webkit,firefox
+          AJENT_VISUAL_OUTPUT: ${{ github.workspace }}/artifacts/ui
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-contrast
+          path: |
+            artifacts/ui
+            artifacts/account-journeys
+            artifacts/feed-journeys
+            artifacts/help-journeys
+            artifacts/storage-journeys
+            artifacts/pointer-journeys
+            artifacts/conversion-journeys
+            artifacts/group-journeys
+            artifacts/question-journeys
+  container:
+    runs-on: [self-hosted, linux, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --platform linux/arm64 --build-arg "AJENT_REVISION=$GITHUB_SHA" --label "org.opencontainers.image.revision=$GITHUB_SHA" -t ajent:ci .
       - run: scripts/container-smoke.sh ajent:ci
       - run: docker save ajent:ci | gzip > ajent-arm64.tar.gz
       - uses: actions/upload-artifact@v4
@@ -51,7 +123,7 @@ jobs:
           path: ajent-arm64.tar.gz
           retention-days: 1
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     services:
       postgres:
         image: postgres:16-alpine
@@ -70,6 +142,8 @@ jobs:
           cache: true
       - run: go build ./...
       - run: go vet ./...
+      - run: python3 -m unittest discover -s scripts -p '*_test.py'
+      - run: python3 -m unittest discover -s internal/web/onboarding -p '*test.py'
       - run: scripts/test.sh
         env:
           AJENT_TEST_DSN: postgres://postgres:test@localhost:5432/ajent_test?sslmode=disable

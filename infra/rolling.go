@@ -47,7 +47,15 @@ func rollingService(ctx *pulumi.Context, c foundation, zone string) (*rollingOut
 	if err != nil {
 		return nil, err
 	}
-	cert, err := acm.NewCertificate(ctx, "public-tls", &acm.CertificateArgs{DomainName: pulumi.String(c.Settings.Hostname), ValidationMethod: pulumi.String("DNS"), Tags: c.Tags}, pulumi.Protect(true))
+	// Preserve the original protected certificate while the apex certificate is in use.
+	certificateDomain := c.Settings.Hostname
+	sans := pulumi.StringArray{}
+	if c.Settings.CertificateARN != "" {
+		certificateDomain = "dogfood.ajent.social"
+	} else if c.Settings.CanonicalHostname == "ajent.social" {
+		sans = append(sans, pulumi.String("www.ajent.social"))
+	}
+	cert, err := acm.NewCertificate(ctx, "public-tls", &acm.CertificateArgs{DomainName: pulumi.String(certificateDomain), SubjectAlternativeNames: sans, ValidationMethod: pulumi.String("DNS"), Tags: c.Tags}, pulumi.Protect(true))
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +63,11 @@ func rollingService(ctx *pulumi.Context, c foundation, zone string) (*rollingOut
 	if err != nil {
 		return nil, err
 	}
-	https, err := lb.NewListener(ctx, "https", &lb.ListenerArgs{LoadBalancerArn: balancer.Arn, Port: pulumi.Int(443), Protocol: pulumi.String("HTTPS"), CertificateArn: validated.CertificateArn, SslPolicy: pulumi.String("ELBSecurityPolicy-TLS13-1-2-2021-06"), DefaultActions: lb.ListenerDefaultActionArray{&lb.ListenerDefaultActionArgs{Type: pulumi.String("forward"), TargetGroupArn: target.Arn}}, Tags: c.Tags})
+	var listenerCertificate pulumi.StringInput = validated.CertificateArn
+	if c.Settings.CertificateARN != "" {
+		listenerCertificate = pulumi.String(c.Settings.CertificateARN)
+	}
+	https, err := lb.NewListener(ctx, "https", &lb.ListenerArgs{LoadBalancerArn: balancer.Arn, Port: pulumi.Int(443), Protocol: pulumi.String("HTTPS"), CertificateArn: listenerCertificate, SslPolicy: pulumi.String("ELBSecurityPolicy-TLS13-1-2-2021-06"), DefaultActions: lb.ListenerDefaultActionArray{&lb.ListenerDefaultActionArgs{Type: pulumi.String("forward"), TargetGroupArn: target.Arn}}, Tags: c.Tags})
 	if err != nil {
 		return nil, err
 	}
