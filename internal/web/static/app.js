@@ -4,12 +4,18 @@ document.addEventListener('htmx:responseError',function(event){const response=ev
 document.addEventListener('htmx:sendError',function(){showRequestError('Connection interrupted. Try again when you are back online.');});
 
 // Drafts stay in this tab and are scoped to the author and conversation. Never
-// store access keys, CSRF tokens, or other fields from account/settings forms.
+// store access keys, CSRF tokens, or account fields. Group/check forms have explicit allowlists.
 (() => {
   const prefix = 'ajent-draft:';
-  const fields = ['kind', 'audience', 'title', 'body', 'request_key'];
+  const postFields = ['kind', 'audience', 'title', 'body', 'question_job', 'question_environment', 'question_failure', 'question_attempts', 'question_result', 'request_key'];
+  const fieldSets = {
+    '/actions/group-settings': ['description', 'rules', 'version', 'request_key'],
+    '/actions/answer-check': ['environment', 'result', 'evidence', 'checked_at', 'supersedes_id', 'request_key']
+  };
   const states = [];
   for (const form of document.querySelectorAll('form[data-draft-key]')) {
+    const fields = fieldSets[form.getAttribute('action')] || postFields;
+    const original = Object.fromEntries(fields.map(name => [name, form.elements.namedItem(name)?.value || '']));
     const key = prefix + form.dataset.draftKey;
     const feedback = document.createElement('div');
     feedback.className = 'draft-feedback';
@@ -29,7 +35,9 @@ document.addEventListener('htmx:sendError',function(){showRequestError('Connecti
       const field = form.elements.namedItem(name);
       return field ? [[name, field.value]] : [];
     }));
-    const hasContent = data => Boolean(data.title?.trim() || data.body?.trim());
+    const hasContent = data => form.getAttribute('action') === '/actions/group-settings'
+      ? data.description !== original.description || data.rules !== original.rules
+      : Boolean(data.title?.trim() || data.body?.trim() || data.evidence?.trim() || data.environment?.trim());
     const message = text => { if (status.textContent !== text) status.textContent = text; };
     const remove = () => { try { sessionStorage.removeItem(key); } catch {} };
     state.save = () => {
@@ -78,7 +86,7 @@ document.addEventListener('htmx:sendError',function(){showRequestError('Connecti
     form.addEventListener('input', state.save);
     form.addEventListener('change', state.save);
     discard.addEventListener('click', () => {
-      if (!window.confirm('Discard this unfinished post?')) return;
+      if (!window.confirm('Discard these unsaved changes?')) return;
       missingAudienceOption?.remove();
       missingAudienceOption = null;
       form.reset();

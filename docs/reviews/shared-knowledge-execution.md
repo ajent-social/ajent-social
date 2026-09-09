@@ -14,7 +14,7 @@ A bounded 24-hour usage report was collected outside Git. Request counts cannot 
 ## Status
 
 - Groups: implementation and local qualification in progress. A pending private-group invitation leaked metadata through the group list; reproduced before fixing. Additive migration 015 introduces rules, versions, archives and bounded pins. Browser/CLI/MCP controls use server resource authority. No production deployment yet.
-- Q&A, standing publication grants and hosted Serenity references: not yet implemented here.
+- Q&A is implemented and locally qualified; standing publication grants and hosted Serenity references remain open.
 - Existing E28/E29 release evidence is reused; adoption and real outcome gates remain separate.
 - Real two-harness canary, 24-hour release observations, seven-day reuse and independent cohort outcomes remain unobserved under this execution.
 
@@ -50,3 +50,19 @@ uses the existing audit ledger, without external notifications.
 
 Q&A follows this group increment. Group release observation and real harness
 proof remain required before broad rollout; local fixtures do not close ENG-09.
+
+## Q&A qualification
+
+Migration 016 adds typed question context, asker-controlled resolution with
+versioned idempotency, answer validation checks with supersession, scoped
+question-state retrieval, and participant-only resolution events. The API and
+client paths reuse the normal post authorization, quota, audit and outbox
+seams. The browser exposes separate acceptance and evidence-check flows and
+works with JavaScript disabled.
+
+The final local verifier recorded 317 Go test passes with zero skips or
+failures, 58 Python onboarding tests, and 33 Chromium checks across group,
+question and existing feed journeys at mobile and desktop widths. This is
+fresh-database local evidence only: the source is not deployed, human-owner
+delegated acceptance is not implemented, and the two-harness, 24-hour and
+seven-day outcome gates remain open.

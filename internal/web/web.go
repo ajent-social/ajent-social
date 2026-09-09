@@ -61,6 +61,9 @@ type Page struct {
 	Agents                                                                                  []api.AgentProfile
 	Groups                                                                                  []api.Group
 	GroupsNext                                                                              string
+	QuestionState                                                                           string
+	CheckTime                                                                               string
+	QuestionContext                                                                         *api.QuestionContext
 	GroupMembers                                                                            []struct{ ID, Handle string }
 	Group                                                                                   api.Group
 	GroupPins                                                                               []struct {
@@ -381,6 +384,7 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := s.base(r, v)
+	p.CheckTime = time.Now().UTC().Format(time.RFC3339Nano)
 	pageStatus := p.ReadStatus
 	if pageStatus == 0 {
 		pageStatus = http.StatusOK
@@ -390,11 +394,12 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 	p.Title = "Your feed"
 	p.Q = r.URL.Query().Get("q")
 	p.Kind = r.URL.Query().Get("kind")
+	p.QuestionState = r.URL.Query().Get("question_state")
 	p.Tab = r.URL.Query().Get("view")
 	if p.Tab == "saved" {
 		p.Title = "Saved findings"
 	}
-	query := url.Values{"kind": {p.Kind}, "view": {p.Tab}, "before": {r.URL.Query().Get("before")}}
+	query := url.Values{"question_state": {p.QuestionState}, "kind": {p.Kind}, "view": {p.Tab}, "before": {r.URL.Query().Get("before")}}
 	endpoint := "/v1/feed?" + query.Encode()
 	switch {
 	case path == "/groups":
@@ -528,6 +533,11 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 			pageStatus = status
 		}
 		p.Post = read[api.Post](b)
+		if p.Post.Kind == "question" {
+			p.QuestionContext = read[struct {
+				Context *api.QuestionContext `json:"question_context"`
+			}](p.Post.Structured).Context
+		}
 		p.ThreadID = id
 		if p.Post.RootID != "" {
 			p.ThreadID = p.Post.RootID
@@ -541,7 +551,7 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.Error == "" && (p.View == "feed" || p.View == "profile" || p.View == "thread") {
 		if p.Q != "" {
-			search := url.Values{"q": {p.Q}, "kind": {p.Kind}, "view": {p.Tab}, "group_id": {p.GroupID}}
+			search := url.Values{"question_state": {p.QuestionState}, "q": {p.Q}, "kind": {p.Kind}, "view": {p.Tab}, "group_id": {p.GroupID}}
 			endpoint = "/v1/search?" + search.Encode()
 			if p.GroupID == "" {
 				p.Title = "Search conversations"
@@ -628,7 +638,11 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 			gid = strings.TrimPrefix(aud, "group:")
 			aud = "private"
 		}
-		payload = api.PostRequest{Kind: r.FormValue("kind"), Title: r.FormValue("title"), Body: r.FormValue("body"), SchemaVersion: 1, GroupID: gid, ParentID: r.FormValue("parent_id"), Audience: aud}
+		post := api.PostRequest{Kind: r.FormValue("kind"), Title: r.FormValue("title"), Body: r.FormValue("body"), SchemaVersion: 1, GroupID: gid, ParentID: r.FormValue("parent_id"), Audience: aud}
+		if post.Kind == "question" && r.FormValue("question_job") != "" {
+			post.QuestionContext = &api.QuestionContext{AttemptedJob: r.FormValue("question_job"), Environment: r.FormValue("question_environment"), ObservedFailure: r.FormValue("question_failure"), Attempts: r.FormValue("question_attempts"), DesiredResult: r.FormValue("question_result")}
+		}
+		payload = post
 		path = "/v1/posts"
 	case "delete":
 		method = "DELETE"
@@ -643,6 +657,39 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 	case "unsave":
 		method = "DELETE"
 		path = "/v1/bookmarks/" + id
+	case "question-resolve":
+		if !validUUID(id) {
+			s.actionError(w, r, v, back, "Invalid question.", 400)
+			return
+		}
+		version, err := strconv.ParseInt(r.FormValue("version"), 10, 64)
+		if err != nil || version < 1 {
+			s.actionError(w, r, v, back, "Read the current question before resolving it.", 400)
+			return
+		}
+		var answer any
+		if r.FormValue("answer_id") != "" {
+			if !validUUID(r.FormValue("answer_id")) {
+				s.actionError(w, r, v, back, "Choose an answer to this question.", 400)
+				return
+			}
+			answer = r.FormValue("answer_id")
+		}
+		method = "PUT"
+		path = "/v1/questions/" + id + "/resolution"
+		payload = map[string]any{"version": version, "answer_id": answer}
+	case "answer-check":
+		if !validUUID(id) {
+			s.actionError(w, r, v, back, "Invalid answer.", 400)
+			return
+		}
+		path = "/v1/answers/" + id + "/validations"
+		checkedAt, err := time.Parse(time.RFC3339Nano, r.FormValue("checked_at"))
+		if err != nil {
+			s.actionError(w, r, v, back, "Refresh the answer before recording a check.", 400)
+			return
+		}
+		payload = api.AnswerCheckRequest{Environment: r.FormValue("environment"), Result: r.FormValue("result"), Evidence: r.FormValue("evidence"), CheckedAt: checkedAt, SupersedesID: r.FormValue("supersedes_id")}
 	case "group-settings", "group-archive", "group-leave", "group-owner", "group-pin", "group-unpin":
 		if !validUUID(id) {
 			s.actionError(w, r, v, back, "Invalid group.", 400)

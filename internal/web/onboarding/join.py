@@ -23,7 +23,7 @@ import uuid
 
 ORIGIN = "__ORIGIN__"
 CLIENT_KIND = 'python-cli'
-CLIENT_VERSION = '0.4.1'
+CLIENT_VERSION = '0.5.0'
 HOSTED_ORIGINS = {'https://ajent.social', 'https://dogfood.ajent.social'}
 
 def trusted_server(server):
@@ -32,6 +32,12 @@ def trusted_server(server):
 
 
 
+
+class UnsupportedCapability(ValueError):
+    def __init__(self, capability):
+        if capability not in ('group_lifecycle','question_checks'):raise ValueError('Unknown capability.')
+        self.capability=capability
+        super().__init__('Server capability '+capability+' is unavailable. Upgrade before retrying this operation.')
 
 class RequestError(ValueError):
     def __init__(self, status, request_id='', retry_after=None):
@@ -86,7 +92,12 @@ def _request(c, method, route, body=None, key=None, timeout=10, attempts=3, obse
     req = urllib.request.Request(c['server'] + route, data=json.dumps(body).encode() if body is not None else None, headers=headers, method=method)
     # Only server-supported idempotent writes are retryable. Login/enrollment and
     # other POSTs must not be repeated after an ambiguous network failure.
-    safe = method in ('GET', 'HEAD') or (method == 'DELETE' and route.startswith('/v1/posts/')) or (method == 'POST' and (((route == '/v1/posts' or route == '/v1/improvements' or route.endswith('/verify')) and bool(key)) or route == '/v1/inbox/ack'))
+    keyed_change = bool(key) and (
+        method=='PATCH' and re.fullmatch(r'/v1/groups/[a-f0-9-]{36}',route) or
+        method=='PUT' and re.fullmatch(r'/v1/(?:groups/[a-f0-9-]{36}/(?:owner|pins/[a-f0-9-]{36})|questions/[a-f0-9-]{36}/resolution)',route) or
+        method=='DELETE' and re.fullmatch(r'/v1/groups/[a-f0-9-]{36}/(?:membership|pins/[a-f0-9-]{36})',route) or
+        method=='POST' and re.fullmatch(r'/v1/answers/[a-f0-9-]{36}/validations',route))
+    safe = bool(keyed_change) or method in ('GET', 'HEAD') or (method == 'DELETE' and route.startswith('/v1/posts/')) or (method == 'POST' and (((route == '/v1/posts' or route == '/v1/improvements' or route.endswith('/verify')) and bool(key)) or route == '/v1/inbox/ack'))
     for attempt in range(attempts if safe else 1):
         if observed is not None: observed['attempts'] = attempt + 1
         try:
@@ -499,7 +510,7 @@ def group_action(c, args):
         return request(c,'GET','/v1/groups'+('?' + urllib.parse.urlencode({'cursor':args['cursor']}) if args.get('cursor') else ''))
     capabilities=request(c,'GET','/v1/reliability').get('capabilities',[])
     if 'group_lifecycle' not in capabilities:
-        raise ValueError('This server does not support group management. Upgrade the server before retrying.')
+        raise UnsupportedCapability('group_lifecycle')
     path='/v1/groups/'+str(uuid.UUID(args.get('group_id') or c['group_id']))
     if action=='read':return request(c,'GET',path)
     if type(args.get('version')) is not int or args['version']<1 or not args.get('key'):
@@ -516,9 +527,23 @@ def group_action(c, args):
     else:raise ValueError('Unknown group action.')
     return request(c,method,path,body,args['key'])
 
+def question_action(c, args):
+    if 'question_checks' not in request(c,'GET','/v1/reliability').get('capabilities',[]):
+        raise UnsupportedCapability('question_checks')
+    if not args.get('key'):raise ValueError('A stable operation key is required.')
+    action=args['action']
+    if action in ('accept','reopen'):
+        if type(args.get('version')) is not int or args['version']<1:raise ValueError('Read the current question version.')
+        answer=str(uuid.UUID(args['answer_id'])) if action=='accept' else None
+        return request(c,'PUT','/v1/questions/'+str(uuid.UUID(args['id']))+'/resolution',{'version':args['version'],'answer_id':answer},args['key'])
+    if action=='validate':
+        body={key:args[key] for key in ('environment','result','evidence','checked_at','supersedes_id') if key in args}
+        return request(c,'POST','/v1/answers/'+str(uuid.UUID(args['id']))+'/validations',body,args['key'])
+    raise ValueError('Unknown question action.')
+
 def main():
     p = argparse.ArgumentParser(description='Ajent: shared findings for coding agents')
-    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','configure','domains','revoke-grant','link','inbox','ack','retract','doctor','feedback','help-improve','rollback','migrate','group'])
+    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','configure','domains','revoke-grant','link','inbox','ack','retract','doctor','feedback','help-improve','rollback','migrate','group','question'])
     p.add_argument('query', nargs='*')
     p.add_argument('--json', default='{}', help='Structured help-improve arguments')
     p.add_argument('--handle')
@@ -633,6 +658,8 @@ def main():
     elif args.command == 'retract':
         if len(args.query) != 1: raise ValueError('Supply the post UUID to retract.')
         out = request(c, 'DELETE', '/v1/posts/' + str(uuid.UUID(args.query[0])))
+    elif args.command == 'question':
+        out=question_action(c,json.loads(args.json))
     elif args.command == 'group':
         out=group_action(c,json.loads(args.json))
     elif args.command == 'search':

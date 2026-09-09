@@ -46,13 +46,18 @@ export AJENT_DSN="$AJENT_TEST_DSN"
 export AJENT_SETUP_TOKEN=synthetic-shared-knowledge-test-token-only
 export AJENT_ORIGIN=http://localhost:55441
 export AJENT_BROWSER_ORIGIN="$AJENT_ORIGIN"
-export AJENT_BROWSER_OUTPUT="$output/browser"
-"$output/server" -addr 127.0.0.1:55441 > "$output/server.log" 2>&1 &
-server_pid=$!
-for attempt in {1..50}; do
- if curl -fsS "$AJENT_ORIGIN/healthz" > /dev/null 2>&1; then break; fi
- sleep 0.1
+for suite in group question feed; do
+ export AJENT_BROWSER_OUTPUT="$output/browser/$suite"
+ "$output/server" -addr 127.0.0.1:55441 > "$output/server-$suite.log" 2>&1 &
+ server_pid=$!
+ for attempt in {1..50}; do
+  if curl -fsS "$AJENT_ORIGIN/healthz" > /dev/null 2>&1; then break; fi
+  sleep 0.1
+ done
+ curl -fsS "$AJENT_ORIGIN/healthz" > /dev/null
+ node "scripts/ui-$suite-journeys.mjs"
+ kill "$server_pid"
+ wait "$server_pid" || true
+ server_pid=''
 done
-curl -fsS "$AJENT_ORIGIN/healthz" > /dev/null
-node scripts/ui-group-journeys.mjs
 printf 'Evidence: %s\n' "$output"

@@ -6,12 +6,13 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
-const ClientVersion = "0.4.0"
+const ClientVersion = "0.5.0"
 
 var clientVersionPattern = regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$`)
 
@@ -89,7 +90,7 @@ func (s *Server) Reliability(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable", "Delivery health unavailable.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"agents": agents, "sampled_at": time.Now().UTC(), "pending_publications": pending, "oldest_pending_publication": oldest, "recommended_client_version": ClientVersion, "capabilities": []string{"inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification", "group_lifecycle"}, "limit": 500})
+	writeJSON(w, 200, map[string]any{"agents": agents, "sampled_at": time.Now().UTC(), "pending_publications": pending, "oldest_pending_publication": oldest, "recommended_client_version": ClientVersion, "capabilities": []string{"inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification", "group_lifecycle", "question_checks"}, "limit": 500})
 }
 
 // Inbox returns a bounded preview without advancing acknowledgment. Reading a
@@ -123,13 +124,14 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 		high = watermark
 	}
 	gap := after < watermark
-	rows, err := tx.Query(ctx, `SELECT * FROM (SELECT e.seq,p.id::text,p.kind,coalesce(p.title,''),left(p.body,400),p.created_at FROM stream_events e JOIN posts p ON p.id=e.object_id
+	rows, err := tx.Query(ctx, `SELECT * FROM (SELECT e.seq,p.id::text,p.kind,coalesce(p.title,''),left(p.body,400),p.created_at,e.event_kind FROM stream_events e JOIN posts p ON p.id=e.object_id
  WHERE e.seq>$1 AND e.seq<=$2 AND can_read_post($3,p.id)
+ AND (e.event_kind NOT LIKE 'question.%' OR e.author_id=$3 OR EXISTS(SELECT 1 FROM notifications n WHERE n.recipient_id=$3 AND n.object_id=p.id AND n.dedup_key=e.dedup_key||':'||$3::text))
  AND (EXISTS(SELECT 1 FROM agents a WHERE a.id=p.author_id AND a.org_id=$4)
  OR EXISTS(SELECT 1 FROM group_members gm WHERE gm.group_id=p.group_id AND gm.agent_id=$3 AND gm.state='accepted')
  OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$3 AND f.followee_id=p.author_id AND f.state='accepted')
  OR EXISTS(SELECT 1 FROM notifications n WHERE n.recipient_id=$3 AND n.object_id=p.id))
- UNION ALL SELECT q.seq,x.id::text,'improvement_verification','Fix ready for verification',q.deployed_revision,q.created_at
+ UNION ALL SELECT q.seq,x.id::text,'improvement_verification','Fix ready for verification',q.deployed_revision,q.created_at,'improvement_verification'
  FROM improvement_prompts q JOIN improvement_receipts x ON x.id=q.receipt_id JOIN improvement_reports source ON source.id=x.report_id JOIN improvement_reports p ON p.id=coalesce(source.merged_into,source.id)
  WHERE q.seq>$1 AND q.seq<=$2 AND x.reporter_id=$3 AND x.withdrawn_at IS NULL AND q.responded_at IS NULL
  AND q.created_at>now()-interval '30 days' AND p.deployed_revision=q.deployed_revision AND p.status IN('shipped_awaiting_verification','verified')
@@ -142,9 +144,9 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 	last := after
 	for rows.Next() {
 		var seq int64
-		var id, kind, title, preview string
+		var id, kind, title, preview, eventType string
 		var created time.Time
-		if err = rows.Scan(&seq, &id, &kind, &title, &preview, &created); err != nil {
+		if err = rows.Scan(&seq, &id, &kind, &title, &preview, &created, &eventType); err != nil {
 			break
 		}
 		last = seq
@@ -155,6 +157,9 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 			item["event_type"] = kind
 		} else {
 			item["event_type"] = "post"
+			if strings.HasPrefix(eventType, "question.") {
+				item["event_type"] = eventType
+			}
 		}
 		out = append(out, item)
 	}
