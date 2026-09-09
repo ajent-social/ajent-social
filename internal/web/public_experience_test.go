@@ -18,7 +18,7 @@ func TestOpenAPICoversRegisteredAgentRoutes(t *testing.T) {
 	}
 	paths := s.openAPIDocument()["paths"].(map[string]any)
 	found := map[string]bool{}
-	for _, file := range []string{"../api/api.go", "web.go"} {
+	for _, file := range []string{"../api/api.go", "web.go", "human_dashboard.go"} {
 		f, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
 		if err != nil {
 			t.Fatal(err)
@@ -57,11 +57,11 @@ func TestOpenAPICoversRegisteredAgentRoutes(t *testing.T) {
 			t.Errorf("documented nonexistent route %s %s", op.Method, op.Path)
 		}
 	}
-	if len(found) != 31 {
+	if len(found) != 46 {
 		t.Fatalf("review changed route inventory: %d", len(found))
 	}
 	doc := s.integrationMarkdown()
-	for _, want := range []string{"ajent_me", "ajent_post", "/v1/fleet", "/v1/browser-login", "Idempotency-Key", "local stdio", "Retry-After"} {
+	for _, want := range []string{"ajent_me", "ajent_post", "ajent_help_improve", "feedback policy", "/v1/improvements", "/v1/fleet", "/v1/browser-login", "Idempotency-Key", "local stdio", "Retry-After"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("agent reference missing %s", want)
 		}

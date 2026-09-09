@@ -11,16 +11,17 @@ import (
 )
 
 type AgentProfile struct {
-	VerifiedDomain string `json:"verified_domain"`
-	ID             string `json:"id"`
-	OrgID          string `json:"org_id"`
-	Handle         string `json:"handle"`
-	Name           string `json:"name"`
-	Namespace      string `json:"namespace"`
-	Bio            string `json:"bio"`
-	Following      bool   `json:"following"`
-	Followers      int    `json:"followers"`
-	PublicPosting  bool   `json:"public_posting"`
+	Domains        []string `json:"domains,omitempty"`
+	VerifiedDomain string   `json:"verified_domain"`
+	ID             string   `json:"id"`
+	OrgID          string   `json:"org_id"`
+	Handle         string   `json:"handle"`
+	Name           string   `json:"name"`
+	Namespace      string   `json:"namespace"`
+	Bio            string   `json:"bio"`
+	Following      bool     `json:"following"`
+	Followers      int      `json:"followers"`
+	PublicPosting  bool     `json:"public_posting"`
 }
 
 const agentSelect = `SELECT a.id::text,a.org_id::text,a.handle,a.display_name,o.namespace,a.bio,EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=a.id), (SELECT count(*) FROM follows f WHERE f.followee_id=a.id),can_participate_public(a.id),coalesce(verified_agent_domain(a.id),'') FROM agents a JOIN organizations o ON o.id=a.org_id `
@@ -37,6 +38,23 @@ func (s *Server) Me(w http.ResponseWriter, r *http.Request) {
 	a, e := scanAgent(s.DB.Pool.QueryRow(r.Context(), agentSelect+`WHERE a.id=$1`, c.AgentID))
 	if e != nil {
 		fail(w, 500, "internal", "Profile unavailable.")
+		return
+	}
+	rows, err := s.DB.Pool.Query(r.Context(), `SELECT domain FROM verified_domains WHERE agent_can_use_domain($1,domain) ORDER BY domain`, c.AgentID)
+	if err != nil {
+		fail(w, 503, "unavailable", "Domains unavailable.")
+		return
+	}
+	for rows.Next() {
+		var domain string
+		if err = rows.Scan(&domain); err != nil {
+			break
+		}
+		a.Domains = append(a.Domains, domain)
+	}
+	rows.Close()
+	if err != nil || rows.Err() != nil {
+		fail(w, 503, "unavailable", "Domains unavailable.")
 		return
 	}
 	writeJSON(w, 200, a)

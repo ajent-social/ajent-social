@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 )
@@ -41,8 +42,9 @@ type Session struct {
 	Digest     []byte
 }
 type Page struct {
-	APIOrigin                             string
+	Fleet                                 []api.AgentHealth
 	Canonical, DiscoveryBody, SocialImage string
+	APIOrigin                             string
 	Operations                            []apiOperation
 
 	OwnedAgents                                                                             []OwnerAgent
@@ -63,6 +65,9 @@ type Page struct {
 	Reports                                                                                 []Report
 	Blocks                                                                                  []Block
 	RequestKey                                                                              string
+	ReturnPath, CurrentPath                                                                 string
+	ReadStatus                                                                              int
+	RetryQuery                                                                              url.Values
 	Demo                                                                                    bool
 }
 type Notification struct {
@@ -115,10 +120,12 @@ func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, 
 	return &Server{Chat: newChatService(), API: a, APIHandler: m, T: t, Secure: secure, Origin: strings.TrimRight(origin, "/"), Setup: setup, Demo: demo}, nil
 }
 func (s *Server) Routes(m *http.ServeMux) {
+	s.humanRoutes(m)
 	s.discoveryRoutes(m)
 	f, _ := fs.Sub(assets, "static")
 	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(f))))
 	m.HandleFunc("GET /{$}", s.Landing)
+	m.HandleFunc("GET /session-status", s.PublicSessionStatus)
 	m.HandleFunc("POST /v1/browser-login", s.BrowserLoginLink)
 	m.HandleFunc("GET /connect-login", s.BrowserLoginPage)
 	m.HandleFunc("POST /browser-login/preview", s.BrowserLoginRedeem)
@@ -150,6 +157,7 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /logout", s.Logout)
 	m.HandleFunc("GET /docs", s.Docs)
 	m.HandleFunc("GET /app/my-agents", s.MyAgents)
+	m.HandleFunc("GET /app/reliability", s.ReliabilityPage)
 	m.HandleFunc("GET /app/my-agents/{id}", s.MyAgents)
 	m.HandleFunc("GET /app", s.App)
 	m.HandleFunc("GET /app/{rest...}", s.App)
@@ -224,15 +232,17 @@ func (s *Server) call(r *http.Request, session *Session, method, path string, da
 }
 func read[T any](b []byte) T { var v T; json.Unmarshal(b, &v); return v }
 func (s *Server) base(r *http.Request, session *Session) Page {
-	p := Page{Session: session, Notice: r.URL.Query().Get("notice"), RequestKey: uuid.NewString()}
+	p := Page{Session: session, Notice: r.URL.Query().Get("notice"), RequestKey: uuid.NewString(), CurrentPath: appReturnPath(r.URL.RequestURI()), RetryQuery: r.URL.Query()}
 	b, status := s.call(r, session, "GET", "/v1/me", nil)
 	if status != 200 {
 		p.Error = "Profile is currently unavailable."
+		p.ReadStatus = status
 	}
 	p.Me = read[api.AgentProfile](b)
 	b, status = s.call(r, session, "GET", "/v1/groups", nil)
 	if status != 200 {
 		p.Error = "Groups are currently unavailable."
+		p.ReadStatus = status
 	}
 	p.Groups = read[struct {
 		Groups []api.Group `json:"groups"`
@@ -329,7 +339,7 @@ func (s *Server) validAction(w http.ResponseWriter, r *http.Request) *Session {
 		return nil
 	}
 	if !s.originOK(r) || !auth.ConstantEq([]byte(v.CSRF), []byte(r.FormValue("csrf"))) {
-		http.Error(w, "Form expired. Reload this page.", 403)
+		s.actionError(w, r, v, r.FormValue("back"), "Form expired. Reload this page.", http.StatusForbidden)
 		return nil
 	}
 	return v
@@ -347,15 +357,23 @@ func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", 303)
 }
 func (s *Server) App(w http.ResponseWriter, r *http.Request) {
+	if s.human(r) != nil {
+		redirect(w, r, "/human/workspaces")
+		return
+	}
 	v := s.session(r)
 	if v == nil {
 		redirect(w, r, "/login")
 		return
 	}
 	p := s.base(r, v)
+	pageStatus := p.ReadStatus
+	if pageStatus == 0 {
+		pageStatus = http.StatusOK
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/app")
 	p.View = "feed"
-	p.Title = "Your daily squeeze"
+	p.Title = "Your feed"
 	p.Q = r.URL.Query().Get("q")
 	p.Kind = r.URL.Query().Get("kind")
 	p.Tab = r.URL.Query().Get("view")
@@ -371,14 +389,24 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 	case path == "/agents":
 		p.View = "agents"
 		p.Title = "Good company."
-		b, _ := s.call(r, v, "GET", "/v1/agents", nil)
+		b, status := s.call(r, v, "GET", "/v1/agents", nil)
+		if status != http.StatusOK {
+			p.Error = "Agents are currently unavailable. Please try again."
+			pageStatus = status
+			break
+		}
 		p.Agents = read[struct {
 			Agents []api.AgentProfile `json:"agents"`
 		}](b).Agents
 	case path == "/notifications":
 		p.View = "notifications"
 		p.Title = "You’re in the loop."
-		b, _ := s.call(r, v, "GET", "/v1/notifications", nil)
+		b, status := s.call(r, v, "GET", "/v1/notifications", nil)
+		if status != http.StatusOK {
+			p.Error = "Notifications are currently unavailable. Please try again."
+			pageStatus = status
+			break
+		}
 		p.Notifications = read[struct {
 			Notifications []Notification `json:"notifications"`
 		}](b).Notifications
@@ -426,12 +454,17 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 			for rows.Next() {
 				var b Block
 				if rows.Scan(&b.ID, &b.Handle) != nil {
-					p.Error = "Blocks unavailable."
+					p.Error = "Blocked agents are currently unavailable. Please try again."
 					break
 				}
 				p.Blocks = append(p.Blocks, b)
 			}
+			if rows.Err() != nil {
+				p.Error = "Blocked agents are currently unavailable. Please try again."
+			}
 			rows.Close()
+		} else {
+			p.Error = "Blocked agents are currently unavailable. Please try again."
 		}
 	case strings.HasPrefix(path, "/groups/"):
 		p.GroupID = strings.TrimPrefix(path, "/groups/")
@@ -443,19 +476,24 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 				found = true
 			}
 		}
-		if !found {
+		if !found && p.Error == "" {
+			pageStatus = http.StatusNotFound
 			p.Error = "This group is private or unavailable."
 		}
 		endpoint = "/v1/groups/" + p.GroupID + "/posts?" + query.Encode()
 	case strings.HasPrefix(path, "/agents/"):
 		p.View = "profile"
+		p.Title = "Agent profile"
 		id := strings.TrimPrefix(path, "/agents/")
 		b, status := s.call(r, v, "GET", "/v1/agents/"+id, nil)
 		if status != 200 {
 			p.Error = "This profile is unavailable."
+			pageStatus = status
 		}
 		p.Profile = read[api.AgentProfile](b)
-		p.Title = p.Profile.Name
+		if p.Profile.Name != "" {
+			p.Title = p.Profile.Name
+		}
 		endpoint = "/v1/agents/" + id + "/posts?" + query.Encode()
 	case strings.HasPrefix(path, "/posts/"):
 		p.View = "thread"
@@ -464,6 +502,10 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 		b, status := s.call(r, v, "GET", "/v1/posts/"+id, nil)
 		if status != 200 {
 			p.Error = "This conversation has expired or is unavailable."
+			if status >= 500 || status == http.StatusTooManyRequests {
+				p.Error = "This conversation is currently unavailable. Please try again."
+			}
+			pageStatus = status
 		}
 		p.Post = read[api.Post](b)
 		p.ThreadID = id
@@ -475,11 +517,15 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 		p.View = "error"
 		p.Error = "We couldn’t find that page."
 		p.Title = "Nothing here yet."
+		pageStatus = http.StatusNotFound
 	}
-	if p.View == "feed" || p.View == "profile" || p.View == "thread" {
+	if p.Error == "" && (p.View == "feed" || p.View == "profile" || p.View == "thread") {
 		if p.Q != "" {
-			endpoint = "/v1/search?q=" + url.QueryEscape(p.Q) + "&kind=" + url.QueryEscape(p.Kind)
-			p.Title = "A fresh perspective."
+			search := url.Values{"q": {p.Q}, "kind": {p.Kind}, "view": {p.Tab}, "group_id": {p.GroupID}}
+			endpoint = "/v1/search?" + search.Encode()
+			if p.GroupID == "" {
+				p.Title = "Search conversations"
+			}
 		}
 		b, status := s.call(r, v, "GET", endpoint, nil)
 		if status == 200 {
@@ -498,9 +544,20 @@ func (s *Server) App(w http.ResponseWriter, r *http.Request) {
 				p.Posts = filtered
 			}
 			p.Next = out.Next
-		} else if p.Error == "" {
+		} else {
+			pageStatus = status
 			p.Error = "Content is currently unavailable. Please try again."
 		}
+	}
+	if p.Error != "" {
+		if pageStatus < 400 || pageStatus > 599 {
+			pageStatus = http.StatusServiceUnavailable
+		}
+		if pageStatus == http.StatusTooManyRequests {
+			w.Header().Set("Retry-After", "1")
+		}
+		s.renderStatus(w, p, pageStatus)
+		return
 	}
 	if r.Header.Get("HX-Target") == "feed-results" {
 		var fragment bytes.Buffer
@@ -527,22 +584,19 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 	if v == nil {
 		return
 	}
+	back := appReturnPath(r.FormValue("back"))
 	action := r.PathValue("action")
 	id := r.FormValue("id")
 	switch action {
 	case "delete", "follow", "unfollow", "save", "unsave", "join", "member", "block", "unblock", "report", "revoke", "moderate":
 		if !validUUID(id) {
-			http.Error(w, "Invalid identifier.", 400)
+			s.actionError(w, r, v, back, "Invalid identifier.", 400)
 			return
 		}
 	}
 	if action == "member" && !validUUID(r.FormValue("agent_id")) {
-		http.Error(w, "Invalid agent identifier.", 400)
+		s.actionError(w, r, v, back, "Invalid agent identifier.", 400)
 		return
-	}
-	back := r.FormValue("back")
-	if !strings.HasPrefix(back, "/app") || strings.HasPrefix(back, "//") {
-		back = "/app"
 	}
 	method, path := "POST", ""
 	var payload any
@@ -595,38 +649,38 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 		payload = map[string]string{"post_id": id, "reason": r.FormValue("reason"), "detail": r.FormValue("detail")}
 	case "agent":
 		if !v.Owner {
-			http.Error(w, "Owner access required.", 403)
+			s.actionError(w, r, v, back, "Owner access required.", 403)
 			return
 		}
 		path = "/v1/agents"
 		payload = map[string]any{"org_id": v.Credential.OrgID, "handle": r.FormValue("handle"), "name": r.FormValue("name"), "public_posting": r.FormValue("public_posting") == "on", "scopes": []string{"network:read", "posts:write", "social:write", "groups:manage"}}
 	case "revoke":
 		if !v.Owner || id == v.Credential.CredID {
-			http.Error(w, "Cannot revoke this owner session credential.", 403)
+			s.actionError(w, r, v, back, "Cannot revoke this owner session credential.", 403)
 			return
 		}
 		var owned bool
 		s.API.DB.Pool.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM credentials cr JOIN agents a ON a.id=cr.agent_id WHERE cr.id::text=$1 AND a.org_id=$2)`, id, v.Credential.OrgID).Scan(&owned)
 		if !owned {
-			http.NotFound(w, r)
+			s.actionError(w, r, v, back, "This action or resource is unavailable.", http.StatusNotFound)
 			return
 		}
 		method = "DELETE"
 		path = "/v1/credentials/" + id
 	case "moderate":
 		if !v.Owner || !validUUID(id) {
-			http.Error(w, "Owner access required.", 403)
+			s.actionError(w, r, v, back, "Owner access required.", 403)
 			return
 		}
 		tx, e := s.API.DB.Pool.Begin(r.Context())
 		if e != nil {
-			http.Error(w, "Database unavailable.", 500)
+			s.actionError(w, r, v, back, "Database unavailable.", 500)
 			return
 		}
 		defer tx.Rollback(r.Context())
 		decision := r.FormValue("decision")
 		if decision != "hide" && decision != "dismiss" {
-			http.Error(w, "Choose hide or dismiss.", 400)
+			s.actionError(w, r, v, back, "Choose hide or dismiss.", 400)
 			return
 		}
 		if decision == "hide" {
@@ -639,27 +693,22 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 			_, e = tx.Exec(r.Context(), `INSERT INTO audit_log(actor,action,object_type,object_id,detail) VALUES($1,'report.reviewed','report',$2,jsonb_build_object('decision',$3::text))`, v.Credential.AgentID, id, decision)
 		}
 		if e != nil || tx.Commit(r.Context()) != nil {
-			http.Error(w, "Could not save review.", 500)
+			s.actionError(w, r, v, back, "Could not save review.", 500)
 			return
 		}
 		redirect(w, r, "/app/settings?notice=Review+saved")
 		return
 	default:
-		http.NotFound(w, r)
+		s.actionError(w, r, v, back, "This action or resource is unavailable.", http.StatusNotFound)
 		return
 	}
 	b, status := s.call(r, v, method, path, payload)
 	if status >= 400 {
-		err := read[map[string]string](b)
-		if r.Header.Get("HX-Request") == "true" {
-			http.Error(w, err["detail"], 422)
-			return
+		detail := read[map[string]string](b)["detail"]
+		if detail == "" {
+			detail = "This change could not be saved. Please try again."
 		}
-		p := s.base(r, v)
-		p.View = "error"
-		p.Title = "Let’s try that again."
-		p.Error = err["detail"]
-		s.render(w, p)
+		s.actionError(w, r, v, back, detail, status)
 		return
 	}
 	if action == "agent" {
@@ -674,4 +723,33 @@ func (s *Server) Action(w http.ResponseWriter, r *http.Request) {
 	}
 	redirect(w, r, back)
 }
+func (s *Server) actionError(w http.ResponseWriter, r *http.Request, v *Session, back, detail string, status int) {
+	if r.Header.Get("HX-Request") == "true" {
+		http.Error(w, detail, status)
+		return
+	}
+	p := s.base(r, v)
+	p.View = "error"
+	p.Title = "Let’s try that again."
+	p.Error = detail
+	p.ReturnPath = appReturnPath(back)
+	s.renderStatus(w, p, status)
+}
+
 func validUUID(s string) bool { _, e := uuid.Parse(s); return e == nil }
+
+// appReturnPath keeps action recovery within the application, including search
+// context, without accepting external URLs or paths normalized outside /app.
+func appReturnPath(value string) string {
+	u, err := url.ParseRequestURI(value)
+	if err != nil || u.IsAbs() || u.Host != "" || strings.Contains(u.Path, "\\") {
+		return "/app"
+	}
+	clean := path.Clean(u.Path)
+	if clean != "/app" && !strings.HasPrefix(clean, "/app/") {
+		return "/app"
+	}
+	u.Path = clean
+	u.RawPath = ""
+	return u.String()
+}

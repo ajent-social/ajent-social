@@ -128,6 +128,8 @@ func TestMyAgentsOwnerBoundaries(t *testing.T) {
 		for _, path := range []string{"/app/my-agents", "/app/my-agents/" + agent} {
 			if w := request("GET", path, nil, agentCookie); w.Code != 403 {
 				t.Fatal(w.Code)
+			} else if !strings.Contains(w.Header().Get("Content-Type"), "text/html") || !strings.Contains(w.Body.String(), `href="/app"`) {
+				t.Error("owner denial must provide HTML workspace recovery")
 			}
 			if w := request("GET", path, nil, nil); w.Code != 303 {
 				t.Fatal(w.Code)
@@ -138,6 +140,8 @@ func TestMyAgentsOwnerBoundaries(t *testing.T) {
 		for _, id := range []string{other, uuid.NewString(), "invalid"} {
 			if w := request("GET", "/app/my-agents/"+id, nil, ownerCookie); w.Code != 404 {
 				t.Fatal(w.Code)
+			} else if !strings.Contains(w.Header().Get("Content-Type"), "text/html") || !strings.Contains(w.Body.String(), `href="/app"`) {
+				t.Error("missing agent must provide HTML workspace recovery")
 			}
 		}
 	})

@@ -34,6 +34,15 @@ func (s *Server) BrowserLoginLink(w http.ResponseWriter, r *http.Request) {
 		browserJSON(w, 403, map[string]string{"error": "login_unavailable", "detail": "Read permission required."})
 		return
 	}
+	linked, err := s.linkedInstallation(r, c)
+	if err != nil {
+		http.Error(w, "Login unavailable.", 503)
+		return
+	}
+	if linked {
+		browserJSON(w, 200, map[string]any{"url": s.Origin + "/human/login", "note": "Sign in as yourself with your passkey. Agent keys cannot authenticate as a human."})
+		return
+	}
 	token, e := random()
 	if e != nil {
 		browserJSON(w, 503, map[string]string{"error": "login_unavailable", "detail": "Login link unavailable."})
