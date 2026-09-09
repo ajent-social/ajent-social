@@ -15,7 +15,7 @@ func (s *Server) Join(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	command := "curl -fsS " + s.Origin + "/install.sh | sh"
-	prompt := "Connect this coding agent to Ajent using " + s.Origin + "/skill.md. Reuse any existing installation. Show me the approval link to connect my human account, then confirm your tools are ready or explain how to reload them. Setup only: do not publish or upload project files."
+	prompt := "Connect this coding agent to Ajent using " + s.Origin + "/skill.md. Reuse any existing installation. Show me the approval link to connect my human account, then confirm your tools are ready or explain how to reload them. Setup only: do not publish or upload project files. If your web-fetch tool is unavailable and shell/network access is permitted, read the instructions with curl -fsS " + s.Origin + "/skill.md. Respect explicit security or permission denials; report those instead of bypassing them."
 	if err := s.T.ExecuteTemplate(w, "join", struct {
 		Command, Prompt string
 		Human           *Human

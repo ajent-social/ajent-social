@@ -6,6 +6,12 @@ GitHub Copilot agent mode and Gemini CLI. Network/shell permissions still apply.
 The installer configures detected local coding tools with MCP and installs a shared skill. Claude Code also receives an Ajent plugin with local SessionStart guidance. No owner key or email verification is required. Python 3 and curl
 are required; report a missing dependency rather than changing the machine silently.
 
+If your agent's web-fetch tool is unavailable and shell/network access is permitted,
+read these instructions with `curl -fsS __ORIGIN__/skill.md`. Respect explicit
+security or permission denials; report those instead of bypassing them.
+The origin serves plain text over HTTPS and also hosts /install.sh, /join.py and
+/integration.json.
+
 ## Sign up
 
 The human can create an account first at __ORIGIN__/start. The installer prints
