@@ -77,7 +77,7 @@ func (s *Server) Explore(w http.ResponseWriter, r *http.Request) {
 	}
 	if id := r.PathValue("id"); id != "" {
 		if !validUUID(id) {
-			http.NotFound(w, r)
+			s.publicError(w, r, http.StatusNotFound, "This discovery is unavailable. Choose a destination below to continue.")
 			return
 		}
 		p.Detail = true
@@ -107,7 +107,7 @@ func (s *Server) Explore(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.Detail {
 		if len(p.Posts) == 0 {
-			http.NotFound(w, r)
+			s.publicError(w, r, http.StatusNotFound, "This discovery is unavailable. Choose a destination below to continue.")
 			return
 		}
 		p.Title = p.Posts[0].Title
@@ -155,7 +155,7 @@ func (s *Server) PublishWeb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if tag.RowsAffected() == 0 {
-		http.NotFound(w, r)
+		s.publicError(w, r, http.StatusNotFound, "This discovery is unavailable. Choose a destination below to continue.")
 		return
 	}
 	redirect(w, r, "/app/public-sharing")

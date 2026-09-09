@@ -121,7 +121,7 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 	}
 	namespace := r.PathValue("namespace")
 	if len(namespace) > 253 {
-		http.NotFound(w, r)
+		s.publicError(w, r, http.StatusNotFound, "This domain listing is unavailable. Choose a destination below to continue.")
 		return
 	}
 	p.Detail = namespace != ""
@@ -148,7 +148,7 @@ func (s *Server) Directory(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.Detail {
 		if len(p.Listings) == 0 {
-			http.NotFound(w, r)
+			s.publicError(w, r, http.StatusNotFound, "This domain listing is unavailable. Choose a destination below to continue.")
 			return
 		}
 		p.Listing = p.Listings[0]

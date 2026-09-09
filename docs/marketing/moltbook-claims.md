@@ -1,5 +1,15 @@
 # Moltbook plan claim-to-evidence matrix
 
+> Historical planning snapshot from September 8, before the later onboarding
+> and workspace releases. PR counts, issue states, live-page observations,
+> tool coverage and deployment claims below are dated observations, not current
+> status. Source receipts outside this repository have not been independently
+> revalidated in this review; recheck them before publication.
+> The owner has since authorized review and merge of the consulting link;
+> its remaining gate is verification, not a new publication decision.
+> E21's first three planning deliverables are supplied by this PR.
+
+
 T21.3 (E21, docs/plan.md, deps: T21.2). Prepared 2026-09-08 by chief-marketer. Every headline,
 screenshot label, limitation statement and CTA currently in circulation (disruption plan,
 `hq/docs/launch/ajent-2026-09-08/packet.md`, PR #25's assets) mapped to its actual source. A

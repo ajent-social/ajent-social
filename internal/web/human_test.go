@@ -252,7 +252,14 @@ func TestHumanClaimsExistingInstallationAndApprovesNew(t *testing.T) {
 		w := f.request("POST", "/human/link/preview", map[string]string{"Token": proof}, "")
 		f.want(w, 200)
 		csrf := jsonMap(t, w)["csrf"].(string)
-		f.want(f.request("POST", "/human/link/approve", url.Values{"token": {proof}, "csrf": {csrf}, "workspace": {workspace}, "scope": {"user"}, "confirm": {"yes"}}, ""), status)
+		w = f.request("POST", "/human/link/approve", url.Values{"token": {proof}, "csrf": {csrf}, "workspace": {workspace}, "scope": {"user"}, "confirm": {"yes"}}, "")
+		f.want(w, status)
+		if status == http.StatusSeeOther {
+			destination, err := url.Parse(w.Header().Get("Location"))
+			if err != nil || destination.Query().Get("workspace") != workspace {
+				t.Fatalf("approval lost selected workspace: %s", w.Header().Get("Location"))
+			}
+		}
 	}
 	proof := start(token)
 	w = f.request("GET", "/v1/installations/link", nil, token)
@@ -286,8 +293,26 @@ func TestHumanClaimsExistingInstallationAndApprovesNew(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "Keep this private agent finding") {
 		t.Fatal("claim lost activity")
 	}
+
+	for _, view := range []string{"overview", "agents", "installations", "domains", "security"} {
+		t.Run("workspace view "+view, func(t *testing.T) {
+			page := f.request("GET", "/human/workspaces?workspace="+org+"&view="+view, nil, "")
+			f.want(page, 200)
+			if !strings.Contains(page.Body.String(), `aria-current="page"`) {
+				t.Fatal("view has no current navigation item")
+			}
+		})
+	}
+	search := f.request("GET", "/human/workspaces?workspace="+org+"&view=agents&q=no-such-agent", nil, "")
+	f.want(search, 200)
+	if !strings.Contains(search.Body.String(), "No matching agents") {
+		t.Fatal("missing search empty state")
+	}
 	other := newHumanFixture(t)
 	other.register()
+	for _, view := range []string{"overview", "agents", "installations", "domains", "security"} {
+		other.want(other.request("GET", "/human/workspaces?workspace="+org+"&view="+view, nil, ""), 404)
+	}
 	stolenProof := start(token)
 	other.want(other.request("POST", "/human/link/preview", map[string]string{"Token": stolenProof}, ""), 403)
 	// New keys remain unusable until approved; then their agents share the existing group.
@@ -306,7 +331,12 @@ func TestHumanClaimsExistingInstallationAndApprovesNew(t *testing.T) {
 		t.Fatal(err)
 	}
 	other.want(other.request("POST", "/human/revoke", url.Values{"csrf": {csrf}, "id": {cid}, "kind": {"installation"}}, ""), 403)
-	f.want(f.request("POST", "/human/revoke", url.Values{"csrf": {csrf}, "id": {cid}, "kind": {"installation"}}, ""), 303)
+	w = f.request("POST", "/human/revoke", url.Values{"csrf": {csrf}, "id": {cid}, "kind": {"installation"}, "workspace": {org}}, "")
+	f.want(w, 303)
+	destination, err := url.Parse(w.Header().Get("Location"))
+	if err != nil || destination.Query().Get("workspace") != org {
+		t.Fatalf("revocation lost selected workspace: %s", w.Header().Get("Location"))
+	}
 	f.want(f.request("GET", "/v1/me", nil, child), 401)
 	f.want(f.request("GET", "/human/workspaces", nil, ""), 200)
 }

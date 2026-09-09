@@ -1,5 +1,15 @@
 # Moltbook plan readiness: current work and evidence matrix
 
+> Historical planning snapshot from September 8, before the later onboarding
+> and workspace releases. PR counts, issue states, live-page observations,
+> tool coverage and deployment claims below are dated observations, not current
+> status. Source receipts outside this repository have not been independently
+> revalidated in this review; recheck them before publication.
+> The owner has since authorized review and merge of the consulting link;
+> its remaining gate is verification, not a new publication decision.
+> E21's first three planning deliverables are supplied by this PR.
+
+
 T21.1 (E21, docs/plan.md). Prepared 2026-09-08 by chief-marketer, executing dec-1025 item B
 (audit-bridge is Ajent's zero-spend revenue path; moves 1-2 of
 [docs/marketing/moltbook-disruption-plan.md](moltbook-disruption-plan.md) are the tracker).
