@@ -6,7 +6,7 @@ Date: 2026 09 08 UTC. Scope: engineering, content, community operations and stra
 
 Objective: make a useful finding travel between actual coding tools, be checked in context, and create repeat value for independent owners. Make those outcomes publicly understandable and shareable. Ten outside teams provide the first learning cohort. Product adoption, public-network utility and consulting revenue are separate outcomes.
 
-This execution index contains 61 growth preparation rows and two gated growth planning rows, plus 18 completed E28/E29 rows and 5 pending E30 rows. Growth statuses remain unchanged. Role owners are proposed responsibilities, not agents already assigned. Engineering predicates support later dispatch; no kazi goal, deployment, publication or participant send was created by planning.
+This execution index contains 61 growth preparation rows and two gated growth planning rows, plus 18 completed E28/E29 rows and 5 pending E37 rows. Growth statuses remain unchanged. Role owners are proposed responsibilities, not agents already assigned. Engineering predicates support later dispatch; no kazi goal, deployment, publication or participant send was created by planning.
 
 The user also requested a plan for ajent_help_improve: capture feedback as a byproduct of real work, return useful workarounds, deduplicate reports, triage into GitHub and verify fixes through affected agents. E28 is the immediately executable private reporting milestone; E29 expands resolution automation after that live path is proven. This workstream is independent of growth cohort enrollment. See [ADR 003](adr/003-work-derived-improvement-reports.md).
 
@@ -80,7 +80,7 @@ Preparation checks mark artifacts ready. They do not mean the capability is depl
 ### E27 -- Compound evidence and choose investment -> docs/plans/E27-moltbook-learning.md (0/1)
 ### E28 -- Capture friction and return a useful improvement record -> docs/plans/E28-help-improve.md (12/12)
 ### E29 -- Close the loop from triage to verified resolution -> docs/plans/E29-improvement-resolution.md (6/6)
-### E30 -- Let a workspace admin invite and manage other members -> docs/plans/E30-workspace-membership.md (0/5)
+### E37 -- Let a workspace admin invite and manage other members -> docs/plans/E37-workspace-membership.md (0/5)
 
 E21-E25 are executable preparation for the first pilot-ready milestone. E26-E27 are deliberately outline fidelity: their exact operational rows depend on readiness, actual participants and observed outcomes. Their full intended mechanics and success/stop rules are already specified in the pilot protocol. Expand E26 at readiness and E27 only after the observation readout; they are coordinator planning work, never unattended implementation work. The current parser does not recognize kind: plan distinctly, so these rows carry explicit blocking annotations as well.
 
@@ -236,7 +236,7 @@ A preparation task is complete when its artifact and scoped acceptance are revie
 ## 10. Progress Log
 
 - 2026 09 08: Added E28 (T28.1-T28.12), gated E29 (T29.0), six improvement use cases and proposed ADR 003; preserved E21-E27 statuses and reconciled historical telemetry claims with live release evidence. Planning only; previous growth planning entry remains in roadmap.md.
-- 2026 09 08: Added E30 (T30.1-T30.5, UC-W01-UC-W03) -- workspace membership via admin-generated invite links and explicit confirm-to-join. Scope corrected during authoring from an original domain-matching-email design (would have required adding email to Ajent's deliberately passkey-only human identity); invite-links alone satisfy the actual request without that reversal. Reuses the existing `organizations`/`verified_domains` schema; no new Workspace or DomainClaim entity. Planning only; not yet dispatched.
+- 2026 09 08: Added E37 (T37.1-T37.5, UC-W01-UC-W03) -- workspace membership via admin-generated invite links and explicit confirm-to-join. Scope corrected during authoring from an original domain-matching-email design (would have required adding email to Ajent's deliberately passkey-only human identity); invite-links alone satisfy the actual request without that reversal. Reuses the existing `organizations`/`verified_domains` schema; no new Workspace or DomainClaim entity. Planning only; not yet dispatched.
 
 ## 11. Hand off notes
 
