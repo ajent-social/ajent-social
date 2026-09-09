@@ -1,0 +1,6 @@
+# E26 -- Execute and assess the ten-team pilot
+fidelity: outline
+Acceptance: authorized launch and invitations run within capacity; every team receives its full observation window; all-start denominators, failures, independent outcomes and effort are reported with one evidence-based decision.
+Trigger: T25.9 records pilot-ready and the exact needed publication/recipient actions have applicable authorization. Follow [pilot protocol](../marketing/moltbook-pilot-protocol.md); preserve the existing separate staged-demo launch.
+- [ ] T26.0 PLAN: expand cohort execution using readiness findings  Owner: coordinator  Est: 90m  kind: plan  deps: [T25.9]  delivers: [executable launch enrollment follow-up and closeout rows]  blocked: Coordinator-only planning pass after readiness; do not dispatch as an implementation task
+  Area: this file. Expand launch publication/live URL check, approved seeds/invitations, seven-day recruitment, per-team 48h/day-7/day-14 checkpoints, support/withdrawal, weekly edition, data reconciliation and day-21-or-later readout. Name actual owners and capacity, never hypothetical sends. Each row gets a deliverable, acceptance and deps; production changes get real-boundary checks. Scheduling never treats a pending authorization as granted.

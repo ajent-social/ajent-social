@@ -77,14 +77,14 @@ func (s *Server) Explore(w http.ResponseWriter, r *http.Request) {
 	}
 	if id := r.PathValue("id"); id != "" {
 		if !validUUID(id) {
-			http.NotFound(w, r)
+			s.publicError(w, r, http.StatusNotFound, "This discovery is unavailable. Choose a destination below to continue.")
 			return
 		}
 		p.Detail = true
 		filter += " AND p.id=$3"
 		args = append(args, id)
 	}
-	rows, err := s.API.DB.Pool.Query(r.Context(), `SELECT p.id::text,coalesce(p.title,''),p.body,p.kind,a.handle,a.display_name,p.created_at,p.expires_at,p.web_published,coalesce(verified_agent_domain(a.id),'')
+	rows, err := s.API.DB.Pool.Query(r.Context(), `SELECT p.id::text,coalesce(p.title,''),p.body,p.kind,a.handle,a.display_name,p.created_at,p.expires_at,p.web_published,CASE WHEN agent_can_use_domain(p.author_id,p.domain) THEN p.domain ELSE '' END
  FROM posts p JOIN agents a ON a.id=p.author_id WHERE `+filter+`
  AND ($1='' OR to_tsvector('simple',coalesce(p.title,'')||' '||p.body) @@ plainto_tsquery('simple',$1))
  ORDER BY p.created_at DESC,p.id DESC LIMIT 21 OFFSET $2`, args...)
@@ -107,7 +107,7 @@ func (s *Server) Explore(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.Detail {
 		if len(p.Posts) == 0 {
-			http.NotFound(w, r)
+			s.publicError(w, r, http.StatusNotFound, "This discovery is unavailable. Choose a destination below to continue.")
 			return
 		}
 		p.Title = p.Posts[0].Title
@@ -148,14 +148,14 @@ func (s *Server) PublishWeb(w http.ResponseWriter, r *http.Request) {
 	// Authorization is checked in the mutation, not just in the listing UI.
 	tag, err := s.API.DB.Pool.Exec(r.Context(), `WITH changed AS (UPDATE posts p SET web_published=$1 FROM agents a
  WHERE a.id=p.author_id AND p.id=$2 AND (p.author_id=$3 OR ($4 AND a.org_id=$5))
- AND (NOT $1 OR (p.group_id IS NULL AND p.audience='public' AND can_participate_public(p.author_id) AND can_read_post(p.author_id,p.id))) RETURNING p.id)
+ AND (NOT $1 OR (p.group_id IS NULL AND p.audience='public' AND post_domain_eligible(p.id) AND can_read_post(p.author_id,p.id))) RETURNING p.id)
  INSERT INTO audit_log(actor,action,object_type,object_id,detail) SELECT $3::text,'post.web_publication','post',id,jsonb_build_object('published',$1::boolean) FROM changed`, choice == "publish", id, v.Credential.AgentID, v.Owner, v.Credential.OrgID)
 	if err != nil {
 		s.publicError(w, r, 503, "Publication could not be saved. Please try again.")
 		return
 	}
 	if tag.RowsAffected() == 0 {
-		http.NotFound(w, r)
+		s.publicError(w, r, http.StatusNotFound, "This discovery is unavailable. Choose a destination below to continue.")
 		return
 	}
 	redirect(w, r, "/app/public-sharing")

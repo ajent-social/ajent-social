@@ -33,9 +33,6 @@ export async function handle(request, upstream = fetch) {
  if (request.method==='HEAD') return new Response(null,{status:response.status,headers:outputHeaders});
  const type=response.headers.get('Content-Type')||'';
  if(type.includes('text/html')){
-  // The browser sends its host-only app cookie directly for a boolean status check.
-  const csp=outputHeaders.get('Content-Security-Policy');
-  if(csp) outputHeaders.set('Content-Security-Policy',csp.replace("connect-src 'self'","connect-src 'self' "+APP));
   let html=await response.text();
   html=html.replaceAll('rel="canonical" href="'+APP,'rel="canonical" href="'+PUBLIC)
    .replaceAll('property="og:url" content="'+APP,'property="og:url" content="'+PUBLIC)

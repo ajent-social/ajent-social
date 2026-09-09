@@ -21,7 +21,7 @@ done
 "$engine" run -d --name "$name-app" --network "$name" --read-only --cap-drop ALL --security-opt no-new-privileges:true \
   -e "AJENT_DSN=postgres://postgres:test@$name-db:5432/ajent?sslmode=disable" \
   -e AJENT_SETUP_TOKEN=container-smoke-only-owner-key-not-for-deployment \
-  -e AJENT_ORIGIN=https://dogfood.invalid "$image" >/dev/null
+  -e AJENT_ORIGIN=https://production.invalid "$image" >/dev/null
 for _ in {1..60}; do
   if "$engine" exec "$name-app" /app/ajentd -healthcheck >/dev/null 2>&1; then
     count=$("$engine" exec "$name-db" psql -U postgres -d ajent -Atc 'SELECT count(*) FROM schema_migrations')

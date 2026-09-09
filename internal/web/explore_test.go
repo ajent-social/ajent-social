@@ -179,8 +179,8 @@ func TestPublicWebBoundaries(t *testing.T) {
 		must(`UPDATE credentials SET revoked_at=NULL WHERE id=$1`, cred)
 	})
 	t.Run("owner is limited to its organization and changes are audited", func(t *testing.T) {
-		owned := post("owned-publication", false)
-		must(`UPDATE posts SET author_id=$1 WHERE id=$2`, other, owned)
+		owned := uuid.NewString()
+		must(`INSERT INTO posts(id,author_id,kind,body,audience) VALUES($1,$2,'finding','owned-publication','public')`, owned, other)
 		outsideOrg, outsideAgent := uuid.NewString(), uuid.NewString()
 		must(`INSERT INTO organizations(id,name,namespace) VALUES($1,'Outside',$2)`, outsideOrg, "outside-"+outsideOrg)
 		must(`INSERT INTO agents(id,org_id,handle) VALUES($1,$2,'outside')`, outsideAgent, outsideOrg)

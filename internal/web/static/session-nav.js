@@ -1,34 +1,33 @@
-(() => {
-  'use strict';
-  const link = document.querySelector('[data-session-link]');
-  if (!link) return;
-  const join = document.querySelector('[data-session-join]');
-  const origin = ['ajent.social', 'www.ajent.social'].includes(location.hostname)
-    ? 'https://dogfood.ajent.social' : location.origin;
-  let pending = false;
-  async function refresh() {
-    if (pending) return;
-    pending = true;
-    try {
-      const response = await fetch(origin + '/session-status', {
-        credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(5000)
-      });
-      if (!response.ok) return;
-      const { authenticated } = await response.json();
-      if (typeof authenticated !== 'boolean') return;
-      link.textContent = authenticated ? 'Dashboard' : 'Sign in';
-      link.href = origin + (authenticated ? '/app' : '/login');
-      if (join) join.hidden = authenticated;
-    } catch {
-      // Navigation remains usable if the status service is unavailable.
-    } finally {
-      pending = false;
-    }
-  }
-  refresh();
-  window.addEventListener('pageshow', refresh);
-  window.addEventListener('focus', refresh);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') refresh();
-  });
+// Keep the public return link in sync with this browser's current account.
+(()=>{'use strict';
+ const links=[...document.querySelectorAll('[data-session-link]')];
+ if(!links.length)return;
+ const joins=[...document.querySelectorAll('[data-session-join]')];
+ let loading=false,again=false;
+ function update(state){
+  if(typeof state.human!=='boolean'||typeof state.agent!=='boolean')return;
+  const destination=state.human?'/human/workspaces':state.agent?'/app':'/human/login';
+  const label=state.human?'Your workspaces':state.agent?'Agent dashboard':'Sign in';
+  for(const link of links){link.href=destination;link.textContent=label;}
+  for(const join of joins){join.textContent=state.human||state.agent?'Connect agent':'Get started';join.href=state.human||state.agent?'/join':'/start';}
+ }
+ async function refresh(){
+  if(document.hidden)return;
+  if(loading){again=true;return;}
+  loading=true;
+  do{
+   again=false;
+   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
+   try{
+    const response=await fetch('/session-status',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
+    if(response.ok)update(await response.json());
+   }catch{/* Keep the usable return link when the status request is unavailable. */}
+   finally{clearTimeout(timer);}
+  }while(again&&!document.hidden);
+  loading=false;
+ }
+ window.addEventListener('pageshow',refresh);
+ window.addEventListener('focus',refresh);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+ if(document.readyState==='complete')refresh();
 })();

@@ -5,6 +5,7 @@ import (
 	"ajent/internal/bootstrap"
 	"ajent/migrations"
 	"context"
+	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"net/http"
@@ -75,49 +76,22 @@ func TestOwnerWebFlowAndCSRF(t *testing.T) {
 		t.Fatalf("login %d %s", good.Code, good.Body)
 	}
 	session := good.Result().Cookies()[0]
-	checkStatus := func(cookie *http.Cookie, origin string, status int, authenticated bool) {
-		t.Helper()
-		r := httptest.NewRequest("GET", "/session-status", nil)
-		r.Header.Set("Origin", origin)
-		if cookie != nil {
-			r.AddCookie(cookie)
-		}
-		w := httptest.NewRecorder()
-		m.ServeHTTP(w, r)
-		if w.Code != status || w.Header().Get("Cache-Control") != "no-store" {
-			t.Fatalf("session status: %d %s", w.Code, w.Body)
-		}
-		if status == 200 {
-			want := "{\"authenticated\":false}\n"
-			if authenticated {
-				want = "{\"authenticated\":true}\n"
-			}
-			if w.Body.String() != want {
-				t.Fatalf("unexpected session disclosure: %s", w.Body)
-			}
-		}
-		if origin == "https://ajent.social" && status == 200 {
-			if w.Header().Get("Access-Control-Allow-Origin") != origin || w.Header().Get("Access-Control-Allow-Credentials") != "true" {
-				t.Fatal("missing credentialed CORS")
-			}
-		} else if w.Header().Get("Access-Control-Allow-Origin") != "" {
-			t.Fatal("unexpected CORS grant")
-		}
-	}
-	s.Origin = "https://dogfood.ajent.social"
-	checkStatus(nil, "https://ajent.social", 200, false)
-	checkStatus(session, "https://ajent.social", 200, true)
-	checkStatus(session, "https://untrusted.example", 403, false)
-	checkStatus(session, "", 200, true)
-	s.Origin = "http://example.com"
-
 	r := httptest.NewRequest("GET", "/app", nil)
 	r.AddCookie(session)
 	sess := s.session(r)
 	if sess == nil || !sess.Owner {
 		t.Fatal("session not created")
 	}
-	for _, path := range []string{"/", "/docs", "/app", "/app/groups", "/app/agents", "/app/notifications", "/app/settings", "/app/agents/" + owner, "/app?q=retries"} {
+	status := req("GET", "/session-status", nil, session)
+	var publicState map[string]bool
+	if err := json.Unmarshal(status.Body.Bytes(), &publicState); err != nil {
+		t.Fatal(err)
+	}
+	if status.Code != http.StatusOK || len(publicState) != 2 || !publicState["agent"] || publicState["human"] {
+		t.Fatalf("incorrect public session state: %d %v", status.Code, publicState)
+	}
+
+	for _, path := range []string{"/", "/docs", "/app", "/app/groups", "/app/agents", "/app/notifications", "/app/reliability", "/app/settings", "/app/agents/" + owner, "/app?q=retries"} {
 		w := req("GET", path, nil, session)
 		if w.Code != 200 || strings.Contains(w.Body.String(), "Page could not be rendered") {
 			t.Fatalf("route %s %d %s", path, w.Code, w.Body)
@@ -161,7 +135,6 @@ func TestOwnerWebFlowAndCSRF(t *testing.T) {
 	if logout.Code != 303 {
 		t.Fatal("logout failed")
 	}
-	checkStatus(session, "", 200, false)
 	if req("GET", "/app", nil, session).Code != 303 {
 		t.Fatal("logged-out session active")
 	}

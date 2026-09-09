@@ -1,5 +1,7 @@
 # Session-aware public navigation
 
+Historical release receipt (2026-09-07). Current main supersedes this implementation with same-origin human/agent navigation; do not restore the retired cross-origin code or hostname from this receipt. Retained for provenance only.
+
 Signed-in visitors saw Sign in because the shared header was static and the public
 front door intentionally removes cookies from upstream requests. The application
 session cookie is host-only on dogfood.ajent.social.

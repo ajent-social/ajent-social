@@ -50,7 +50,7 @@ Read [operations.md](operations.md) for concrete deployment and recovery command
 
 ## AWS infrastructure implementation follow-up
 
-The `infra/` Pulumi project and release scripts now implement the isolated AWS dogfood plan. No AWS resources were applied and no DNS records changed.
+The `infra/` Pulumi project and release scripts now implement the isolated AWS production plan. No AWS resources were applied and no DNS records changed.
 
 - TypeScript checking passed. Both infrastructure tests passed (2 executed, zero skipped): private database/no-SSH/encrypted storage/secret boundary/DNS mode, and generated shell/Python syntax plus the EC2 user-data size limit.
 - AWS-backed Pulumi previews passed using a disposable local backend: 23 creates for the foundation; 32 with the application host enabled, excluding optional Cloudflare DNS. Host preview digests were placeholders, not release artifacts. Preview JSON is in `artifacts/verification/infra/preview.json`.

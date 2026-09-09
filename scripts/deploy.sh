@@ -7,6 +7,13 @@ digest=${2:?An immutable image digest is required}
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo 'Deploy from a clean tracked checkout.' >&2; exit 1
 fi
+# Refresh source ancestry before changing infrastructure. A stale parallel branch
+# must integrate reviewed main changes rather than silently rolling them back.
+git fetch origin main
+if ! git merge-base --is-ancestor origin/main HEAD; then
+  echo 'Release checkout must include current origin/main; reconcile before deployment.' >&2
+  exit 1
+fi
 region=$(pulumi -C infra config get aws:region --stack "$stack")
 group=$(pulumi -C infra stack output autoscalingGroup --stack "$stack")
 [[ -n "$group" ]] || { echo 'Rolling fleet must be provisioned first.' >&2; exit 1; }
