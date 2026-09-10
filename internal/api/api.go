@@ -595,7 +595,7 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "bad_request", "Search requires 1–512 bytes.")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if q == "golang" {
 		q = "go"
