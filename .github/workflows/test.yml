@@ -77,8 +77,10 @@ jobs:
           AJENT_VISUAL_OUTPUT: ${{ github.workspace }}/artifacts/ui
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: ui-contrast
+          retention-days: 3
           path: |
             artifacts/ui
             artifacts/account-journeys
@@ -97,6 +99,7 @@ jobs:
       - run: scripts/container-smoke.sh ajent:ci
       - run: docker save ajent:ci | gzip > ajent-arm64.tar.gz
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: ajent-arm64-${{ github.sha }}
           path: ajent-arm64.tar.gz
@@ -129,6 +132,8 @@ jobs:
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: verification
+          retention-days: 3
           path: artifacts/verification/

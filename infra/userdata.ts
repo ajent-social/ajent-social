@@ -1,14 +1,25 @@
 export interface HostConfig {
     canonicalHostname?:string; legacyOrigin?:string; openrouterSecretArn?:string;
+    improvementRepository?:string; improvementGitHubSecretArn?:string;
     hostname:string; region:string; dbHost:string; dbArn:string; ownerArn:string;
     image:string; caddyImage:string; logGroup:string; stack:string; behindLoadBalancer?:boolean;
 }
+// Provision only a dedicated repository credential; never infer a local gh token.
+export function validateImprovementConfig(config:Pick<HostConfig,'improvementRepository'|'improvementGitHubSecretArn'>):void {
+    const repo=config.improvementRepository;
+    if(repo!==undefined && (!/^[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9_.-]{1,100}$/.test(repo) || ['.','..'].includes(repo.split('/')[1]))) throw new Error('improvementRepository must be a lowercase owner/repository');
+    if(config.improvementGitHubSecretArn!==undefined) {
+        if(!repo) throw new Error('improvementGitHubSecretArn requires improvementRepository');
+        if(!/^arn:aws(?:-us-gov|-cn)?:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[a-zA-Z0-9/_+=.@-]+$/.test(config.improvementGitHubSecretArn)) throw new Error('improvementGitHubSecretArn must identify one Secrets Manager secret');
+    }
+}
 // Values enter shell scripts only through JSON/base64, never shell interpolation.
 export function bootstrap(config:HostConfig):string {
+    validateImprovementConfig(config);
     const files:Record<string,string> = {
         'config.json': JSON.stringify(config),
         'Caddyfile': `${config.hostname} {\n header Strict-Transport-Security "max-age=31536000"\n reverse_proxy 127.0.0.1:8080\n}\n`,
-        'refresh.py': `import json, subprocess, os, urllib.parse
+        'refresh.py': `import json, subprocess, os, sys, urllib.parse
 from pathlib import Path
 c=json.loads(Path('/opt/ajent/config.json').read_text())
 def secret(arn):
@@ -23,6 +34,16 @@ if c.get('openrouterSecretArn'):
     key=secret(c['openrouterSecretArn'])
     if not key or any(ch in key for ch in ['\\n','\\r']):raise ValueError('Invalid chat secret format')
     with p.open('a') as f:f.write('OPENROUTER_API_KEY='+key+'\\n')
+if c.get('improvementRepository'):
+    with p.open('a') as f:f.write('AJENT_IMPROVEMENT_REPOSITORY='+c['improvementRepository']+'\\n')
+    if c.get('improvementGitHubSecretArn'):
+        try:
+            raw=subprocess.check_output(['aws','secretsmanager','get-secret-value','--region',c['region'],'--secret-id',c['improvementGitHubSecretArn']],stderr=subprocess.DEVNULL,timeout=15)
+            key=json.loads(raw)['SecretString']
+            if not isinstance(key,str) or not key or len(key)>4096 or any(ord(ch)<33 or ord(ch)>126 for ch in key):raise ValueError('invalid format')
+            with p.open('a') as f:f.write('AJENT_IMPROVEMENT_GITHUB_TOKEN='+key+'\\n')
+        except (subprocess.SubprocessError,ValueError,KeyError,TypeError):
+            print('improvement credential unavailable; worker will be degraded',file=sys.stderr)
 p.replace('/run/ajent.env')
 registry=c['image'].split('/')[0]
 pw=subprocess.check_output(['aws','ecr','get-login-password','--region',c['region']])

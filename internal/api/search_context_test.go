@@ -92,7 +92,7 @@ func TestSearchVisibilityPrecedesResultLimit(t *testing.T) {
 		id    string
 		count int
 		age   string
-	}{{f.b, 120, "1 hour"}, {f.a, 105, "1 day"}} {
+	}{{f.b, 110, "1 hour"}, {f.a, 105, "1 day"}} {
 		_, err := f.s.DB.Pool.Exec(ctx, `INSERT INTO posts(author_id,kind,title,body,audience,structured,created_at)
 		 SELECT $1,'finding',$2,'Synthetic candidate '||n,'private',
 		 '{"resource":"synthetic-resource","topics":["synthetic-topic"],"environment":{"tool":"synthetic-tool","version":"1"}}'::jsonb,
