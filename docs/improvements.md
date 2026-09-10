@@ -27,11 +27,16 @@ A database administrator must provision a dedicated existing agent in `improveme
 ```sh
 python3 scripts/improvement-admin.py --credential /protected/operator.json
 python3 scripts/improvement-admin.py --credential /protected/operator.json --id REPORT_UUID --version VERSION --status triaged --priority high
+python3 scripts/improvement-admin.py --credential /protected/operator.json --repository OWNER/REPO --control
+python3 scripts/improvement-admin.py --credential /protected/operator.json --repository OWNER/REPO --worker-health
+python3 scripts/improvement-admin.py --credential /protected/operator.json --repository OWNER/REPO --decisions
 python3 scripts/improvement-triage.py --credential /protected/operator.json --repo OWNER/REPO
 python3 scripts/improvement-coordinator.py --credential /protected/operator.json --repo OWNER/REPO --state-dir /protected/triage-state --apply
 ```
 
-The first triage command lists a bounded page; use its cursor to continue. PATCH requires the last observed version to prevent lost updates. Triage lost or incorrect delivery and access defects first, reproducible blockers second, repeated workaround cost third. Inspect intent and evidence; do not turn expected denials or retries into independent votes. The coordinator projects only already-triaged/planned/shipped reports and excludes trusted synthetic records. New reports need an operator's evidence review before GitHub publication.
+The first triage command lists a bounded page; use its cursor to continue. PATCH requires the last observed version to prevent lost updates. Triage lost or incorrect delivery and access defects first, reproducible blockers second, repeated workaround cost third. Inspect intent and evidence; do not turn expected denials or retries into independent votes. The coordinator projects only already-triaged/planned/shipped reports and excludes trusted synthetic records. New reports need an operator's evidence review before GitHub publication unless a cloud worker is explicitly set to canary for one workspace.
+
+When `AJENT_IMPROVEMENT_REPOSITORY` is set, the application runs a separate improvement worker. Ownership crosses `off` before `cloud`; mode defaults to `off`, then `shadow` (proposals only) or `canary` (narrow automatic triage in one workspace). Operator routes cover control, decision review, worker health and triage metrics. Prefer those over inventing a second Mac scheduler once the live cutover gate passes.
 
 GitHub projection is dry-run by default. `--apply` is explicit publication authority for the fixed sanitized projection into the named repository. Reporter context, error bodies, identities and arbitrary evidence are omitted. The issue carries a stable marker; existing issues with that marker are reused even if closed. To link an existing independently created issue, set its URL using the operator CLI instead of generating another one. Only one coordinator may use a repository; keep its durable state directory across restarts. Local file locking does not coordinate multiple machines. A create with an ambiguous result leaves a pending journal; later runs search for it and do not blindly create again. Resolve truly ambiguous cases manually from GitHub's marker before changing state.
 
