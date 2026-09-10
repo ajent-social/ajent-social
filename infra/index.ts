@@ -2,7 +2,7 @@ import * as pulumi from '@pulumi/pulumi';
 import * as aws from '@pulumi/aws';
 import * as random from '@pulumi/random';
 import * as cloudflare from '@pulumi/cloudflare';
-import { bootstrap } from './userdata';
+import { bootstrap, validateImprovementConfig } from './userdata';
 import { rollingService } from './rolling';
 
 const cfg = new pulumi.Config();
@@ -47,12 +47,25 @@ const repository = new aws.ecr.Repository('application-images',{imageTagMutabili
 const logs = new aws.cloudwatch.LogGroup('application-logs',{retentionInDays:30,tags});
 const alerts = new aws.sns.Topic('alerts',{tags});
 const openrouterSecretArn = cfg.get('openrouterSecretArn');
+const improvementRepository = cfg.get('improvementRepository');
+const improvementGitHubSecretArn = cfg.get('improvementGitHubSecretArn');
+validateImprovementConfig({improvementRepository,improvementGitHubSecretArn});
 const alertEmail = cfg.get('alertEmail');
 if(alertEmail) new aws.sns.TopicSubscription('operator',{topic:alerts.arn,protocol:'email',endpoint:alertEmail});
 for (const [name,metric,threshold,comparison] of [
     ['database-storage','FreeStorageSpace',5*1024**3,'LessThanThreshold'],
     ['database-cpu','CPUUtilization',85,'GreaterThanThreshold'],
 ] as const) new aws.cloudwatch.MetricAlarm(name,{namespace:'AWS/RDS',metricName:metric,dimensions:{DBInstanceIdentifier:db.identifier},statistic:'Average',period:300,evaluationPeriods:3,threshold,comparisonOperator:comparison,treatMissingData:'breaching',alarmActions:[alerts.arn],okActions:[alerts.arn],tags});
+// No default metric value: missing worker events must remain missing even when
+// unrelated application traffic continues. Minimum catches any degraded replica.
+if(improvementRepository) {
+    const metricName=`ImprovementWorkerHealthy-${stack}`;
+    const heartbeat=new aws.cloudwatch.LogMetricFilter('improvement-worker-health',{logGroupName:logs.name,pattern:'{ $.event = "improvement_worker" && ($.healthy = 0 || $.healthy = 1) }',metricTransformation:{name:metricName,namespace:'Ajent/Production',value:'$.healthy'}});
+    new aws.cloudwatch.MetricAlarm('improvement-worker-stalled',{namespace:'Ajent/Production',metricName,statistic:'Minimum',period:60,evaluationPeriods:5,datapointsToAlarm:5,threshold:1,comparisonOperator:'LessThanThreshold',treatMissingData:'breaching',alarmActions:[alerts.arn],okActions:[alerts.arn],tags},{dependsOn:[heartbeat]});
+    const dueMetric=`ImprovementWorkerOldestDueSeconds-${stack}`;
+    const due=new aws.cloudwatch.LogMetricFilter('improvement-worker-oldest-due',{logGroupName:logs.name,pattern:'{ $.event = "improvement_worker" && $.oldest_due_seconds >= 0 }',metricTransformation:{name:dueMetric,namespace:'Ajent/Production',value:'$.oldest_due_seconds'}});
+    new aws.cloudwatch.MetricAlarm('improvement-worker-overdue',{namespace:'Ajent/Production',metricName:dueMetric,statistic:'Maximum',period:60,evaluationPeriods:1,threshold:900,comparisonOperator:'GreaterThanOrEqualToThreshold',treatMissingData:'notBreaching',alarmActions:[alerts.arn],okActions:[alerts.arn],tags},{dependsOn:[due]});
+}
 let edge: ReturnType<typeof rollingService> | undefined;
 let host: aws.ec2.Instance | undefined;
 let address: aws.ec2.Eip | undefined;
@@ -60,7 +73,7 @@ if(imageDigest){
     const role = new aws.iam.Role('host',{assumeRolePolicy:aws.iam.assumeRolePolicyForPrincipal({Service:'ec2.amazonaws.com'}),tags});
     const ssm = new aws.iam.RolePolicyAttachment('ssm',{role:role.name,policyArn:'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'});
     const policy = new aws.iam.RolePolicy('runtime',{role:role.id,policy:pulumi.all([dbSecret.arn,ownerSecret.arn,repository.arn,logs.arn]).apply(([d,o,r,l])=>JSON.stringify({Version:'2012-10-17',Statement:[
-        {Effect:'Allow',Action:['secretsmanager:GetSecretValue'],Resource:[d,o,...(openrouterSecretArn ? [openrouterSecretArn] : [])]},
+        {Effect:'Allow',Action:['secretsmanager:GetSecretValue'],Resource:[d,o,...(openrouterSecretArn ? [openrouterSecretArn] : []),...(improvementGitHubSecretArn ? [improvementGitHubSecretArn] : [])]},
         {Effect:'Allow',Action:['ecr:GetAuthorizationToken'],Resource:'*'},
         {Effect:'Allow',Action:['ecr:BatchGetImage','ecr:GetDownloadUrlForLayer','ecr:BatchCheckLayerAvailability'],Resource:r},
         {Effect:'Allow',Action:['logs:CreateLogStream','logs:PutLogEvents'],Resource:`${l}:*`},
@@ -68,12 +81,12 @@ if(imageDigest){
     ]}))});
     const profile = new aws.iam.InstanceProfile('host',{role:role.name,tags});
     const ami = aws.ssm.getParameterOutput({name:'/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64'});
-    if(cfg.getBoolean('rollingService')) edge = rollingService({canonicalHostname,legacyOrigin,certificateArn,openrouterSecretArn,hostname,region,stack,tags,vpc,publicSubnet,route,appSG,profile,ami:ami.value,repository,logs,db,dbSecret,ownerSecret,imageDigest,caddyImage:caddyImage!,alerts,dependencies:[policy,ssm,dbSecretVersion,ownerSecretVersion,gateway,route]});
+    if(cfg.getBoolean('rollingService')) edge = rollingService({canonicalHostname,legacyOrigin,certificateArn,openrouterSecretArn,improvementRepository,improvementGitHubSecretArn,hostname,region,stack,tags,vpc,publicSubnet,route,appSG,profile,ami:ami.value,repository,logs,db,dbSecret,ownerSecret,imageDigest,caddyImage:caddyImage!,alerts,dependencies:[policy,ssm,dbSecretVersion,ownerSecretVersion,gateway,route]});
     if(!cfg.getBoolean('retireLegacyHost')) {
     host = new aws.ec2.Instance('application-host',{ami:ami.value,instanceType:'t4g.small',subnetId:publicSubnet.id,vpcSecurityGroupIds:[appSG.id],iamInstanceProfile:profile.name,
         associatePublicIpAddress:true,metadataOptions:{httpTokens:'required',httpEndpoint:'enabled',httpPutResponseHopLimit:2},
         rootBlockDevice:{encrypted:true,volumeType:'gp3',volumeSize:20},userDataReplaceOnChange:true,
-        userData:pulumi.all([db.address,dbSecret.arn,ownerSecret.arn,repository.repositoryUrl,logs.name]).apply(([dbHost,dbArn,ownerArn,repo,logGroup])=>bootstrap({openrouterSecretArn,hostname,region,dbHost,dbArn,ownerArn,image:`${repo}@${imageDigest}`,caddyImage:caddyImage!,logGroup,stack})),tags,
+        userData:pulumi.all([db.address,dbSecret.arn,ownerSecret.arn,repository.repositoryUrl,logs.name]).apply(([dbHost,dbArn,ownerArn,repo,logGroup])=>bootstrap({openrouterSecretArn,improvementRepository,improvementGitHubSecretArn,hostname,region,dbHost,dbArn,ownerArn,image:`${repo}@${imageDigest}`,caddyImage:caddyImage!,logGroup,stack})),tags,
     },{dependsOn:[policy,ssm,dbSecretVersion,ownerSecretVersion,gateway,route]});
     address = new aws.ec2.Eip('application-address',{domain:'vpc',instance:host.id,tags});
     new aws.cloudwatch.MetricAlarm('host-status',{namespace:'AWS/EC2',metricName:'StatusCheckFailed',dimensions:{InstanceId:host.id},statistic:'Maximum',period:60,evaluationPeriods:2,threshold:1,comparisonOperator:'GreaterThanOrEqualToThreshold',treatMissingData:'breaching',alarmActions:[alerts.arn],tags});

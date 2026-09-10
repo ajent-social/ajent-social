@@ -47,7 +47,7 @@ func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	sql, err := os.ReadFile(filepath.Join("..", "..", "migrations", "015_improvement_jobs.sql"))
+	sql, err := os.ReadFile(filepath.Join("..", "..", "migrations", "017_improvement_jobs.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}

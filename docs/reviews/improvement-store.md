@@ -1,6 +1,6 @@
 # Durable improvement store verification
 
-T30.3 and T30.4 storage primitives, 2026-09-08. Migration 015 stores unique
+T30.3 and T30.4 storage primitives, 2026-09-08. Migration 017 stores unique
 repository/report/operation/version keys, safe marker-only intents, database-time
 leases and generation fencing. It deliberately has no report foreign key so
 unresolved external-effect tombstones survive private report retention.

@@ -3,6 +3,7 @@ package main
 import (
 	"ajent/internal/api"
 	"ajent/internal/bootstrap"
+	"ajent/internal/improvements"
 	"ajent/internal/jobs"
 	"ajent/internal/store"
 	"ajent/internal/telemetry"
@@ -118,6 +119,36 @@ func main() {
 		w.Write([]byte("ok"))
 	})
 	jobsDone := jobs.Start(ctx, db.Pool)
+	var improvementDone <-chan struct{}
+	closedImprovement := make(chan struct{})
+	close(closedImprovement)
+	improvementDone = closedImprovement
+	if repo := strings.TrimSpace(os.Getenv("AJENT_IMPROVEMENT_REPOSITORY")); repo != "" {
+		if err := improvements.EnsureControl(ctx, db.Pool, repo); err != nil {
+			log.Fatal("invalid improvement repository")
+		}
+		var publisher improvements.IssuePublisher
+		cfg := improvements.GitHubConfig{Repository: repo}
+		if file := strings.TrimSpace(os.Getenv("AJENT_IMPROVEMENT_GITHUB_TOKEN_FILE")); file != "" {
+			cfg.TokenFile = file
+		} else if os.Getenv("AJENT_IMPROVEMENT_GITHUB_TOKEN") != "" {
+			cfg.TokenEnv = "AJENT_IMPROVEMENT_GITHUB_TOKEN"
+		}
+		if cfg.TokenFile != "" || cfg.TokenEnv != "" {
+			gh, err := improvements.NewGitHub(cfg)
+			if err != nil {
+				log.Fatal("invalid improvement GitHub credentials")
+			}
+			publisher = gh
+		} else {
+			slog.Warn("improvement worker missing GitHub credentials", "event", "improvement_worker", "healthy", 0, "outcome", "github_not_configured")
+		}
+		worker, err := improvements.NewWorker(db.Pool, repo, publisher)
+		if err != nil {
+			log.Fatal("invalid improvement worker configuration")
+		}
+		improvementDone = worker.Start(ctx)
+	}
 	srv := &http.Server{Addr: *addr, Handler: headers(limit(m, trusted), m), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	shutdownDone := make(chan struct{})
 	go func() {
@@ -137,6 +168,7 @@ func main() {
 	stop()
 	<-shutdownDone
 	<-jobsDone
+	<-improvementDone
 	if err != nil && err != http.ErrServerClosed {
 		db.Pool.Close()
 		log.Fatal("HTTP listener failed: ", err)

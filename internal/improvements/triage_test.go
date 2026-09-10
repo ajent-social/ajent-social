@@ -200,7 +200,7 @@ func triageDB(t *testing.T) (*pgxpool.Pool, Control) {
 		t.Fatal(e)
 	}
 	t.Cleanup(p.Close)
-	files := []string{"001_init.sql", "002_phase_b.sql", "014_improvements.sql", "016_improvement_control.sql", "017_improvement_triage.sql"}
+	files := []string{"001_init.sql", "002_phase_b.sql", "014_improvements.sql", "018_improvement_control.sql", "019_improvement_triage.sql"}
 	for _, f := range files {
 		b, e := os.ReadFile(filepath.Join("..", "..", "migrations", f))
 		if e != nil {

@@ -52,6 +52,6 @@ Triage waves: 1-12, one worker per corresponding T31 task in order; start T31.1 
 
 Estimate: 16 hours plus 30 percent reserve, approximately 21 hours; observation up to seven days in shadow plus 24 hours canary, with partial samples reported honestly. Compare manual review effort and first-disposition latency, not report volume. A successful triage decision is not a reproduced bug or verified fix. E32/E33/E34 expand after this gate using actual review and operations needs.
 
-Progress: 2026 09 08 planned T31.1-T31.12; implementation and runtime activation not started.
+Progress: 2026 09 09 library, worker, and operator API wired on feat/improvement-triage-engine; shadow/canary live gates still open.
 
 Execution 2026 09 08: discovery/contracts completed in docs/reviews/improvement-operations-discovery.md and docs/contracts/. Implementation and live gates remain open.
