@@ -38,6 +38,17 @@ The first triage command lists a bounded page; use its cursor to continue. PATCH
 
 When `AJENT_IMPROVEMENT_REPOSITORY` is set, the application runs a separate improvement worker. Ownership crosses `off` before `cloud`; mode defaults to `off`, then `shadow` (proposals only) or `canary` (narrow automatic triage in one workspace). Operator routes cover control, decision review, worker health and triage metrics. Prefer those over inventing a second Mac scheduler once the live cutover gate passes.
 
+### Post-merge live cutover (E31)
+
+Do not flip production mode until the release that includes migrations `017`–`019` and the worker binary is deployed. Keep the Mac coordinator journal until cloud ownership is stable.
+
+1. Confirm worker health with mode still `off` and ownership still `local` (or `off` mid-transfer):
+   `python3 scripts/improvement-admin.py --credential /protected/operator.json --repository OWNER/REPO --worker-health`
+2. Transfer ownership `local → off → cloud` with optimistic versions from `--control`, then set `mode=shadow`. Shadow must record decisions with zero automated report transitions and zero GitHub writes.
+3. Review the first bounded decision page (`--decisions`); accept/change/reject only after reading evidence. Disabling (`mode=off`) must stop further proposals.
+4. After the shadow gate in E31 T31.10–T31.11, set `mode=canary` with exactly one `canary_org`. Exercise one eligible synthetic report and one uncertain report; withdraw or close synthetics afterward.
+5. Record sample size, disagreements and kill-switch exercise in release evidence. Zero traffic is inconclusive, not a pass.
+
 GitHub projection is dry-run by default. `--apply` is explicit publication authority for the fixed sanitized projection into the named repository. Reporter context, error bodies, identities and arbitrary evidence are omitted. The issue carries a stable marker; existing issues with that marker are reused even if closed. To link an existing independently created issue, set its URL using the operator CLI instead of generating another one. Only one coordinator may use a repository; keep its durable state directory across restarts. Local file locking does not coordinate multiple machines. A create with an ambiguous result leaves a pending journal; later runs search for it and do not blindly create again. Resolve truly ambiguous cases manually from GitHub's marker before changing state.
 
 The coordinator runs one bounded pass and writes an atomic `latest.json` heartbeat. A failed or incomplete pass is unknown, never healthy zero. Schedule it on one designated host; production activation and cadence are recorded separately in release evidence. The application itself runs retention and aggregate improvement metrics in its existing minute job. No transcript-reading service is involved.
