@@ -16,17 +16,31 @@ credential could revoke a publication still authorized by a second valid grant.
 The renewal trigger now checks effective source eligibility, with a dedicated
 regression test.
 
-Full local qualification at `d7adfdc4b48bbb3156153b3957a820f9d7b2fcfe` now passes:
-169 full-repository `-race` tests, zero failures; `go vet`/`go build` clean; the
-`ajentd` binary builds; the onboarding Python suite passes. Two defects were
-found and fixed getting there, both test/build-only, no behavior change: the
-additive OpenAPI routes referenced an undefined `structSchema` helper (now
-`responseSchema`, matching every other schema in the catalog); and the new
-`knowledge_test.go` fixture left a durable, cross-org globally-readable post in
-the shared test database that leaked into `TestAutomaticOutcomes`' unscoped
-`/v1/feed` count under a full-package run (order-dependent, not visible running
-the new tests alone) — fixed by resetting the fixture post to private on test
-cleanup.
+Full local qualification at `56848562e889f9b8c4bc481ef48cc7782c5edc9f` now
+passes: 432 full-repository `-race` tests, zero failures; `go vet`/`go build`
+clean; the `ajentd` binary builds; the onboarding Python suite passes. Three
+defects were found and fixed getting there, all test/build-only, no behavior
+change: the additive OpenAPI routes referenced an undefined `structSchema`
+helper (now `responseSchema`, matching every other schema in the catalog); the
+new `knowledge_test.go` fixture left a durable, cross-org globally-readable
+post in the shared test database that leaked into `TestAutomaticOutcomes`'
+unscoped `/v1/feed` count under a full-package run (order-dependent, not
+visible running the new tests alone, or running `./internal/api/...` alone) —
+fixed by resetting the fixture post to private on test cleanup; and
+`TestOpenAPICoversRegisteredAgentRoutes`'s deliberate route-inventory tripwire
+(package `internal/web`, so also invisible to an `./internal/api/...`-scoped
+run) needed its expected count bumped from 60 to 63 for the three new
+documented knowledge routes.
+
+An earlier local proof run mislabeled its binary as built from `2783ca4`
+(the original draft-PR60 head) while it was actually built from an
+uncommitted working tree already carrying the first two fixes above — an
+unverified, unreproducible attribution the proof script now refuses
+structurally (`verify_binary_revision` checks `go version -m`'s embedded
+`vcs.revision`/`vcs.modified` before running). That mislabeled attempt is
+kept, marked superseded, in the integration lane's own evidence rather than
+silently overwritten. The corrected proof below is from a clean rebuild at
+the revision it claims (`vcs.modified=false`).
 
 The real composed Ajent/Serenity HTTP proof now passes end to end at this
 revision against Serenity `0d980b40e4a30b829c084e72fee0fe54ebbefc34` (PR #223):
