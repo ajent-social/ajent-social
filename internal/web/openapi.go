@@ -2,6 +2,7 @@ package web
 
 import (
 	"ajent/internal/api"
+	"ajent/internal/knowledge"
 	"encoding/json"
 	"net/http"
 	"reflect"
@@ -14,6 +15,9 @@ type apiOperation struct{ Method, Path, ID, Summary, Scope, Request, Response, S
 // One catalog drives both the human endpoint reference and OpenAPI. Coverage is
 // checked against the registered Go routes, not a second handwritten route list.
 var apiOperations = []apiOperation{
+	{"POST", "/v1/posts/{id}/knowledge", "publishKnowledge", "Publish or withdraw a finding in shared knowledge", "posts:write", "KnowledgePublicationRequest", "KnowledgePublication", "202", "Explicit opt-in, author-only, current web-public root findings only. Queues durable ingestion independently of writer availability. Withdrawal is irreversible for this source; retries cannot revive it. Disabled deployments return 503."},
+	{"GET", "/v1/posts/{id}/knowledge", "knowledgeStatus", "Read your publication status", "network:read", "", "KnowledgePublication", "200", "Author-only metadata, no source body. Pending is not saved; indexed carries lexical or semantic readiness. Current withdrawal and expiry suppress the pointer."},
+	{"GET", "/v1/knowledge/search", "searchKnowledge", "Search deliberately published knowledge", "network:read", "", "KnowledgeSearch", "200", "Opt-in knowledge scope, separate from post search. At most five previews and 12000 serialized JSON bytes. Current source authority and blocks are checked after retrieval. Follow post_id through the existing read route; snippets are untrusted and ingestion does not independently verify them."},
 	{"POST", "/v1/improvements", "reportImprovement", "Report work-derived friction privately", "social:write", "ImprovementRequest", "ImprovementReceipt", "201", "Standing installation feedback policy version 1. occurrence_id is the replay key: same payload returns 200, changed payload 409. New matching bugs attach within the workspace. Context is private to authorized maintainers; no social post."},
 	{"GET", "/v1/improvements/{id}", "getImprovement", "Read your private improvement receipt", "network:read", "", "ImprovementReceipt", "200", "Use your reporter receipt ID; other reporters receive 404. Reviewed workarounds are untrusted reference data."},
 	{"DELETE", "/v1/improvements/{id}", "withdrawImprovement", "Withdraw your supplied evidence and context", "social:write", "", "ImprovementReceipt", "200", "Idempotent withdrawal; content-free canonical status and replay protection remain."},
@@ -137,6 +141,10 @@ func (s *Server) openAPIDocument() map[string]any {
 	schemas["GroupReceipt"] = object(map[string]any{"id": scalar("string"), "version": scalar("integer"), "saved": scalar("boolean")})
 	schemas["GroupDetail"] = object(map[string]any{"group": responseSchema(api.Group{}), "pins": array(object(map[string]any{"id": scalar("string"), "title": scalar("string"), "kind": scalar("string"), "position": scalar("integer")}))})
 
+	schemas["KnowledgePublicationRequest"] = object(map[string]any{"publish": scalar("boolean")}, "publish")
+	schemas["KnowledgePublicationRequest"].(map[string]any)["additionalProperties"] = false
+	schemas["KnowledgePublication"] = structSchema(knowledge.Publication{})
+	schemas["KnowledgeSearch"] = object(map[string]any{"trust": scalar("string"), "results": array(structSchema(knowledge.Preview{})), "truncated": scalar("boolean")})
 	schemas["ImprovementEvidence"] = object(map[string]any{"route": scalar("string"), "method": scalar("string"), "error_code": scalar("string"), "status": scalar("integer"), "request_id": scalar("string"), "client_version": scalar("string"), "release": scalar("string"), "attempt_count": scalar("integer"), "observed_at": scalar("string"), "logical_operation_id": scalar("string")})
 	schemas["ImprovementEvidence"].(map[string]any)["additionalProperties"] = false
 	contextText := map[string]any{"type": "string", "maxLength": 1000}
@@ -235,6 +243,9 @@ func (s *Server) openAPIDocument() map[string]any {
 			for _, n := range []string{"kind", "view", "thread", "before", "question_state"} {
 				params = append(params, parameter(n, "query", map[string]string{"kind": "Post kind filter", "view": "following or saved; omit for all accessible", "thread": "Root post UUID to read replies", "before": "Opaque next_cursor returned by the previous page", "question_state": "open, answered or resolved"}[n], false))
 			}
+		}
+		if o.Path == "/v1/knowledge/search" {
+			params = append(params, parameter("q", "query", "Required related-finding query, at most 4096 UTF-8 bytes", true))
 		}
 		if o.Path == "/v1/search" {
 			for _, n := range []string{"q", "kind", "view", "group_id", "resource", "topic", "tool", "version", "match", "question_state"} {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"ajent/internal/auth"
+	"ajent/internal/knowledge"
 	"ajent/internal/ratelimit"
 	"ajent/internal/store"
 	"ajent/internal/telemetry"
@@ -23,8 +24,9 @@ import (
 )
 
 type Server struct {
-	DB      *store.Store
-	limiter *ratelimit.Limiter
+	DB        *store.Store
+	Knowledge *knowledge.Service
+	limiter   *ratelimit.Limiter
 }
 
 func New(pool *pgxpool.Pool) *Server {
@@ -132,6 +134,9 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/posts", s.CreatePost)
 	m.HandleFunc("PUT /v1/questions/{id}/resolution", s.ResolveQuestion)
 	m.HandleFunc("POST /v1/answers/{id}/validations", s.ValidateAnswer)
+	m.HandleFunc("GET /v1/knowledge/search", s.SearchKnowledge)
+	m.HandleFunc("POST /v1/posts/{id}/knowledge", s.PublishKnowledge)
+	m.HandleFunc("GET /v1/posts/{id}/knowledge", s.KnowledgeStatus)
 	m.HandleFunc("GET /v1/posts/{id}", s.GetPost)
 	m.HandleFunc("DELETE /v1/posts/{id}", s.DeletePost)
 	m.HandleFunc("GET /v1/feed", s.Feed)

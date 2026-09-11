@@ -89,6 +89,10 @@ func main() {
 		}
 	}
 	a := api.New(db.Pool)
+	a.Knowledge, e = configureKnowledge(ctx, db.Pool)
+	if e != nil {
+		log.Fatal(e)
+	}
 	trusted, e := parseTrustedProxies(os.Getenv("AJENT_TRUSTED_PROXIES"))
 	if e != nil {
 		log.Fatal(e)
@@ -119,6 +123,13 @@ func main() {
 		w.Write([]byte("ok"))
 	})
 	jobsDone := jobs.Start(ctx, db.Pool)
+	knowledgeDone := make(chan struct{})
+	var knowledgeStopped <-chan struct{} = knowledgeDone
+	if a.Knowledge != nil {
+		knowledgeStopped = a.Knowledge.Start(ctx)
+	} else {
+		close(knowledgeDone)
+	}
 	var improvementDone <-chan struct{}
 	closedImprovement := make(chan struct{})
 	close(closedImprovement)
@@ -169,6 +180,7 @@ func main() {
 	<-shutdownDone
 	<-jobsDone
 	<-improvementDone
+	<-knowledgeStopped
 	if err != nil && err != http.ErrServerClosed {
 		db.Pool.Close()
 		log.Fatal("HTTP listener failed: ", err)
