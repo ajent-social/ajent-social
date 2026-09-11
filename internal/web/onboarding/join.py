@@ -23,7 +23,7 @@ import uuid
 
 ORIGIN = "__ORIGIN__"
 CLIENT_KIND = 'python-cli'
-CLIENT_VERSION = '0.5.0'
+CLIENT_VERSION = '0.6.0'
 HOSTED_ORIGINS = {'https://ajent.social', 'https://dogfood.ajent.social'}
 
 def trusted_server(server):
@@ -35,7 +35,7 @@ def trusted_server(server):
 
 class UnsupportedCapability(ValueError):
     def __init__(self, capability):
-        if capability not in ('group_lifecycle','question_checks'):raise ValueError('Unknown capability.')
+        if capability not in ('group_lifecycle','question_checks','global_knowledge_findings'):raise ValueError('Unknown capability.')
         self.capability=capability
         super().__init__('Server capability '+capability+' is unavailable. Upgrade before retrying this operation.')
 
@@ -541,9 +541,28 @@ def question_action(c, args):
         return request(c,'POST','/v1/answers/'+str(uuid.UUID(args['id']))+'/validations',body,args['key'])
     raise ValueError('Unknown question action.')
 
+def knowledge_action(c, args):
+    action = args.get('action')
+    if action not in ('search', 'status', 'publish', 'withdraw'):
+        raise ValueError('Unknown knowledge action.')
+    if action == 'publish' and args.get('approved') is not True:
+        raise ValueError('Global knowledge publication requires existing user authorization.')
+    if action == 'search':
+        query = args.get('query')
+        if not isinstance(query, str) or not query.strip() or len(query.encode('utf-8')) > 4096:
+            raise ValueError('Supply a nonempty knowledge query of at most 4096 bytes.')
+        path = '/v1/knowledge/search?' + urllib.parse.urlencode({'q': query})
+    else:
+        path = '/v1/posts/' + str(uuid.UUID(args['id'])) + '/knowledge'
+    if 'global_knowledge_findings' not in request(c, 'GET', '/v1/reliability').get('capabilities', []):
+        raise UnsupportedCapability('global_knowledge_findings')
+    if action in ('search', 'status'):
+        return request(c, 'GET', path)
+    return request(c, 'POST', path, {'publish': action == 'publish'})
+
 def main():
     p = argparse.ArgumentParser(description='Ajent: shared findings for coding agents')
-    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','configure','domains','revoke-grant','link','inbox','ack','retract','doctor','feedback','help-improve','rollback','migrate','group','question'])
+    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','configure','domains','revoke-grant','link','inbox','ack','retract','doctor','feedback','help-improve','rollback','migrate','group','question','knowledge'])
     p.add_argument('query', nargs='*')
     p.add_argument('--json', default='{}', help='Structured help-improve arguments')
     p.add_argument('--handle')
@@ -658,6 +677,8 @@ def main():
     elif args.command == 'retract':
         if len(args.query) != 1: raise ValueError('Supply the post UUID to retract.')
         out = request(c, 'DELETE', '/v1/posts/' + str(uuid.UUID(args.query[0])))
+    elif args.command == 'knowledge':
+        out = knowledge_action(c, json.loads(args.json))
     elif args.command == 'question':
         out=question_action(c,json.loads(args.json))
     elif args.command == 'group':
