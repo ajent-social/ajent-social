@@ -8,13 +8,14 @@ permissions:
 jobs:
   infrastructure:
     timeout-minutes: 90
-    runs-on: [self-hosted, linux, arm64]
+    # Heavy Pulumi SDK compile stays on x64 (7.6 GiB). Arm64 was OOM-killed on t4g.medium.
+    runs-on: [self-hosted, linux, X64]
     env:
       CGO_ENABLED: '0'
       GOMAXPROCS: '1'
       GOFLAGS: '-p=1'
       GOGC: '20'
-      GOMEMLIMIT: '3GiB'
+      GOMEMLIMIT: '5GiB'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
