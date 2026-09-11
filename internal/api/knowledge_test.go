@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,10 +18,17 @@ const knowledgeFact = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 type knowledgeBackend struct {
 	mu                 sync.Mutex
 	remembers, cancels int
+	reads              int
 	rememberErr        error
+	readErr            error
+	readUnsupported    bool
 	onRemember         func()
 	onSearch           func()
+	onRead             func()
 	inputs             []knowledge.RememberInput
+	readFact, readProv string
+	readValidUntil     string
+	readWrongID        bool
 }
 
 func (b *knowledgeBackend) Remember(_ context.Context, in knowledge.RememberInput) (knowledge.RememberResult, error) {
@@ -48,6 +56,33 @@ func (b *knowledgeBackend) Search(context.Context, string) ([]knowledge.SearchHi
 		b.onSearch()
 	}
 	return []knowledge.SearchHit{{ID: knowledgeFact, Snippet: "fixture evidence"}, {ID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Snippet: "unmapped private marker"}}, nil
+}
+func (b *knowledgeBackend) ReadExact(_ context.Context, factID string) (knowledge.ReadFactResult, error) {
+	b.mu.Lock()
+	b.reads++
+	callback, err, unsupported := b.onRead, b.readErr, b.readUnsupported
+	fact, prov, until, wrongID := b.readFact, b.readProv, b.readValidUntil, b.readWrongID
+	b.mu.Unlock()
+	if callback != nil {
+		callback()
+	}
+	if unsupported {
+		return knowledge.ReadFactResult{}, knowledge.ErrUnsupported
+	}
+	if err != nil {
+		return knowledge.ReadFactResult{}, err
+	}
+	if fact == "" {
+		fact = "Fixture: durable withdrawal\n\nA cancellation fence prevents late retries from creating withdrawn content."
+	}
+	if prov == "" {
+		prov = "fixture provenance"
+	}
+	id := factID
+	if wrongID {
+		id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	}
+	return knowledge.ReadFactResult{ProtocolVersion: 1, ID: id, Visibility: "world", Fact: fact, Provenance: prov, ValidUntil: until, ContentUntrusted: true}, nil
 }
 func setupKnowledge(t *testing.T) (*fixture, *knowledgeBackend) {
 	t.Helper()
@@ -352,6 +387,141 @@ func TestKnowledgeUnusedExpiredParentDoesNotRevokeEffectiveGrant(t *testing.T) {
 	out, err := f.s.Knowledge.Search(ctx, f.b, "cancellation")
 	if err != nil || len(out.Results) != 1 {
 		t.Fatalf("unrelated renewal canceled source: %+v %v", out, err)
+	}
+}
+
+func TestKnowledgeExactReadReturnsCanonicalFactWithoutMutatingControlState(t *testing.T) {
+	f, b := setupKnowledge(t)
+	id := f.webFinding()
+	if f.publication(id, true) != 202 {
+		t.Fatal("publish")
+	}
+	if _, err := f.s.Knowledge.ProcessOne(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	before, err := f.s.Knowledge.Status(context.Background(), f.a, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := f.request("GET", "/v1/posts/"+id+"/knowledge/exact", f.tb, "", "")
+	if w.Code != 200 {
+		t.Fatalf("exact read: %d %s", w.Code, w.Body)
+	}
+	var out knowledge.Observation
+	if json.Unmarshal(w.Body.Bytes(), &out) != nil {
+		t.Fatal("bad body")
+	}
+	if out.PostID != id || out.FactID != knowledgeFact || !out.ContentUntrusted || out.Fact == "" || out.Provenance == "" {
+		t.Fatalf("unexpected observation: %+v", out)
+	}
+	if b.reads != 1 {
+		t.Fatalf("reads=%d", b.reads)
+	}
+	after, err := f.s.Knowledge.Status(context.Background(), f.a, id)
+	if err != nil || after != before {
+		t.Fatalf("read mutated control state: %+v -> %+v (%v)", before, after, err)
+	}
+}
+
+func TestKnowledgeExactReadMissingForgedAndMismatchedFactID(t *testing.T) {
+	f, b := setupKnowledge(t)
+	if w := f.request("GET", "/v1/posts/not-a-uuid/knowledge/exact", f.tb, "", ""); w.Code != 404 {
+		t.Fatalf("forged id: %d", w.Code)
+	}
+	if w := f.request("GET", "/v1/posts/"+uuid.NewString()+"/knowledge/exact", f.tb, "", ""); w.Code != 404 {
+		t.Fatalf("missing id: %d", w.Code)
+	}
+	id := f.webFinding()
+	if f.publication(id, true) != 202 {
+		t.Fatal("publish")
+	}
+	if _, err := f.s.Knowledge.ProcessOne(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	b.readWrongID = true
+	if w := f.request("GET", "/v1/posts/"+id+"/knowledge/exact", f.tb, "", ""); w.Code != 503 {
+		t.Fatalf("mismatched fact id admitted: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestKnowledgeExactReadRejectsUnpublishedSourceBeforeContactingBackend(t *testing.T) {
+	f, b := setupKnowledge(t)
+	private := f.post(f.ta, "", "")
+	if w := f.request("GET", "/v1/posts/"+private+"/knowledge/exact", f.tb, "", ""); w.Code != 404 {
+		t.Fatalf("unpublished source admitted: %d", w.Code)
+	}
+	grouped := f.post(f.ta, f.g, "")
+	if w := f.request("GET", "/v1/posts/"+grouped+"/knowledge/exact", f.ta, "", ""); w.Code != 404 {
+		t.Fatalf("group source admitted: %d", w.Code)
+	}
+	if b.reads != 0 {
+		t.Fatal("backend contacted before authorization")
+	}
+}
+
+func TestKnowledgeExactReadOlderBackendMissingExtensionIsHonestlyUnsupported(t *testing.T) {
+	f, b := setupKnowledge(t)
+	id := f.webFinding()
+	if f.publication(id, true) != 202 {
+		t.Fatal("publish")
+	}
+	if _, err := f.s.Knowledge.ProcessOne(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	b.readUnsupported = true
+	w := f.request("GET", "/v1/posts/"+id+"/knowledge/exact", f.tb, "", "")
+	if w.Code != 503 {
+		t.Fatalf("got %d %s", w.Code, w.Body)
+	}
+	var out map[string]string
+	if json.Unmarshal(w.Body.Bytes(), &out) != nil || out["error"] != "knowledge_unsupported" {
+		t.Fatalf("wrong error code: %+v", out)
+	}
+}
+
+func TestKnowledgeExactReadWithdrawalDuringRPCSuppressesBody(t *testing.T) {
+	f, b := setupKnowledge(t)
+	id := f.webFinding()
+	if f.publication(id, true) != 202 {
+		t.Fatal("publish")
+	}
+	if _, err := f.s.Knowledge.ProcessOne(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	b.onRead = func() {
+		if f.publication(id, false) != 202 {
+			t.Error("withdraw failed")
+		}
+	}
+	w := f.request("GET", "/v1/posts/"+id+"/knowledge/exact", f.tb, "", "")
+	if w.Code != 404 {
+		t.Fatalf("withdrawn body leaked: %d %s", w.Code, w.Body)
+	}
+	if strings.Contains(w.Body.String(), "cancellation fence") {
+		t.Fatal("fact content leaked in a suppressed response")
+	}
+}
+
+func TestKnowledgeExactReadCredentialRevokedDuringRPCIsRejected(t *testing.T) {
+	f, b := setupKnowledge(t)
+	id := f.webFinding()
+	if f.publication(id, true) != 202 {
+		t.Fatal("publish")
+	}
+	if _, err := f.s.Knowledge.ProcessOne(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	b.onRead = func() {
+		if _, err := f.s.DB.Pool.Exec(context.Background(), `UPDATE credentials SET revoked_at=now() WHERE agent_id=$1`, f.b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := f.request("GET", "/v1/posts/"+id+"/knowledge/exact", f.tb, "", "")
+	if w.Code != 401 {
+		t.Fatalf("revoked credential still admitted: %d %s", w.Code, w.Body)
+	}
+	if strings.Contains(w.Body.String(), "cancellation fence") {
+		t.Fatal("fact content leaked after credential revocation")
 	}
 }
 

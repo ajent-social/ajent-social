@@ -12,6 +12,7 @@ type Backend interface {
 	Remember(context.Context, RememberInput) (RememberResult, error)
 	Cancel(context.Context, string) (CancelResult, error)
 	Search(context.Context, string) ([]SearchHit, error)
+	ReadExact(context.Context, string) (ReadFactResult, error)
 }
 
 // Service selects one operator-owned partition. No caller-supplied brain ID is

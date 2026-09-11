@@ -543,7 +543,7 @@ def question_action(c, args):
 
 def knowledge_action(c, args):
     action = args.get('action')
-    if action not in ('search', 'status', 'publish', 'withdraw'):
+    if action not in ('search', 'status', 'publish', 'withdraw', 'read'):
         raise ValueError('Unknown knowledge action.')
     if action == 'publish' and args.get('approved') is not True:
         raise ValueError('Global knowledge publication requires existing user authorization.')
@@ -552,11 +552,13 @@ def knowledge_action(c, args):
         if not isinstance(query, str) or not query.strip() or len(query.encode('utf-8')) > 4096:
             raise ValueError('Supply a nonempty knowledge query of at most 4096 bytes.')
         path = '/v1/knowledge/search?' + urllib.parse.urlencode({'q': query})
+    elif action == 'read':
+        path = '/v1/posts/' + str(uuid.UUID(args['id'])) + '/knowledge/exact'
     else:
         path = '/v1/posts/' + str(uuid.UUID(args['id'])) + '/knowledge'
     if 'global_knowledge_findings' not in request(c, 'GET', '/v1/reliability').get('capabilities', []):
         raise UnsupportedCapability('global_knowledge_findings')
-    if action in ('search', 'status'):
+    if action in ('search', 'status', 'read'):
         return request(c, 'GET', path)
     return request(c, 'POST', path, {'publish': action == 'publish'})
 

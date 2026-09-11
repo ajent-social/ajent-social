@@ -18,11 +18,17 @@ import (
 const testFactID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 func protocolWriter(t *testing.T, cancellation bool, call func(string, json.RawMessage) (any, bool)) *Serenity {
+	return protocolReader(t, cancellation, false, call)
+}
+func protocolReader(t *testing.T, cancellation, readExtension bool, call func(string, json.RawMessage) (any, bool)) *Serenity {
 	t.Helper()
 	server := mcp.NewServer(&mcp.Implementation{Name: "protocol-fixture", Version: "1"}, nil)
 	names := []string{"remember", "recall"}
 	if cancellation {
 		names = append(names, "cancel_memory_operation")
+	}
+	if readExtension {
+		names = append(names, "read_memory_fact")
 	}
 	for _, name := range names {
 		schema := map[string]any{"type": "object", "properties": map[string]any{"operation_key": map[string]any{"type": "string"}}}
@@ -149,5 +155,82 @@ func TestSerenityEndpointAndRedirectContainCredentials(t *testing.T) {
 	}
 	if received.Load() {
 		t.Fatal("writer credential followed redirect")
+	}
+}
+
+func TestSerenityReadExactRequiresExtensionAndValidFactID(t *testing.T) {
+	adapter := protocolReader(t, true, false, func(name string, _ json.RawMessage) (any, bool) {
+		t.Errorf("older backend without the extension was called: %s", name)
+		return nil, true
+	})
+	if _, err := adapter.ReadExact(context.Background(), testFactID); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("got %v", err)
+	}
+	adapter = protocolReader(t, true, true, func(name string, _ json.RawMessage) (any, bool) {
+		t.Errorf("invalid fact ID reached the backend: %s", name)
+		return nil, true
+	})
+	for _, bad := range []string{"", "not-hex", strings.ToUpper(testFactID), testFactID[:63]} {
+		if _, err := adapter.ReadExact(context.Background(), bad); !errors.Is(err, ErrUnsupported) {
+			t.Fatalf("%q: got %v", bad, err)
+		}
+	}
+}
+
+func TestSerenityReadExactValidatesProtocolBeforeTrustingContent(t *testing.T) {
+	otherFact := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	for _, mode := range []string{"wrong_id", "group_visibility", "not_content_untrusted", "wrong_protocol_version", "ok"} {
+		t.Run(mode, func(t *testing.T) {
+			adapter := protocolReader(t, true, true, func(string, json.RawMessage) (any, bool) {
+				out := ReadFactResult{ProtocolVersion: 1, ID: testFactID, Fact: "canonical fact", Visibility: "world", Provenance: "post:1", ContentUntrusted: true}
+				switch mode {
+				case "wrong_id":
+					out.ID = otherFact
+				case "group_visibility":
+					out.Visibility = "group"
+				case "not_content_untrusted":
+					out.ContentUntrusted = false
+				case "wrong_protocol_version":
+					out.ProtocolVersion = 2
+				}
+				return out, false
+			})
+			got, err := adapter.ReadExact(context.Background(), testFactID)
+			if mode == "ok" {
+				if err != nil || got.ID != testFactID || got.Fact != "canonical fact" || !got.ContentUntrusted {
+					t.Fatalf("%+v %v", got, err)
+				}
+				return
+			}
+			if !errors.Is(err, ErrUnavailable) {
+				t.Fatalf("%s: got %v", mode, err)
+			}
+		})
+	}
+}
+
+func TestSerenityReadExactProviderErrorNeverLeaksContent(t *testing.T) {
+	adapter := protocolReader(t, true, true, func(string, json.RawMessage) (any, bool) {
+		return map[string]any{"error": "internal", "message": "PRIVATE-CANARY"}, true
+	})
+	_, err := adapter.ReadExact(context.Background(), testFactID)
+	if !errors.Is(err, ErrUnavailable) || strings.Contains(err.Error(), "PRIVATE-CANARY") {
+		t.Fatalf("unsafe error %v", err)
+	}
+}
+
+func TestSerenityReadExactMalformedOrOversizeOutputRejected(t *testing.T) {
+	for _, mode := range []string{"malformed", "oversize"} {
+		t.Run(mode, func(t *testing.T) {
+			adapter := protocolReader(t, true, true, func(string, json.RawMessage) (any, bool) {
+				if mode == "malformed" {
+					return map[string]any{"protocol_version": "not-a-number"}, false
+				}
+				return ReadFactResult{ProtocolVersion: 1, ID: testFactID, Fact: strings.Repeat("a", 1<<20), Visibility: "world", ContentUntrusted: true}, false
+			})
+			if _, err := adapter.ReadExact(context.Background(), testFactID); !errors.Is(err, ErrUnavailable) {
+				t.Fatalf("%s: got %v", mode, err)
+			}
+		})
 	}
 }
