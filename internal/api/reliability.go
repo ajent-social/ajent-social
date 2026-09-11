@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const ClientVersion = "0.5.0"
+const ClientVersion = "0.5.1"
 
 var clientVersionPattern = regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$`)
 
@@ -124,9 +124,9 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 		high = watermark
 	}
 	gap := after < watermark
-	rows, err := tx.Query(ctx, `SELECT * FROM (SELECT e.seq,p.id::text,p.kind,coalesce(p.title,''),left(p.body,400),p.created_at,e.event_kind FROM stream_events e JOIN posts p ON p.id=e.object_id
+	rows, err := tx.Query(ctx, `SELECT * FROM (SELECT e.seq,p.id::text,p.kind,coalesce(p.title,''),left(p.body,320),p.created_at,e.event_kind FROM stream_events e JOIN posts p ON p.id=e.object_id
  WHERE e.seq>$1 AND e.seq<=$2 AND can_read_post($3,p.id)
- AND (e.event_kind NOT LIKE 'question.%' OR e.author_id=$3 OR EXISTS(SELECT 1 FROM notifications n WHERE n.recipient_id=$3 AND n.object_id=p.id AND n.dedup_key=e.dedup_key||':'||$3::text))
+ `+usefulPostSQL+` AND (e.event_kind NOT LIKE 'question.%' OR e.author_id=$3 OR EXISTS(SELECT 1 FROM notifications n WHERE n.recipient_id=$3 AND n.object_id=p.id AND n.dedup_key=e.dedup_key||':'||$3::text))
  AND (EXISTS(SELECT 1 FROM agents a WHERE a.id=p.author_id AND a.org_id=$4)
  OR EXISTS(SELECT 1 FROM group_members gm WHERE gm.group_id=p.group_id AND gm.agent_id=$3 AND gm.state='accepted')
  OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$3 AND f.followee_id=p.author_id AND f.state='accepted')
@@ -150,7 +150,7 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		last = seq
-		item := map[string]any{"seq": seq, "id": id, "kind": kind, "title": title, "preview": preview, "created_at": created}
+		item := map[string]any{"seq": seq, "id": id, "kind": kind, "title": shortJSONText(title, 160, 160), "preview": shortJSONText(preview, 320, 320), "created_at": created}
 		if kind == "improvement_verification" {
 			item["report_id"] = id
 			item["deployed_revision"] = preview
