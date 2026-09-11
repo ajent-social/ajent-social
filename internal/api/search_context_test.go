@@ -101,30 +101,32 @@ func TestSearchVisibilityPrecedesResultLimit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, mode := range []string{"", "exact"} {
-		t.Run("visible_page_match_"+mode, func(t *testing.T) {
-			q := url.Values{"q": {keyword}, "match": {mode}, "kind": {"finding"}, "resource": {"synthetic-resource"}, "topic": {"synthetic-topic"}, "tool": {"synthetic-tool"}, "version": {"1"}}
-			w := f.request("GET", "/v1/search?"+q.Encode(), f.ta, "", "")
-			if w.Code != 200 {
-				t.Fatalf("search: %d %s", w.Code, w.Body)
-			}
-			var result struct {
-				Posts   []Post `json:"posts"`
-				HasMore bool   `json:"has_more"`
-			}
-			if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
-				t.Fatal(err)
-			}
-			if len(result.Posts) != 100 || !result.HasMore {
-				t.Fatalf("private candidates displaced visible page or cap changed: count=%d has_more=%v", len(result.Posts), result.HasMore)
-			}
-			for index, post := range result.Posts {
-				wantBody := fmt.Sprintf("Synthetic candidate %d", 105-index)
-				if post.AuthorID != f.a || post.Body != wantBody {
-					t.Fatalf("result %d violated visibility or ranking: author=%s body=%q want=%q", index, post.AuthorID, post.Body, wantBody)
+	for _, limit := range []int{3, 5, 100} {
+		for _, mode := range []string{"", "exact"} {
+			t.Run(fmt.Sprintf("visible_page_%d_match_%s", limit, mode), func(t *testing.T) {
+				q := url.Values{"q": {keyword}, "limit": {fmt.Sprint(limit)}, "match": {mode}, "kind": {"finding"}, "resource": {"synthetic-resource"}, "topic": {"synthetic-topic"}, "tool": {"synthetic-tool"}, "version": {"1"}}
+				w := f.request("GET", "/v1/search?"+q.Encode(), f.ta, "", "")
+				if w.Code != 200 {
+					t.Fatalf("search: %d %s", w.Code, w.Body)
 				}
-			}
-		})
+				var result struct {
+					Posts   []Post `json:"posts"`
+					HasMore bool   `json:"has_more"`
+				}
+				if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+					t.Fatal(err)
+				}
+				if len(result.Posts) != limit || !result.HasMore {
+					t.Fatalf("private candidates displaced visible page or cap changed: count=%d has_more=%v", len(result.Posts), result.HasMore)
+				}
+				for index, post := range result.Posts {
+					wantBody := fmt.Sprintf("Synthetic candidate %d", 105-index)
+					if post.AuthorID != f.a || post.Body != wantBody {
+						t.Fatalf("result %d violated visibility or ranking: author=%s body=%q want=%q", index, post.AuthorID, post.Body, wantBody)
+					}
+				}
+			})
+		}
 	}
 	for _, field := range []string{"resource", "topic", "tool", "version"} {
 		t.Run("retains_"+field+"_filter", func(t *testing.T) {
@@ -138,6 +140,18 @@ func TestSearchVisibilityPrecedesResultLimit(t *testing.T) {
 			}
 			if w.Code != 200 || len(result.Posts) != 0 {
 				t.Fatalf("%s filter lost: status=%d results=%d", field, w.Code, len(result.Posts))
+			}
+		})
+	}
+}
+
+func TestSearchLimitValidation(t *testing.T) {
+	f := setup(t)
+	for _, limit := range []string{"0", "-1", "101", "true", "1.5"} {
+		t.Run(limit, func(t *testing.T) {
+			w := f.request("GET", "/v1/search?q=needle&limit="+url.QueryEscape(limit), f.ta, "", "")
+			if w.Code != 400 {
+				t.Fatalf("invalid limit accepted: %d", w.Code)
 			}
 		})
 	}
