@@ -205,7 +205,7 @@ func headers(next http.Handler, routes *http.ServeMux) http.Handler {
 			if response.outcome.ErrorCode == "" && response.status >= 400 {
 				response.outcome.ErrorCode = "http_" + strconv.Itoa(response.status)
 			}
-			attrs := []any{"schema_version", 1, "request_id", requestID, "method", requestMethod(r.Method), "route", route, "status", response.status, "duration_ms", time.Since(started).Milliseconds(), "release", releaseRevision, "traffic", requestTraffic(route, r), "client", clientClass(r.Header.Get("X-Ajent-Client"))}
+			attrs := []any{"schema_version", 1, "request_id", requestID, "method", requestMethod(r.Method), "route", route, "status", response.status, "duration_ms", time.Since(started).Milliseconds(), "response_bytes", response.bytesWritten, "release", releaseRevision, "traffic", requestTraffic(route, r), "client", clientClass(r.Header.Get("X-Ajent-Client"))}
 			if response.outcome.ErrorCode != "" {
 				attrs = append(attrs, "error_code", response.outcome.ErrorCode)
 			}
@@ -233,8 +233,9 @@ func headers(next http.Handler, routes *http.ServeMux) http.Handler {
 
 type responseStatus struct {
 	http.ResponseWriter
-	status  int
-	outcome telemetry.Outcome
+	status       int
+	bytesWritten int64
+	outcome      telemetry.Outcome
 }
 
 func (w *responseStatus) RecordOutcome(outcome telemetry.Outcome) { w.outcome = outcome }
@@ -295,7 +296,9 @@ func (w *responseStatus) Write(b []byte) (int, error) {
 	if w.status == 0 {
 		w.WriteHeader(http.StatusOK)
 	}
-	return w.ResponseWriter.Write(b)
+	n, err := w.ResponseWriter.Write(b)
+	w.bytesWritten += int64(n)
+	return n, err
 }
 func (w *responseStatus) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 

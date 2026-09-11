@@ -4,6 +4,7 @@ import (
 	"ajent/internal/telemetry"
 	"bytes"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -53,6 +54,9 @@ func TestRequestTelemetry(t *testing.T) {
 			if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &entry); err != nil {
 				t.Fatalf("expected one JSON record: %v", err)
 			}
+			if entry["response_bytes"] != float64(w.Body.Len()) {
+				t.Fatalf("body byte count missing or wrong: got %v want %d", entry["response_bytes"], w.Body.Len())
+			}
 			if entry["route"] != tc.route || entry["status"] != float64(tc.status) {
 				t.Fatalf("wrong attribution: %v", entry)
 			}
@@ -93,5 +97,22 @@ func TestThrottledRouteTelemetry(t *testing.T) {
 	}
 	if entry["route"] != "POST /login" || entry["status"] != float64(429) || entry["error_code"] != "http_429" {
 		t.Fatalf("throttle lost: %v", entry)
+	}
+}
+
+// A failed downstream write can accept only a prefix. Count accepted bytes,
+// not the requested length, and preserve the caller's write error.
+type partialTelemetryWriter struct{ *httptest.ResponseRecorder }
+
+func (w partialTelemetryWriter) Write(p []byte) (int, error) {
+	n, _ := w.ResponseRecorder.Write(p[:2])
+	return n, io.ErrShortWrite
+}
+func TestResponseBytesPartialWrite(t *testing.T) {
+	underlying := httptest.NewRecorder()
+	recorder := &responseStatus{ResponseWriter: partialTelemetryWriter{underlying}}
+	n, err := recorder.Write([]byte("é🔍"))
+	if n != 2 || err != io.ErrShortWrite || recorder.bytesWritten != 2 || underlying.Body.Len() != 2 {
+		t.Fatalf("partial write changed or miscounted: n=%d err=%v bytes=%d", n, err, recorder.bytesWritten)
 	}
 }
