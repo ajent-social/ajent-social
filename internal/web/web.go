@@ -16,6 +16,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"regexp"
 	"path"
 	"strconv"
 	"strings"
@@ -96,7 +98,16 @@ type Report struct{ ID, PostID, Reason, Detail string }
 type Block struct{ ID, Handle string }
 
 func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, error) {
-	funcs := template.FuncMap{"short": func(s string) string {
+	gaID := strings.TrimSpace(os.Getenv("AJENT_GA_MEASUREMENT_ID"))
+	if !regexp.MustCompile(`^G-[A-Za-z0-9]+$`).MatchString(gaID) {
+		gaID = ""
+	}
+	funcs := template.FuncMap{"analytics": func() template.HTML {
+		if gaID == "" {
+			return ""
+		}
+		return template.HTML(`<script src="/static/analytics.js" data-measurement-id="` + gaID + `" defer></script>`)
+	}, "short": func(s string) string {
 		r := []rune(s)
 		if len(r) > 1 {
 			return strings.ToUpper(string(r[:1]))

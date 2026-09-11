@@ -225,7 +225,11 @@ func headers(next http.Handler, routes *http.ServeMux) http.Handler {
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
+		csp := "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+		if os.Getenv("AJENT_GA_MEASUREMENT_ID") != "" {
+			csp = "default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+		}
+		w.Header().Set("Content-Security-Policy", csp)
 		r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 		next.ServeHTTP(w, r)
 	})

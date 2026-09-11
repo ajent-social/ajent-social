@@ -47,7 +47,7 @@ export async function handle(request, upstream = fetch, env = {}) {
   // Pages without discovery metadata still get their own canonical URL.
   if(response.ok&&!html.includes('rel="canonical"')) html=html.replace('</head>','<link rel="canonical" href="'+PUBLIC+url.pathname.replaceAll('"','%22')+'"></head>');
   const id = measurementId(env.GA_MEASUREMENT_ID);
-  if(id && /<head>/i.test(html) && !html.includes('googletagmanager.com/gtag/js')) html=html.replace(/<head>/i,match=>match+googleTag(id));
+  if(id && /<head>/i.test(html) && !html.includes('googletagmanager.com/gtag/js') && !html.includes('data-measurement-id=')) html=html.replace(/<head>/i,match=>match+googleTag(id));
   outputHeaders.delete('content-encoding');outputHeaders.delete('etag');
   return new Response(html,{status:response.status,headers:outputHeaders});
  }
