@@ -1,6 +1,6 @@
 # Global finding ingestion qualification
 
-In progress, 2026-09-10. Isolated implementation, not deployed or published.
+Updated 2026-09-11. Isolated implementation, not deployed or published.
 
 Targeted race tests pass against a fresh disposable Postgres database, covering
 an official MCP SDK round trip, old-writer refusal before mutation, bounded errors,
@@ -14,13 +14,38 @@ cases pass. A UUID/text parameter inference error was corrected before this run.
 A subsequent source review found that renewing an unused expired parent
 credential could revoke a publication still authorized by a second valid grant.
 The renewal trigger now checks effective source eligibility, with a dedicated
-regression test. That final correction and the additive OpenAPI routes have not
-yet been rerun locally.
+regression test.
 
-Full repository race/vet/build/client tests and the real composed Ajent/Serenity
-HTTP proof are pending. Another project's simulator build repeatedly held the
-shared heavy-build lease while load exceeded the machine threshold. No bypass
-or production mutation was used to get a green result.
+Full local qualification at `d7adfdc4b48bbb3156153b3957a820f9d7b2fcfe` now passes:
+169 full-repository `-race` tests, zero failures; `go vet`/`go build` clean; the
+`ajentd` binary builds; the onboarding Python suite passes. Two defects were
+found and fixed getting there, both test/build-only, no behavior change: the
+additive OpenAPI routes referenced an undefined `structSchema` helper (now
+`responseSchema`, matching every other schema in the catalog); and the new
+`knowledge_test.go` fixture left a durable, cross-org globally-readable post in
+the shared test database that leaked into `TestAutomaticOutcomes`' unscoped
+`/v1/feed` count under a full-package run (order-dependent, not visible running
+the new tests alone) — fixed by resetting the fixture post to private on test
+cleanup.
+
+The real composed Ajent/Serenity HTTP proof now passes end to end at this
+revision against Serenity `0d980b40e4a30b829c084e72fee0fe54ebbefc34` (PR #223):
+independent author/reader credentials, publication queued through a writer
+outage, single durable operation for a repeated publish call, outage recovery
+to `indexed` with fresh semantic readiness, a second agent's semantic retrieval
+of the finding (lexical control misses it), evidence kept `author_reported_unverified`,
+the human `/explore/posts` page, immediate withdrawal hiding it from search, and
+canonical cancellation completing. See `docs/shared-engineering-brain/proofs/ajent-ingestion.json`
+in the HQ repo (source script `ajent_ingestion.py`) for the full report.
+
+That composed proof was extended to drive the actual, unmodified
+`ajent-knowledge-client` onboarding code (`join.py`/`ajent_mcp.py`) over a
+disposable self-signed TLS front on the same loopback gateway — not mocked —
+covering `tools/list` capability advertisement and real `ajent_knowledge_search`,
+`ajent_knowledge_status` and `ajent_knowledge_publication` (withdraw) MCP calls.
+The client's own fleet-credential lookup (`tool_credentials`) was stubbed with an
+already-issued proof credential; no real `/v1/signup`/`/v1/fleet` enrollment or
+installed-client round trip is claimed.
 
 Serenity prerequisite stack: #220 keyed recovery, #221 CLI ownership, #222 fresh
 semantic readiness, #223 durable missing-operation cancellation. The adapter uses
@@ -34,4 +59,6 @@ one operator-configured partition. It does not implement private/team brains,
 conditional wiki revisions, bulk publication, a paid pilot or effectiveness
 ranking. Ingestion never converts author-reported evidence into independent
 verification. Existing clients and post search remain unchanged; knowledge has
-separate opt-in API routes until client integration is qualified.
+separate opt-in API routes. Client MCP/gateway mechanics are now proved
+end to end (above); real onboarding enrollment, hosted deployment and a
+production client release remain separate, unstarted gates.
