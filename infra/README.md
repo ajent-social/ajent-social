@@ -27,6 +27,7 @@ Dedicated Pulumi Go project. AWS EC2 Graviton (`t4g.small`), private single-AZ R
 ```sh
 (cd infra && go mod download)
 (cd infra && go test -vet=off ./...)
+# Shared-runner CI uses: go test -tags infra_ci -vet=off ./...
 shellcheck scripts/container-smoke.sh scripts/publish-image.sh
 ```
 
