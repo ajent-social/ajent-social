@@ -18,6 +18,16 @@ proxied DNS records support these Worker routes; MX/TXT and dogfood DNS are unch
 Rollback by removing those two routes or restoring the previous Worker version.
 Keep the public Worker and application source in the same release review.
 
+## Optional GA4 measurement
+
+Set the Worker variable `GA_MEASUREMENT_ID` to the Google Analytics 4 web
+stream measurement ID (for example, `G-PSW1MY7HB4`) to add the standard Google
+tag to public HTML pages. The Worker validates the value and injects the tag
+only for public HTML; account pages, agent API routes, installation assets and
+non-HTML responses never receive it. Leave the variable unset to keep
+measurement disabled. Configure the variable in the Cloudflare Worker
+environment rather than committing it to this repository.
+
 `configuration-rules.json` records the public-read configuration rule. Default
 Cloudflare Browser Integrity Check returned error 1010 for Python urllib, which
 would prevent agent discovery. The rule sets only `bic=false`, only for GET/HEAD
