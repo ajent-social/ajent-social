@@ -6,31 +6,61 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"text/template"
 )
 
 // Field order matches the original TypeScript JSON so migration does not roll hosts.
 type hostConfig struct {
-	CanonicalHostname   string `json:"canonicalHostname,omitempty"`
-	LegacyOrigin        string `json:"legacyOrigin,omitempty"`
-	OpenrouterSecretARN string `json:"openrouterSecretArn,omitempty"`
-	Hostname            string `json:"hostname"`
-	Region              string `json:"region"`
-	DBHost              string `json:"dbHost"`
-	DBARN               string `json:"dbArn"`
-	OwnerARN            string `json:"ownerArn"`
-	Image               string `json:"image"`
-	CaddyImage          string `json:"caddyImage"`
-	LogGroup            string `json:"logGroup"`
-	Stack               string `json:"stack"`
-	BehindLoadBalancer  bool   `json:"behindLoadBalancer,omitempty"`
+	CanonicalHostname            string `json:"canonicalHostname,omitempty"`
+	LegacyOrigin                 string `json:"legacyOrigin,omitempty"`
+	OpenrouterSecretARN          string `json:"openrouterSecretArn,omitempty"`
+	ImprovementRepository        string `json:"improvementRepository,omitempty"`
+	ImprovementGitHubSecretARN   string `json:"improvementGitHubSecretArn,omitempty"`
+	Hostname                     string `json:"hostname"`
+	Region                       string `json:"region"`
+	DBHost                       string `json:"dbHost"`
+	DBARN                        string `json:"dbArn"`
+	OwnerARN                     string `json:"ownerArn"`
+	Image                        string `json:"image"`
+	CaddyImage                   string `json:"caddyImage"`
+	LogGroup                     string `json:"logGroup"`
+	Stack                        string `json:"stack"`
+	BehindLoadBalancer           bool   `json:"behindLoadBalancer,omitempty"`
 }
 
 //go:embed bootstrap/*.tmpl
 var bootstrapFiles embed.FS
 
+var (
+	improvementRepositoryPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_.-]{1,100}$`)
+	improvementSecretARNPattern  = regexp.MustCompile(`^arn:aws(?:-us-gov|-cn)?:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[a-zA-Z0-9/_+=.@-]+$`)
+)
+
+// Provision only a dedicated repository credential; never infer a local gh token.
+func validateImprovementConfig(repo, secretARN string) error {
+	if repo != "" {
+		parts := strings.Split(repo, "/")
+		if !improvementRepositoryPattern.MatchString(repo) || len(parts) != 2 || parts[1] == "." || parts[1] == ".." {
+			return fmt.Errorf("improvementRepository must be a lowercase owner/repository")
+		}
+	}
+	if secretARN != "" {
+		if repo == "" {
+			return fmt.Errorf("improvementGitHubSecretArn requires improvementRepository")
+		}
+		if !improvementSecretARNPattern.MatchString(secretARN) {
+			return fmt.Errorf("improvementGitHubSecretArn must identify one Secrets Manager secret")
+		}
+	}
+	return nil
+}
+
 func bootstrap(c hostConfig) (string, error) {
+	if err := validateImprovementConfig(c.ImprovementRepository, c.ImprovementGitHubSecretARN); err != nil {
+		return "", err
+	}
 	var encoded bytes.Buffer
 	encoder := json.NewEncoder(&encoded)
 	encoder.SetEscapeHTML(false)

@@ -1,7 +1,9 @@
 # Migration baselines
 
-The six resource manifests capture the TypeScript program from commit d847692,
-with AWS 7.44.0, Cloudflare 6.20.0, Random 4.21.1 and Pulumi 3.261.0 mocked SDKs.
+The six resource manifests capture the TypeScript program from main after the
+improvement-worker config landed (commit 7184b58 lineage), with AWS 7.44.0,
+Cloudflare 6.20.0, Random 4.21.1 and Pulumi 3.261.0 mocked SDKs. Default
+scenarios leave improvementRepository unset so worker alarms stay absent;
 They contain synthetic identifiers and secrets only. Scenarios cover foundation,
 legacy, transition (both hosts and fleet), rolling-only mode, apex certificate creation, and the settled cutover with an external certificate. All deployed
 resource types, logical names and input values are compared with the Go program.

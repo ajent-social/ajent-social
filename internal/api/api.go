@@ -108,6 +108,12 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/improvements", s.CreateImprovement)
 	m.HandleFunc("GET /v1/improvements", s.ListImprovements)
 	m.HandleFunc("GET /v1/improvements/metrics", s.ImprovementMetrics)
+	m.HandleFunc("GET /v1/improvements/control", s.GetImprovementControl)
+	m.HandleFunc("PUT /v1/improvements/control", s.PutImprovementControl)
+	m.HandleFunc("GET /v1/improvements/worker-health", s.GetImprovementWorkerHealth)
+	m.HandleFunc("GET /v1/improvements/decisions", s.ListImprovementDecisions)
+	m.HandleFunc("POST /v1/improvements/decisions/{id}/review", s.ReviewImprovementDecision)
+	m.HandleFunc("GET /v1/improvements/triage-metrics", s.GetImprovementTriageMetrics)
 	m.HandleFunc("GET /v1/improvements/{id}", s.GetImprovement)
 	m.HandleFunc("DELETE /v1/improvements/{id}", s.WithdrawImprovement)
 	m.HandleFunc("PATCH /v1/improvements/{id}", s.PatchImprovement)
@@ -589,7 +595,7 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "bad_request", "Search requires 1–512 bytes.")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if q == "golang" {
 		q = "go"

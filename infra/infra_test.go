@@ -1,15 +1,19 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"fmt"
 	"os"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 type capturedResource struct {
@@ -219,6 +223,9 @@ func TestConfigurationValidation(t *testing.T) {
 		{"valid", func(*settings) {}, false},
 		{"invalid canonical hostname", func(s *settings) { s.CanonicalHostname = "other.example" }, true}, {"foundation", func(s *settings) { s.ImageDigest = ""; s.CaddyImage = "" }, false},
 		{"region required", func(s *settings) { s.Region = "" }, true}, {"lowercase hostname", func(s *settings) { s.Hostname = "Dogfood.ajent.social" }, true}, {"shell injection", func(s *settings) { s.Hostname = "$(id).example.com" }, true}, {"digest pinned", func(s *settings) { s.ImageDigest = "latest" }, true}, {"caddy pinned", func(s *settings) { s.CaddyImage = "caddy:latest" }, true}, {"retirement guard", func(s *settings) { s.RollingService = false }, true},
+		{"improvement repository", func(s *settings) { s.ImprovementRepository = "ajent-social/ajent-social" }, false},
+		{"invalid improvement repository", func(s *settings) { s.ImprovementRepository = "Owner/repo" }, true},
+		{"secret requires repository", func(s *settings) { s.ImprovementGitHubSecretARN = "arn:aws:secretsmanager:us-west-2:123456789012:secret:token" }, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := valid
@@ -228,6 +235,150 @@ func TestConfigurationValidation(t *testing.T) {
 				t.Fatalf("validation error=%v; want error=%v", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestImprovementWorkerDisabledHasNoAlarmsOrSecretAccess(t *testing.T) {
+	s := settings{Hostname: "dogfood.ajent.social", Region: "us-west-2", Stack: "test", ImageDigest: "sha256:" + strings.Repeat("a", 64), CaddyImage: "caddy@sha256:" + strings.Repeat("b", 64)}
+	mocks := &infraMocks{protected: map[string]bool{}, secretInputs: map[string]bool{}}
+	if err := pulumi.RunErr(func(ctx *pulumi.Context) error { return deploy(ctx, s) }, pulumi.WithMocks("ajent-infra", "disabled-test", mocks)); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range mocks.resources {
+		if strings.HasPrefix(r.Name, "improvement-worker-") {
+			t.Fatalf("unexpected improvement resource %s/%s", r.Type, r.Name)
+		}
+	}
+	var runtime *capturedResource
+	for i := range mocks.resources {
+		if mocks.resources[i].Name == "runtime" && mocks.resources[i].Type == "aws:iam/rolePolicy:RolePolicy" {
+			runtime = &mocks.resources[i]
+			break
+		}
+	}
+	if runtime == nil {
+		t.Fatal("runtime policy missing")
+	}
+	policy := jsonValue(t, runtime.Inputs["policy"]).(map[string]any)
+	statements := policy["Statement"].([]any)
+	var secretAccess map[string]any
+	for _, raw := range statements {
+		stmt := raw.(map[string]any)
+		actions := stmt["Action"].([]any)
+		for _, action := range actions {
+			if action == "secretsmanager:GetSecretValue" {
+				secretAccess = stmt
+			}
+		}
+	}
+	if secretAccess == nil {
+		t.Fatal("secret access statement missing")
+	}
+	got := jsonValue(t, secretAccess["Resource"])
+	want := jsonValue(t, []string{"arn:aws:test::123:database-secret", "arn:aws:test::123:owner-secret"})
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("secret resources=%#v want %#v", got, want)
+	}
+}
+
+func TestImprovementWorkerAlarmsAndBootstrap(t *testing.T) {
+	s := settings{
+		Hostname: "dogfood.ajent.social", Region: "us-west-2", Stack: "test",
+		ImageDigest: "sha256:" + strings.Repeat("a", 64), CaddyImage: "caddy@sha256:" + strings.Repeat("b", 64),
+		OpenrouterSecretARN: "arn:chat-test", ImprovementRepository: "ajent-social/ajent-social",
+		ImprovementGitHubSecretARN: "arn:aws:secretsmanager:us-west-2:123456789012:secret:improvement-test",
+		RollingService: true, RetireLegacyHost: true,
+	}
+	mocks := &infraMocks{protected: map[string]bool{}, secretInputs: map[string]bool{}}
+	if err := pulumi.RunErr(func(ctx *pulumi.Context) error { return deploy(ctx, s) }, pulumi.WithMocks("ajent-infra", "improvement-test", mocks)); err != nil {
+		t.Fatal(err)
+	}
+	var heartbeat, stalled, overdue *capturedResource
+	for i := range mocks.resources {
+		r := &mocks.resources[i]
+		switch r.Name {
+		case "improvement-worker-health":
+			heartbeat = r
+		case "improvement-worker-stalled":
+			stalled = r
+		case "improvement-worker-overdue":
+			overdue = r
+		}
+	}
+	if heartbeat == nil || stalled == nil || overdue == nil {
+		t.Fatal("improvement worker filters/alarms missing")
+	}
+	if !strings.Contains(fmt.Sprint(heartbeat.Inputs["pattern"]), "improvement_worker") {
+		t.Fatalf("unexpected heartbeat pattern: %#v", heartbeat.Inputs["pattern"])
+	}
+	if stalled.Inputs["period"] != 60.0 && stalled.Inputs["period"] != float64(60) && stalled.Inputs["period"] != 60 {
+		// pulumi mocks may deliver ints or float64
+		if fmt.Sprint(stalled.Inputs["period"]) != "60" {
+			t.Fatalf("stalled period=%#v", stalled.Inputs["period"])
+		}
+	}
+	if fmt.Sprint(stalled.Inputs["evaluationPeriods"]) != "5" || fmt.Sprint(stalled.Inputs["datapointsToAlarm"]) != "5" {
+		t.Fatalf("stalled windows=%#v %#v", stalled.Inputs["evaluationPeriods"], stalled.Inputs["datapointsToAlarm"])
+	}
+	if stalled.Inputs["statistic"] != "Minimum" || stalled.Inputs["treatMissingData"] != "breaching" {
+		t.Fatalf("stalled statistic/missing=%#v %#v", stalled.Inputs["statistic"], stalled.Inputs["treatMissingData"])
+	}
+	if fmt.Sprint(overdue.Inputs["threshold"]) != "900" || overdue.Inputs["statistic"] != "Maximum" || overdue.Inputs["treatMissingData"] != "notBreaching" {
+		t.Fatalf("overdue inputs=%#v", overdue.Inputs)
+	}
+	var runtime *capturedResource
+	var template *capturedResource
+	for i := range mocks.resources {
+		r := &mocks.resources[i]
+		if r.Name == "runtime" && r.Type == "aws:iam/rolePolicy:RolePolicy" {
+			runtime = r
+		}
+		if r.Name == "application-fleet" && r.Type == "aws:ec2/launchTemplate:LaunchTemplate" {
+			template = r
+		}
+	}
+	if runtime == nil || template == nil {
+		t.Fatal("runtime policy or launch template missing")
+	}
+	policy := jsonValue(t, runtime.Inputs["policy"]).(map[string]any)
+	var secretAccess map[string]any
+	for _, raw := range policy["Statement"].([]any) {
+		stmt := raw.(map[string]any)
+		for _, action := range stmt["Action"].([]any) {
+			if action == "secretsmanager:GetSecretValue" {
+				secretAccess = stmt
+			}
+		}
+	}
+	resources := jsonValue(t, secretAccess["Resource"]).([]any)
+	if resources[len(resources)-1] != s.ImprovementGitHubSecretARN {
+		t.Fatalf("improvement secret not last resource: %#v", resources)
+	}
+	encoded := template.Inputs["userData"].(string)
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	launch := string(raw)
+	files := regexp.MustCompile(`printf '%s' '([^']+)' \| base64 -d > (\S+)`).FindAllStringSubmatch(launch, -1)
+	var configJSON []byte
+	for _, file := range files {
+		if strings.HasSuffix(file[2], "config.json") {
+			configJSON, err = base64.StdEncoding.DecodeString(file[1])
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if configJSON == nil {
+		t.Fatal("config.json missing from bootstrap")
+	}
+	var config map[string]any
+	if err := json.Unmarshal(configJSON, &config); err != nil {
+		t.Fatal(err)
+	}
+	if config["improvementRepository"] != "ajent-social/ajent-social" || config["improvementGitHubSecretArn"] != s.ImprovementGitHubSecretARN {
+		t.Fatalf("bootstrap config=%#v", config)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 type settings struct {
 	CanonicalHostname, CertificateARN                                                                   string
 	Hostname, Region, Stack, ImageDigest, CaddyImage, OpenrouterSecretARN, AlertEmail, CloudflareZoneID string
+	ImprovementRepository, ImprovementGitHubSecretARN                                                   string
 	RollingService, RetireLegacyHost                                                                    bool
 }
 
@@ -24,7 +25,7 @@ func loadSettings(ctx *pulumi.Context) (settings, error) {
 		}
 		hostname = "ajent.social"
 	}
-	s := settings{CanonicalHostname: c.Get("canonicalHostname"), CertificateARN: c.Get("certificateArn"), Hostname: hostname, Region: config.Get(ctx, "aws:region"), Stack: ctx.Stack(), ImageDigest: c.Get("imageDigest"), CaddyImage: c.Get("caddyImage"), OpenrouterSecretARN: c.Get("openrouterSecretArn"), AlertEmail: c.Get("alertEmail"), CloudflareZoneID: c.Get("cloudflareZoneId")}
+	s := settings{CanonicalHostname: c.Get("canonicalHostname"), CertificateARN: c.Get("certificateArn"), Hostname: hostname, Region: config.Get(ctx, "aws:region"), Stack: ctx.Stack(), ImageDigest: c.Get("imageDigest"), CaddyImage: c.Get("caddyImage"), OpenrouterSecretARN: c.Get("openrouterSecretArn"), ImprovementRepository: c.Get("improvementRepository"), ImprovementGitHubSecretARN: c.Get("improvementGitHubSecretArn"), AlertEmail: c.Get("alertEmail"), CloudflareZoneID: c.Get("cloudflareZoneId")}
 	for key, dst := range map[string]*bool{"rollingService": &s.RollingService, "retireLegacyHost": &s.RetireLegacyHost} {
 		value, err := c.Try(key)
 		if errors.Is(err, config.ErrMissingVar) {
@@ -59,5 +60,5 @@ func (s settings) validate() error {
 	if s.Region == "" {
 		return fmt.Errorf("set aws:region explicitly")
 	}
-	return nil
+	return validateImprovementConfig(s.ImprovementRepository, s.ImprovementGitHubSecretARN)
 }

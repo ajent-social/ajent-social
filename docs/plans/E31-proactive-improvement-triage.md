@@ -1,0 +1,57 @@
+# E31 -- Triage new reports without another reporting chore
+
+fidelity: executable
+
+Acceptance: A bounded production agent examines new eligible reports without a founder prompt, links clear existing issues or applies an evaluated low-risk triage transition, and routes uncertain cases to private review. It cannot publish private context, execute report instructions or declare a fix verified. Its deadline, budget, decisions and disable path are observable. Production completion depends on T31.12 and E30's live gate.
+
+## Context and use cases
+
+Engineering and operations, 2026 09 08. UC-O03 (P0) adds proactive evidence review; UC-O04 (P0) lets an operator inspect, override and stop automation. Both PLANNED. Reuse E28/E29 operator transitions, version checks, private receipts and fixed GitHub projection. See ADR 004, E30 and improvement-operations-usecases.json. The worker reduces manual first-pass review; it does not replace engineering reproduction or implement fixes.
+
+## Work breakdown
+
+- [x] T31.1 Freeze bounded triage policy and evaluation cases  Owner: product/api  Est: 90m  verifies: [UC-O03, UC-O04]  blocked-by: [T30.2]  lane: agent
+  Area: docs/contracts/improvement-triage.md, versioned evaluation fixtures. Define a 30-case controlled corpus covering valid bugs/features, expected denials, missing intent, duplicate suggestions, cross-workspace privacy, malicious instructions, withdrawn context and provider failure. Record expected actions before implementation. Auto-action initially limited to eligible new -> triaged with normal/low priority and exact same-repository issue linking; access/delivery-loss gets high-priority private review. Never auto-decline, merge, ship or verify. Acceptance: every case has an evidence-backed expected action, escalation reason and allowed fields.
+  acc: [versioned triage fixtures enumerate allowed automatic transitions and mandatory review cases with expected outputs]
+- [x] T31.2 Add durable triage decisions and processing policy  Owner: api  Est: 90m  verifies: [UC-O03, UC-O04]  blocked-by: [T31.1, T30.3]
+  Area: migrations 018/019, internal/improvements decision store, operator APIs. Persist report version, evidence fingerprint, policy version, proposal, disposition, reason code and cost counters; private explanations use existing context retention/withdrawal. A report/version/policy has one active decision. Explicit mode off/shadow/canary and permitted processor fields; missing processing authority uses diagnostics-only rules. Real HTTP and DB tests cover ordinary-agent denial, revocation and stale version.
+  acc: [one report version has one active triage decision and revoked processing policy prevents further context submission]
+- [x] T31.3 Build bounded evidence and issue retrieval  Owner: integration  Est: 90m  verifies: [UC-O03]  blocked-by: [T31.2, T30.5]
+  Area: internal/improvements triage context builder. At most five retained samples, 8 KiB total context and ten issue candidates from the configured repository. Check current report state immediately before collection; no URL following from report text, unrelated repository access or cross-workspace evidence. Deterministic signatures and existing links precede model suggestions. HTTP fixtures prove request allowlist, truncation and failure handling.
+  acc: [triage retrieval obeys repository and context bounds and excludes withdrawn or foreign-workspace evidence]
+- [x] T31.4 Implement typed proposal engine and optional model adapter  Owner: agent-runtime  Est: 90m  verifies: [UC-O03, UC-O04]  blocked-by: [T31.3]
+  Area: internal/improvements proposal interface, provider adapter and tests. Deterministic baseline plus optional configured model, strict JSON schema, fixed action enum, cited supplied evidence indexes and issue IDs. No shell/browser/write tools exposed to the model. Reject unknown fields, invalid citations and unsupported priority changes. Fake provider HTTP tests assert body/status, malformed output, refusal, timeout and prompt-injection containment. Without permitted processor configuration, free text stays private and the worker returns rule result or needs_review.
+  acc: [hostile or malformed model output cannot invoke tools or produce an action outside the triage schema]
+- [x] T31.5 Enforce shared run and cost limits  Owner: runtime  Est: 60m  verifies: [UC-O04]  blocked-by: [T31.4]
+  Area: proposal dispatcher and PostgreSQL budget reservation. Default ten reports/pass, one call/report/version/policy, at most 2,000 output tokens/call and 60s job deadline. Monetary cap is required for model mode; initial proposed cap is USD 2/day for this worker, separate from chat. Reserve a conservative maximum before calling; timeout retains reservation until reconciled, not free retry. Unknown rate disables model calls. Test two replicas competing for last budget, cancellation and midnight boundaries.
+  acc: [concurrent workers cannot exceed the configured reserved daily model budget and exhausted budget leaves reports reviewable]
+- [x] T31.6 Add validated action application and overrides  Owner: api  Est: 90m  verifies: [UC-O03, UC-O04]  blocked-by: [T31.5, T30.6]
+  Area: internal/improvements policy evaluator and shared operator transition service. Recheck report version, withdrawal, lease generation, current policy and override before applying. Link only validated repository issue; preserve separate reporter receipts and reason audit. Human/operator edits win over stale proposals. Auto-reviewed eligible states flow into existing projection, not a new issue publisher. Real API tests assert 200/denial/conflict bodies and zero writes for forbidden actions.
+  acc: [a stale or overridden proposal cannot change a report and a permitted proposal applies once through the existing authorized transition rules]
+- [x] T31.7 Expose private review, correction and stop commands  Owner: operator-tools  Est: 60m  verifies: [UC-O04]  blocked-by: [T31.6]
+  Area: scripts/improvement-admin.py, operator decision routes and docs/improvements.md. Bounded review list with cursor, evidence availability, reason, policy version and proposed action; accept/change/reject/off operations require operator role and optimistic version. No dashboard prerequisite. Real HTTP/CLI tests cover foreign credential, stale review and global disable invalidating queued application.
+  acc: [an operator can inspect and override a queued proposal and disabling automation prevents all subsequent automated transitions]
+- [x] T31.8 Emit triage latency, coverage and escalation metrics  Owner: observability  Est: 60m  verifies: [UC-O03, UC-O04]  blocked-by: [T31.7]
+  Area: improvement metrics, structured logs, report script and AGENTS.md. Count eligible/inspected/proposed/applied/review-needed/overridden/budget-deferred with window and policy; measure p50/p90 time to first disposition and pending age. Exclude synthetic cases. No-response is not accepted triage, zero eligible reports is not 100 percent success. Test distinct repeated occurrence versus new report and expired evidence.
+  acc: [triage reporting distinguishes zero eligible reports from successful processing and excludes synthetic decisions from real quality rates]
+- [x] T31.9 Run adversarial corpus and integration regression  Owner: verification  Est: 90m  verifies: [UC-O03, UC-O04]  blocked-by: [T31.8]
+  Area: corpus, provider mocks, fresh PostgreSQL and CI. Require all 30 cases within allowed actions and zero private projection/forbidden action; every mandatory-review case escalates. Test lost lease and withdrawal during inference. Deliberately bypass the action validator, observe forbidden-action failure, restore and pass. Run gofmt, vet, scoped Python tests and integrated race suite with mini lease. Record counts and model configuration if a real model was evaluated; mocks alone do not certify that model.
+  acc: [all 30 triage cases satisfy action and privacy constraints and bypassing validation causes the intended test failure]
+- [ ] T31.10 Deploy shadow mode and capture reviewable outcomes  Owner: release  Est: 90m  verifies: [UC-O03, UC-O04]  blocked-by: [T31.9, T30.12]  lane: agent
+  Area: production config, deployed worker and private review ledger. Shadow mode cannot mutate report state or GitHub. Exercise controlled corpus through actual deployed worker; if model mode selected, evaluate the actual configured provider under its processing policy. Observe real submissions for up to seven days; review all first 20 if available, recording sample size and disagreement. Zero traffic is inconclusive and does not block the controlled safety gate or invent accuracy.
+  acc: [production shadow processing records bounded reviewable decisions while making zero automated report transitions or GitHub writes]
+- [ ] T31.11 Calibrate canary allowlist from observed errors  Owner: product/verification  Est: 60m  delivers: [versioned canary policy and observed disagreement record]  blocked-by: [T31.10]  lane: agent
+  Area: policy fixture and review evidence. Restrict automatic actions to deterministic or explicitly evaluated signatures/categories; model-only uncertain decisions remain proposals when real coverage is insufficient. Require zero forbidden actions in controlled evaluation, reviewed mismatches documented and kill switch exercised. Set escalation target: first disposition within 15 minutes while configured dependencies are available. Publish exact observed denominator and exceptions; no prevented-bug claim.
+- [ ] T31.12 Activate bounded canary and verify the loop live  Owner: release  Est: 90m  verifies: [UC-O03, UC-O04]  blocked-by: [T31.11]  lane: agent
+  Area: production policy, synthetic canary reports, release evidence and AGENTS.md. In one designated workspace, verify new report -> valid automatic triage -> one sanitized issue; uncertain report -> private review; override -> no stale application; revoked policy/budget cap -> no extra model call; disable -> no further transitions. Use isolated synthetic records and close/withdraw after verification. Observe 24 hours; record scope and dependency outages. Existing report verification/recurrence must still pass. Wider rollout requires the recorded per-category evidence, not elapsed time alone.
+  acc: [the deployed canary triages eligible new reports without a founder prompt while uncertain reports reach review and the stop switch prevents further actions]
+
+## Waves, outcomes and limits
+
+Triage waves: 1-12, one worker per corresponding T31 task in order; start T31.1 after T30.2, but no shared store/API edits concurrently with their E30 owner. Deployment T31.10 waits for T30.12. No unattended low-reasoning task contracts are certified by this plan.
+
+Estimate: 16 hours plus 30 percent reserve, approximately 21 hours; observation up to seven days in shadow plus 24 hours canary, with partial samples reported honestly. Compare manual review effort and first-disposition latency, not report volume. A successful triage decision is not a reproduced bug or verified fix. E32/E33/E34 expand after this gate using actual review and operations needs.
+
+Progress: 2026 09 10 library, worker, operator APIs, admin CLI, OpenAPI inventory, and CI-green PR #58 cover T31.1–T31.9. Live gates T31.10–T31.12 (shadow → canary) remain open after merge.
+
+Execution 2026 09 08: discovery/contracts completed in docs/reviews/improvement-operations-discovery.md and docs/contracts/. Implementation shipped in PR #58; production live gates remain open.

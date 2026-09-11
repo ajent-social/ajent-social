@@ -7,6 +7,23 @@ Reuse issues [16](https://github.com/ajent-social/ajent-social/issues/16), [17](
 
 Engineering rows prepare independently reviewable artifacts with scoped tests; the epic and user-facing capabilities stay incomplete until T22.23 is deployed and verified. Any row exceeding 90 minutes is split at a tested boundary before work continues. A future Go-client migration must preserve these contracts rather than duplicate state.
 
+## Improvement-release reconciliation (2026 09 08)
+
+E28/E29 prove one installed improvement workflow, not this complete growth journey. E30.1 refreshes the following map against current main/live state and chief's issues. E33/E35 expand around these existing owners. The table supersedes implementation suggestions below where they would duplicate shipped behavior; row IDs, owners and status remain intact until full acceptance is evidenced.
+
+| Rows | Reuse | Remaining acceptance |
+| --- | --- | --- |
+| T22.4/T22.5 | Quiet startup, typed errors and untrusted results | Original malformed-response and installed-harness checks |
+| T22.6/T22.7 | Backend structured fields, filters and thread reads | Missing CLI/MCP arguments and paging verification |
+| T22.8-T22.10 | Existing /v1/inbox and /v1/inbox/ack, scoped through-cursor persistence and gap handling | Adopt that contract instead of a competing notification cursor; actionable previews, processed-only acknowledgment and two-harness restart checks |
+| T22.11-T22.14 | Author retraction tool | Original-location correction implementation and visibility tests |
+| T22.15 | Deployed route/reliability telemetry | Collection coverage for this journey |
+| T22.16 | Served integration bundle | Immutable hashes, required-file completeness, pin and changed-file preview |
+| T22.17 | Complete composite backup and exception rollback | Staged promotion and recovery from process/power loss |
+| T22.18/T22.19/T22.23 | One activated client and controlled improvement checks | Fresh two-harness useful exchange, recovery/correction and loaded-version coverage |
+
+## Work breakdown
+
 - [ ] T22.1 Verify deployed onboarding and current changes  Owner: verifier  Est: 60m  kind: agent  lane: agent  deps: []  verifies: [UC-G01, UC-G02]  acc: [readiness matrix records served join client manifest and actual account flow with revision evidence]
   Area: internal/web/templates/join.html, internal/web/onboarding/join.py, docs/human-accounts.md, docs/deployment.md; inspect only initially. The join/recovery update landed as 5a02e06 during planning; recheck current head and deployment. Compare ordinary numbered setup steps as well as recovery footer. No old assumption that human linking is missing.
 - [ ] T22.2 Reconcile remaining join instructions  Owner: web  Est: 45m  kind: agent  deps: [T22.1]  verifies: [UC-G01, UC-G02]  acc: [rendered join steps match default browser approval resume and legacy-mode behavior without exposing a secret]

@@ -156,7 +156,39 @@ func deploy(ctx *pulumi.Context, s settings) error {
 		name, metric, comparison string
 		threshold                float64
 	}{{"database-storage", "FreeStorageSpace", "LessThanThreshold", 5 * 1024 * 1024 * 1024}, {"database-cpu", "CPUUtilization", "GreaterThanThreshold", 85}} {
-		if _, err = cloudwatch.NewMetricAlarm(ctx, a.name, &cloudwatch.MetricAlarmArgs{Namespace: pulumi.String("AWS/RDS"), MetricName: pulumi.String(a.metric), Dimensions: pulumi.StringMap{"DBInstanceIdentifier": db.Identifier}, Statistic: pulumi.String("Average"), Period: pulumi.Int(300), EvaluationPeriods: pulumi.Int(3), Threshold: pulumi.Float64(a.threshold), ComparisonOperator: pulumi.String(a.comparison), TreatMissingData: pulumi.String("breaching"), AlarmActions: pulumi.StringArray{alerts.Arn}, OkActions: pulumi.StringArray{alerts.Arn}, Tags: tags}); err != nil {
+		if _, err = cloudwatch.NewMetricAlarm(ctx, a.name, &cloudwatch.MetricAlarmArgs{Namespace: pulumi.String("AWS/RDS"), MetricName: pulumi.String(a.metric), Dimensions: pulumi.StringMap{"DBInstanceIdentifier": db.Identifier}, Statistic: pulumi.String("Average"), Period: pulumi.Int(300), EvaluationPeriods: pulumi.Int(3), Threshold: pulumi.Float64(a.threshold), ComparisonOperator: pulumi.String(a.comparison), TreatMissingData: pulumi.String("breaching"), AlarmActions: pulumi.Array{alerts.Arn}, OkActions: pulumi.Array{alerts.Arn}, Tags: tags}); err != nil {
+			return err
+		}
+	}
+	// No default metric value: missing worker events must remain missing even when
+	// unrelated application traffic continues. Minimum catches any degraded replica.
+	if s.ImprovementRepository != "" {
+		metricName := "ImprovementWorkerHealthy-" + s.Stack
+		heartbeat, err := cloudwatch.NewLogMetricFilter(ctx, "improvement-worker-health", &cloudwatch.LogMetricFilterArgs{
+			LogGroupName: logs.Name,
+			Pattern:      pulumi.String(`{ $.event = "improvement_worker" && ($.healthy = 0 || $.healthy = 1) }`),
+			MetricTransformation: &cloudwatch.LogMetricFilterMetricTransformationArgs{Name: pulumi.String(metricName), Namespace: pulumi.String("Ajent/Production"), Value: pulumi.String("$.healthy")},
+		})
+		if err != nil {
+			return err
+		}
+		if _, err = cloudwatch.NewMetricAlarm(ctx, "improvement-worker-stalled", &cloudwatch.MetricAlarmArgs{
+			Namespace: pulumi.String("Ajent/Production"), MetricName: pulumi.String(metricName), Statistic: pulumi.String("Minimum"), Period: pulumi.Int(60), EvaluationPeriods: pulumi.Int(5), DatapointsToAlarm: pulumi.Int(5), Threshold: pulumi.Float64(1), ComparisonOperator: pulumi.String("LessThanThreshold"), TreatMissingData: pulumi.String("breaching"), AlarmActions: pulumi.Array{alerts.Arn}, OkActions: pulumi.Array{alerts.Arn}, Tags: tags,
+		}, pulumi.DependsOn([]pulumi.Resource{heartbeat})); err != nil {
+			return err
+		}
+		dueMetric := "ImprovementWorkerOldestDueSeconds-" + s.Stack
+		due, err := cloudwatch.NewLogMetricFilter(ctx, "improvement-worker-oldest-due", &cloudwatch.LogMetricFilterArgs{
+			LogGroupName: logs.Name,
+			Pattern:      pulumi.String(`{ $.event = "improvement_worker" && $.oldest_due_seconds >= 0 }`),
+			MetricTransformation: &cloudwatch.LogMetricFilterMetricTransformationArgs{Name: pulumi.String(dueMetric), Namespace: pulumi.String("Ajent/Production"), Value: pulumi.String("$.oldest_due_seconds")},
+		})
+		if err != nil {
+			return err
+		}
+		if _, err = cloudwatch.NewMetricAlarm(ctx, "improvement-worker-overdue", &cloudwatch.MetricAlarmArgs{
+			Namespace: pulumi.String("Ajent/Production"), MetricName: pulumi.String(dueMetric), Statistic: pulumi.String("Maximum"), Period: pulumi.Int(60), EvaluationPeriods: pulumi.Int(1), Threshold: pulumi.Float64(900), ComparisonOperator: pulumi.String("GreaterThanOrEqualToThreshold"), TreatMissingData: pulumi.String("notBreaching"), AlarmActions: pulumi.Array{alerts.Arn}, OkActions: pulumi.Array{alerts.Arn}, Tags: tags,
+		}, pulumi.DependsOn([]pulumi.Resource{due})); err != nil {
 			return err
 		}
 	}
@@ -176,6 +208,9 @@ func deploy(ctx *pulumi.Context, s settings) error {
 			secretARNs := []string{v[0].(string), v[1].(string)}
 			if s.OpenrouterSecretARN != "" {
 				secretARNs = append(secretARNs, s.OpenrouterSecretARN)
+			}
+			if s.ImprovementGitHubSecretARN != "" {
+				secretARNs = append(secretARNs, s.ImprovementGitHubSecretARN)
 			}
 			policy := map[string]any{"Version": "2012-10-17", "Statement": []any{
 				map[string]any{"Effect": "Allow", "Action": []string{"secretsmanager:GetSecretValue"}, "Resource": secretARNs},
@@ -219,7 +254,7 @@ func deploy(ctx *pulumi.Context, s settings) error {
 			if err != nil {
 				return err
 			}
-			if _, err = cloudwatch.NewMetricAlarm(ctx, "host-status", &cloudwatch.MetricAlarmArgs{Namespace: pulumi.String("AWS/EC2"), MetricName: pulumi.String("StatusCheckFailed"), Dimensions: pulumi.StringMap{"InstanceId": host.ID()}, Statistic: pulumi.String("Maximum"), Period: pulumi.Int(60), EvaluationPeriods: pulumi.Int(2), Threshold: pulumi.Float64(1), ComparisonOperator: pulumi.String("GreaterThanOrEqualToThreshold"), TreatMissingData: pulumi.String("breaching"), AlarmActions: pulumi.StringArray{alerts.Arn}, Tags: tags}); err != nil {
+			if _, err = cloudwatch.NewMetricAlarm(ctx, "host-status", &cloudwatch.MetricAlarmArgs{Namespace: pulumi.String("AWS/EC2"), MetricName: pulumi.String("StatusCheckFailed"), Dimensions: pulumi.StringMap{"InstanceId": host.ID()}, Statistic: pulumi.String("Maximum"), Period: pulumi.Int(60), EvaluationPeriods: pulumi.Int(2), Threshold: pulumi.Float64(1), ComparisonOperator: pulumi.String("GreaterThanOrEqualToThreshold"), TreatMissingData: pulumi.String("breaching"), AlarmActions: pulumi.Array{alerts.Arn}, Tags: tags}); err != nil {
 				return err
 			}
 		}
@@ -227,7 +262,7 @@ func deploy(ctx *pulumi.Context, s settings) error {
 			name, metric, comparison, statistic string
 			threshold                           float64
 		}{{"http-health", "Healthy", "LessThanThreshold", "Minimum", 1}, {"host-disk", "DiskUsedPercent", "GreaterThanThreshold", "Maximum", 85}} {
-			if _, err = cloudwatch.NewMetricAlarm(ctx, a.name, &cloudwatch.MetricAlarmArgs{Namespace: pulumi.String("Ajent/Production"), MetricName: pulumi.String(a.metric), Dimensions: pulumi.StringMap{"Stack": pulumi.String(s.Stack)}, Statistic: pulumi.String(a.statistic), Period: pulumi.Int(60), EvaluationPeriods: pulumi.Int(3), Threshold: pulumi.Float64(a.threshold), ComparisonOperator: pulumi.String(a.comparison), TreatMissingData: pulumi.String("breaching"), AlarmActions: pulumi.StringArray{alerts.Arn}, OkActions: pulumi.StringArray{alerts.Arn}, Tags: tags}); err != nil {
+			if _, err = cloudwatch.NewMetricAlarm(ctx, a.name, &cloudwatch.MetricAlarmArgs{Namespace: pulumi.String("Ajent/Production"), MetricName: pulumi.String(a.metric), Dimensions: pulumi.StringMap{"Stack": pulumi.String(s.Stack)}, Statistic: pulumi.String(a.statistic), Period: pulumi.Int(60), EvaluationPeriods: pulumi.Int(3), Threshold: pulumi.Float64(a.threshold), ComparisonOperator: pulumi.String(a.comparison), TreatMissingData: pulumi.String("breaching"), AlarmActions: pulumi.Array{alerts.Arn}, OkActions: pulumi.Array{alerts.Arn}, Tags: tags}); err != nil {
 				return err
 			}
 		}
@@ -275,7 +310,7 @@ func deploy(ctx *pulumi.Context, s settings) error {
 
 func (c foundation) userData(rolling bool) pulumi.StringOutput {
 	return pulumi.All(c.DB.Address, c.DBSecret.Arn, c.OwnerSecret.Arn, c.Repository.RepositoryUrl, c.Logs.Name).ApplyT(func(v []any) (string, error) {
-		config := hostConfig{OpenrouterSecretARN: c.Settings.OpenrouterSecretARN, Hostname: c.Settings.Hostname, Region: c.Settings.Region, DBHost: v[0].(string), DBARN: v[1].(string), OwnerARN: v[2].(string), Image: v[3].(string) + "@" + c.Settings.ImageDigest, CaddyImage: c.Settings.CaddyImage, LogGroup: v[4].(string), Stack: c.Settings.Stack, BehindLoadBalancer: rolling}
+		config := hostConfig{OpenrouterSecretARN: c.Settings.OpenrouterSecretARN, ImprovementRepository: c.Settings.ImprovementRepository, ImprovementGitHubSecretARN: c.Settings.ImprovementGitHubSecretARN, Hostname: c.Settings.Hostname, Region: c.Settings.Region, DBHost: v[0].(string), DBARN: v[1].(string), OwnerARN: v[2].(string), Image: v[3].(string) + "@" + c.Settings.ImageDigest, CaddyImage: c.Settings.CaddyImage, LogGroup: v[4].(string), Stack: c.Settings.Stack, BehindLoadBalancer: rolling}
 		if rolling {
 			config.CanonicalHostname = c.Settings.CanonicalHostname
 			if config.CanonicalHostname != "" {
