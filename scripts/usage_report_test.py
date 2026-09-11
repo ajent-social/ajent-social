@@ -65,4 +65,35 @@ class UsageReportTests(unittest.TestCase):
         self.assertEqual(r['totals']['panics'],1)
         self.assertEqual({x['signal'] for x in r['candidates']},{'panic','slow_p95'})
 
+    def test_response_sizes_and_missing_coverage(self):
+        data=report.summarize([self.event(response_bytes=0),self.event(response_bytes=12000),self.event()])
+        row=data['routes'][0]
+        self.assertEqual(row['response_bytes_observed'],2)
+        self.assertEqual(row['response_bytes_coverage'],2/3)
+        self.assertEqual(row['total_response_bytes'],12000)
+        self.assertEqual(row['p95_response_bytes'],12000)
+        self.assertEqual(row['max_response_bytes'],12000)
+        self.assertNotIn('response_sizes',row)
+        unknown=report.summarize([self.event()])['routes'][0]
+        self.assertEqual(unknown['response_bytes_observed'],0)
+        self.assertIsNone(unknown['total_response_bytes'])
+        self.assertIsNone(unknown['p95_response_bytes'])
+
+    def test_invalid_sizes_do_not_erase_other_evidence(self):
+        data=report.summarize([self.event(response_bytes=v) for v in [True,-1,'123',1.5,None]])
+        self.assertEqual(data['totals']['requests'],5)
+        self.assertEqual(data['totals']['invalid_response_byte_records'],5)
+        self.assertEqual(data['routes'][0]['response_bytes_observed'],0)
+
+    def test_response_size_comparison_requires_both_windows(self):
+        before=report.summarize([self.event(response_bytes=25000)])
+        after=report.summarize([self.event(response_bytes=5000)])
+        self.assertEqual(report.compare(after,before)[0]['p95_response_bytes_delta'],-20000)
+        old=report.summarize([self.event()])
+        del old['routes'][0]['p95_response_bytes']
+        del old['routes'][0]['response_bytes_observed']
+        comparison=report.compare(after,old)[0]
+        self.assertIsNone(comparison['p95_response_bytes_delta'])
+        self.assertEqual(comparison['baseline_response_bytes_observed'],0)
+
 if __name__=='__main__':unittest.main()

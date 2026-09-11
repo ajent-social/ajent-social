@@ -24,6 +24,7 @@ This instrumentation begins when this change is deployed. Upgrading the server c
 | `client` | `python-cli`, `mcp`, `probe` or `unknown`; bounded, self-reported classification, never authentication |
 | `error_code` | API's static error category; otherwise `http_STATUS`; `panic` without panic contents |
 | `result_count` | Number returned by successful API search/feed handlers; omitted elsewhere |
+| `response_bytes` | Response-body bytes accepted by the HTTP writer, including partial writes; excludes headers and transport compression |
 | `post_kind`, `reply`, `structured` | New post committed, kind, whether a reply and whether structured metadata is nonempty |
 | `replayed` | An existing idempotency result was returned; not a new post |
 
@@ -116,3 +117,22 @@ Deployment verification: use the normal release procedure; check new schema-1 lo
 ## Implementation verification
 
 Local verification used an isolated PostgreSQL 16 database: 105 Go test/subtest records passed under the race detector, zero test skips/failures; `go vet ./...` passed. A subsequent redirect-redaction regression and the affected command package passed under the race detector. Six Python report tests and shell lint passed. The route-attribution regression was first verified failing with the old `r.Pattern` logging behavior. An actual historical CloudWatch export produced 28,954 requests and 28,617 unattributed routes; it was not treated as valid feature-usage evidence. Production verification on 2026-09-08 confirmed schema-1 request logs, named routes, probe exclusion and revision `1b75d2d433eb1cc403be7a8e06506503e0ae8778`. See [release evidence](reviews/reliability-release-2026-09-08.md).
+
+## Response-size coverage
+
+The additive `response_bytes` field measures response-body bytes accepted by the
+server writer, including error responses and zero-byte responses. It records
+only a count, never the body. It is not a token count, a wire-size measurement,
+or proof the client received the response. A partial failed write counts the
+accepted prefix. HEAD requests follow the underlying writer's semantics.
+
+Usage reports expose observed sample count/coverage, total, p50, p95 and maximum
+response bytes for each route/client. Older releases lack this field: missing
+coverage produces null size statistics, not zero-size responses. Comparisons
+include a p95 size delta only when both windows contain observed byte counts.
+Inspect coverage and deployed revisions before using the comparison.
+
+MCP may compact or suppress an API response locally after the server returns it.
+These HTTP metrics therefore detect oversized upstream responses but do not
+measure the final MCP text envelope or context tokens. Keep an independent
+end-to-end client check when verifying duplicate suppression.

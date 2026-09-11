@@ -74,10 +74,15 @@ def summarize(events):
         releases[release] += 1
         key = (route, client if client in ('python-cli', 'mcp') else 'unknown')
         g = groups.setdefault(key, {'requests': 0, 'server_errors': 0, 'client_errors': 0,
-                                  'latencies': [], 'results_observed': 0, 'empty_results': 0,
+                                  'latencies': [], 'response_sizes': [], 'results_observed': 0, 'empty_results': 0,
                                   'errors': collections.Counter()})
         g['requests'] += 1
         g['latencies'].append(duration)
+        size = event.get('response_bytes')
+        if type(size) is int and size >= 0:
+            g['response_sizes'].append(size)
+        elif 'response_bytes' in event:
+            totals['invalid_response_byte_records'] += 1
         g['server_errors'] += int(status >= 500)
         g['client_errors'] += int(400 <= status < 500)
         if status >= 400 or event.get('error_code'):
@@ -95,11 +100,18 @@ def summarize(events):
         totals['idempotent_replays'] += int(event.get('replayed') is True)
     rows, candidates = [], []
     for (route, client), g in sorted(groups.items()):
-        row = {k: v for k, v in g.items() if k != 'latencies'}
+        row = {k: v for k, v in g.items() if k not in ('latencies', 'response_sizes')}
         row.update(route=route, client=client, p50_ms=percentile(g['latencies'], .5),
                    p95_ms=percentile(g['latencies'], .95),
                    server_error_rate=g['server_errors'] / g['requests'],
                    empty_result_rate=g['empty_results'] / g['results_observed'] if g['results_observed'] else None)
+        sizes = g['response_sizes']
+        row.update(response_bytes_observed=len(sizes),
+                   response_bytes_coverage=len(sizes)/g['requests'],
+                   total_response_bytes=sum(sizes) if sizes else None,
+                   p50_response_bytes=percentile(sizes,.5),
+                   p95_response_bytes=percentile(sizes,.95),
+                   max_response_bytes=max(sizes) if sizes else None)
         rows.append(row)
         # Candidates, not confirmed bugs. Counts represent requests, not people.
         if route in ('unattributed', 'unmatched'):
@@ -120,7 +132,8 @@ def summarize(events):
     return {'schema_version': 1, 'totals': dict(totals), 'clients': dict(clients), 'releases': dict(releases),
             'posts_by_kind': dict(kinds), 'routes': rows,
             'candidates': sorted(candidates, key=lambda x: (-x['occurrences'], x['signature'])),
-            'limits': ['Requests are not unique agents, independent reports or successful tasks.',
+            'limits': ['Response bytes measure accepted response-body bytes, not tokens, headers, compression or proof of client receipt.',
+                       'Requests are not unique agents, independent reports or successful tasks.',
                        'Application traffic can include tests; client labels are self-reported.',
                        'Legacy/empty routes cannot establish feature usage. Absent metrics do not mean zero use.',
                        'Unmatched routes are grouped without retaining potentially sensitive URL paths.']}
@@ -136,6 +149,10 @@ def compare(current, baseline):
                             'baseline_requests': old['requests'], 'current_requests': row['requests'],
                             'server_error_rate_delta': row['server_error_rate'] - old['server_error_rate'],
                             'p95_ms_delta': row['p95_ms'] - old['p95_ms'],
+                            'baseline_response_bytes_observed': old.get('response_bytes_observed',0),
+                            'current_response_bytes_observed': row['response_bytes_observed'],
+                            'p95_response_bytes_delta': row['p95_response_bytes'] - old['p95_response_bytes']
+                            if row['p95_response_bytes'] is not None and old.get('p95_response_bytes') is not None else None,
                             'empty_result_rate_delta': row['empty_result_rate'] - old['empty_result_rate']
                             if row['empty_result_rate'] is not None and old['empty_result_rate'] is not None else None})
     return changes
