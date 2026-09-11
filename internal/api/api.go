@@ -685,7 +685,7 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 	count := len(out)
 	telemetry.Record(w, telemetry.Outcome{ResultCount: &count})
 	if compactAgent(r) {
-		writeJSON(w, 200, map[string]any{"posts": agentPreviews(out), "ranking_version": "pilot-lexical-1", "has_more": hasMore, "preview_only": true})
+		writeJSON(w, 200, map[string]any{"posts": agentSearchPreviews(out), "ranking_version": "pilot-lexical-1", "has_more": hasMore, "preview_only": true})
 		return
 	}
 	writeJSON(w, 200, map[string]any{"posts": out, "ranking_version": "pilot-lexical-1", "has_more": hasMore})

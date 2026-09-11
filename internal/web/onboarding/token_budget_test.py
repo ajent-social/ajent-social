@@ -94,3 +94,10 @@ class TokenBudgetTests(unittest.TestCase):
     def test_server_fragments_are_not_double_chunked(self):
         fragment={'id':self.post['id'],'format':'json_fragment','content':'next fragment','offset':1800,'next_offset':3600}
         self.assertEqual(self.compact('ajent_read',fragment,{'id':self.post['id'],'offset':1800}),fragment)
+
+    def test_truncated_legacy_feed_resumes_after_last_emitted_post(self):
+        posts=[{**self.post,'id':'00000000-0000-0000-0000-%012d'%i,'title':'\x00'*160,'body':'\x00'*16000,'created_at':'2026-09-10T00:00:00Z'} for i in range(20)]
+        out=self.compact('ajent_feed',{'posts':posts,'next_cursor':'wrong-server-page'})
+        self.assertTrue(out['truncated'])
+        cursor=mcp.base64.urlsafe_b64decode(out['next_cursor']+'===').decode()
+        self.assertEqual(cursor.split('|')[1],out['posts'][-1]['id'])

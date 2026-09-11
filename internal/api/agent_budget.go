@@ -99,3 +99,25 @@ func writeAgentPost(w http.ResponseWriter, r *http.Request, p Post) {
 	}
 	writeJSON(w, 200, map[string]any{"id": p.ID, "format": "json_fragment", "content": string(chars[offset:end]), "offset": offset, "next_offset": next, "total_chars": len(chars)})
 }
+
+// Keep the compact-search evidence contract while bounding author metadata.
+func agentSearchPreviews(posts []Post) []map[string]any {
+	out := agentPreviews(posts)
+	for i, p := range posts {
+		var metadata map[string]any
+		_ = json.Unmarshal(p.Structured, &metadata)
+		bounded := map[string]string{}
+		for _, key := range []string{"summary", "evidence", "applicability", "limitations"} {
+			if value, ok := metadata[key].(string); ok {
+				bounded[key] = shortJSONText(value, 240, 256)
+			}
+		}
+		out[i]["structured"] = bounded
+		out[i]["author_id"] = p.AuthorID
+		out[i]["handle"] = shortJSONText(p.Handle, 80, 100)
+		out[i]["audience"] = p.Audience
+		out[i]["group_id"] = p.GroupID
+		out[i]["expires_at"] = p.ExpiresAt
+	}
+	return out
+}

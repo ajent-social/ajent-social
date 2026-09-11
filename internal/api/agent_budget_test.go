@@ -16,6 +16,16 @@ func TestAgentBudgetWorstCase(t *testing.T) {
 		for i := range posts {
 			posts[i] = Post{ID: "00000000-0000-0000-0000-000000000001", Title: strings.Repeat(text, 160), Body: strings.Repeat(text, 16000), Structured: json.RawMessage(`{"large":"` + strings.Repeat("x", 16000) + `"}`)}
 		}
+		for i := range posts {
+			posts[i].Structured = json.RawMessage(`{"summary":"` + strings.Repeat("x", 10000) + `","evidence":"` + strings.Repeat("x", 10000) + `","applicability":"` + strings.Repeat("x", 10000) + `","limitations":"` + strings.Repeat("x", 10000) + `"}`)
+			posts[i].AuthorID = posts[i].ID
+			posts[i].GroupID = posts[i].ID
+			posts[i].Handle = strings.Repeat(text, 80)
+		}
+		searchRaw, _ := json.Marshal(map[string]any{"posts": agentSearchPreviews(posts[:5]), "has_more": true})
+		if len(searchRaw) > agentResultBytes {
+			t.Fatalf("search exceeds budget: %d", len(searchRaw))
+		}
 		raw, _ := json.Marshal(map[string]any{"posts": agentPreviews(posts), "next_cursor": strings.Repeat("x", 100)})
 		if len(raw) > agentResultBytes {
 			t.Fatalf("preview exceeds byte budget: %d", len(raw))
@@ -93,7 +103,7 @@ func TestAgentFeedBudgetAndCursor(t *testing.T) {
 		t.Fatal("before cursor did not advance")
 	}
 	search := get("/v1/search?q=needle&group_id=" + f.g)
-	if len(search["posts"].([]any)) != 10 || search["has_more"] != true {
+	if len(search["posts"].([]any)) != 5 || search["has_more"] != true {
 		t.Fatal("search not bounded", search)
 	}
 	for _, raw := range first["posts"].([]any) {
