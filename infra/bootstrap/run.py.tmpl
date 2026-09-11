@@ -1,0 +1,10 @@
+import json, os, sys
+from pathlib import Path
+c=json.loads(Path('/opt/ajent/config.json').read_text())
+kind=sys.argv[1]
+args=['docker','run','--rm','--name','ajent-'+kind,'--network','host','--log-driver','awslogs','--log-opt','awslogs-region='+c['region'],'--log-opt','awslogs-group='+c['logGroup'],'--log-opt','awslogs-stream='+kind,'--security-opt','no-new-privileges:true']
+if kind=='app':
+    args+=['--read-only','--cap-drop','ALL','--env-file','/run/ajent.env','-v','/opt/ajent/rds.pem:/certs/rds.pem:ro',c['image'],'-addr','{{if .BehindLoadBalancer}}0.0.0.0:8080{{else}}127.0.0.1:8080{{end}}']
+else:
+    args+=['-v','/opt/ajent/Caddyfile:/etc/caddy/Caddyfile:ro','-v','/var/lib/ajent/caddy-data:/data','-v','/var/lib/ajent/caddy-config:/config',c['caddyImage']]
+os.execvp(args[0],args)

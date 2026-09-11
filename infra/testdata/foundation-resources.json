@@ -1,0 +1,373 @@
+[
+  {
+    "type": "aws:cloudwatch/logGroup:LogGroup",
+    "name": "application-logs",
+    "inputs": {
+      "retentionInDays": 30,
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:cloudwatch/metricAlarm:MetricAlarm",
+    "name": "database-cpu",
+    "inputs": {
+      "alarmActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "comparisonOperator": "GreaterThanThreshold",
+      "dimensions": {
+        "DBInstanceIdentifier": "database"
+      },
+      "evaluationPeriods": 3,
+      "metricName": "CPUUtilization",
+      "namespace": "AWS/RDS",
+      "okActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "period": 300,
+      "statistic": "Average",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "threshold": 85,
+      "treatMissingData": "breaching"
+    }
+  },
+  {
+    "type": "aws:cloudwatch/metricAlarm:MetricAlarm",
+    "name": "database-storage",
+    "inputs": {
+      "alarmActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "comparisonOperator": "LessThanThreshold",
+      "dimensions": {
+        "DBInstanceIdentifier": "database"
+      },
+      "evaluationPeriods": 3,
+      "metricName": "FreeStorageSpace",
+      "namespace": "AWS/RDS",
+      "okActions": [
+        "arn:aws:test::123:alerts"
+      ],
+      "period": 300,
+      "statistic": "Average",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "threshold": 5368709120,
+      "treatMissingData": "breaching"
+    }
+  },
+  {
+    "type": "aws:ec2/internetGateway:InternetGateway",
+    "name": "internet",
+    "inputs": {
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/routeTable:RouteTable",
+    "name": "public-routes",
+    "inputs": {
+      "routes": [
+        {
+          "cidrBlock": "0.0.0.0/0",
+          "gatewayId": "internet_id"
+        }
+      ],
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/routeTableAssociation:RouteTableAssociation",
+    "name": "application-route",
+    "inputs": {
+      "routeTableId": "public-routes_id",
+      "subnetId": "application-subnet_id"
+    }
+  },
+  {
+    "type": "aws:ec2/securityGroup:SecurityGroup",
+    "name": "application",
+    "inputs": {
+      "description": "Managed by Pulumi",
+      "egress": [
+        {
+          "cidrBlocks": [
+            "0.0.0.0/0"
+          ],
+          "fromPort": 0,
+          "protocol": "-1",
+          "toPort": 0
+        }
+      ],
+      "ingress": [
+        {
+          "cidrBlocks": [
+            "0.0.0.0/0"
+          ],
+          "fromPort": 80,
+          "protocol": "tcp",
+          "toPort": 80
+        },
+        {
+          "cidrBlocks": [
+            "0.0.0.0/0"
+          ],
+          "fromPort": 443,
+          "protocol": "tcp",
+          "toPort": 443
+        }
+      ],
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/securityGroup:SecurityGroup",
+    "name": "database",
+    "inputs": {
+      "description": "Managed by Pulumi",
+      "ingress": [
+        {
+          "fromPort": 5432,
+          "protocol": "tcp",
+          "securityGroups": [
+            "application_id"
+          ],
+          "toPort": 5432
+        }
+      ],
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/subnet:Subnet",
+    "name": "application-subnet",
+    "inputs": {
+      "availabilityZone": "us-west-2a",
+      "cidrBlock": "10.87.1.0/24",
+      "mapPublicIpOnLaunch": true,
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/subnet:Subnet",
+    "name": "database-subnet-0",
+    "inputs": {
+      "availabilityZone": "us-west-2a",
+      "cidrBlock": "10.87.10.0/24",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/subnet:Subnet",
+    "name": "database-subnet-1",
+    "inputs": {
+      "availabilityZone": "us-west-2b",
+      "cidrBlock": "10.87.11.0/24",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "vpcId": "network_id"
+    }
+  },
+  {
+    "type": "aws:ec2/vpc:Vpc",
+    "name": "network",
+    "inputs": {
+      "cidrBlock": "10.87.0.0/16",
+      "enableDnsHostnames": true,
+      "enableDnsSupport": true,
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:ecr/repository:Repository",
+    "name": "application-images",
+    "inputs": {
+      "forceDelete": false,
+      "imageScanningConfiguration": {
+        "scanOnPush": true
+      },
+      "imageTagMutability": "IMMUTABLE",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:rds/instance:Instance",
+    "name": "database",
+    "inputs": {
+      "allocatedStorage": 20,
+      "autoMinorVersionUpgrade": true,
+      "backupRetentionPeriod": 7,
+      "backupWindow": "09:00-10:00",
+      "copyTagsToSnapshot": true,
+      "dbName": "ajent",
+      "dbSubnetGroupName": "database",
+      "deletionProtection": true,
+      "engine": "postgres",
+      "engineVersion": "16",
+      "finalSnapshotIdentifier": "ajent-test-final",
+      "instanceClass": "db.t4g.micro",
+      "maintenanceWindow": "sun:10:00-sun:11:00",
+      "maxAllocatedStorage": 100,
+      "multiAz": false,
+      "password": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": "fake-secret-for-test"
+      },
+      "port": 5432,
+      "publiclyAccessible": false,
+      "skipFinalSnapshot": false,
+      "storageEncrypted": true,
+      "storageType": "gp3",
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      },
+      "username": "ajent",
+      "vpcSecurityGroupIds": [
+        "database_id"
+      ]
+    }
+  },
+  {
+    "type": "aws:rds/subnetGroup:SubnetGroup",
+    "name": "database",
+    "inputs": {
+      "description": "Managed by Pulumi",
+      "subnetIds": [
+        "database-subnet-0_id",
+        "database-subnet-1_id"
+      ],
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:secretsmanager/secret:Secret",
+    "name": "database-secret",
+    "inputs": {
+      "recoveryWindowInDays": 7,
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:secretsmanager/secret:Secret",
+    "name": "owner-secret",
+    "inputs": {
+      "recoveryWindowInDays": 7,
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "aws:secretsmanager/secretVersion:SecretVersion",
+    "name": "database-secret-value",
+    "inputs": {
+      "secretId": "database-secret_id",
+      "secretString": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": "fake-secret-for-test"
+      }
+    }
+  },
+  {
+    "type": "aws:secretsmanager/secretVersion:SecretVersion",
+    "name": "owner-secret-value",
+    "inputs": {
+      "secretId": "owner-secret_id",
+      "secretString": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": "fake-secret-for-test"
+      }
+    }
+  },
+  {
+    "type": "aws:sns/topic:Topic",
+    "name": "alerts",
+    "inputs": {
+      "tags": {
+        "Environment": "test",
+        "ManagedBy": "Pulumi",
+        "Project": "ajent"
+      }
+    }
+  },
+  {
+    "type": "random:index/randomPassword:RandomPassword",
+    "name": "database-password",
+    "inputs": {
+      "length": 48,
+      "special": false
+    }
+  },
+  {
+    "type": "random:index/randomPassword:RandomPassword",
+    "name": "owner-key",
+    "inputs": {
+      "length": 64,
+      "special": false
+    }
+  }
+]
