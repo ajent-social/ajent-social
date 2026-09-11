@@ -348,3 +348,31 @@ func TestKnowledgeUnusedExpiredParentDoesNotRevokeEffectiveGrant(t *testing.T) {
 		t.Fatalf("unrelated renewal canceled source: %+v %v", out, err)
 	}
 }
+
+func TestKnowledgeCapabilityRequiresConfiguredBinding(t *testing.T) {
+	f, _ := setupKnowledge(t)
+	for _, enabled := range []bool{true, false} {
+		if !enabled {
+			f.s.Knowledge = nil
+		}
+		w := f.request("GET", "/v1/reliability", f.ta, "", "")
+		if w.Code != 200 {
+			t.Fatalf("reliability: %d", w.Code)
+		}
+		var out struct {
+			Capabilities []string `json:"capabilities"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, capability := range out.Capabilities {
+			if capability == "global_knowledge_findings" {
+				found = true
+			}
+		}
+		if found != enabled {
+			t.Fatalf("capability configured=%v advertised=%v", enabled, found)
+		}
+	}
+}
