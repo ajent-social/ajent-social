@@ -10,9 +10,11 @@ import (
 
 var (
 	// ErrGroupBrainUnavailable is the single uniform result for every unauthorized
-	// or missing private-binding read: nonmember, pending, removed, cross-org,
-	// suspended actor, archived/public group, and a missing/revoked/mismatched
-	// binding are never distinguished in the response.
+	// or missing private-binding read: a nonmember (including one from another
+	// organization -- cross-org membership itself is legitimate, see
+	// GuardGroupBrain), pending, removed, or suspended actor, a suspended
+	// actor-org or group-owning-org, an archived/public group, and a missing/
+	// revoked/mismatched binding are never distinguished in the response.
 	ErrGroupBrainUnavailable = errors.New("group knowledge binding unavailable")
 	// ErrBindingRejected covers every operator-setup failure: the group is
 	// already bound, the brain is already bound to a different (possibly
@@ -75,29 +77,48 @@ func (s *Service) RevokeBinding(ctx context.Context, groupID string) error {
 	return nil
 }
 
-// GuardGroupBrain authenticates actor's CURRENT accepted membership in groupID
-// and resolves the live private brain it is bound to. A group ID is an
-// untrusted selector, never authority: every predicate is evaluated fresh from
-// current rows, never trusted from the caller or cached from a prior call. This
-// performs one unlocked read -- it must never hold a row or advisory lock across
-// an outbound backend call, so a membership/binding revocation can always
-// commit immediately and take effect on the very next call.
+// GuardGroupBrain authorizes an already-authenticated actor -- it receives only
+// an agent ID, never a credential, and proves membership/actor/org/binding
+// state given that identity, not credential validity. A caller wiring this
+// into a real API must separately recheck the actor's actual credential
+// (expiry/revocation/scopes) around any outbound call; that is an explicit
+// owned dependency for whoever adds a real handler, not solved here, and this
+// function must never be read as having done it.
+//
+// It requires actor's CURRENT accepted membership in groupID and resolves the
+// live private brain groupID is bound to. A group ID is an untrusted selector,
+// never authority: every predicate is evaluated fresh from current rows, never
+// trusted from the caller or cached from a prior call. Group membership is
+// legitimately cross-organization by existing product design (see
+// internal/api/social.go's invite/accept path, which has no same-org check) --
+// this does not special-case or ban it. It independently requires BOTH the
+// actor's own organization AND the group's owning organization to be active
+// (not that they are the same organization): an accepted member's own org
+// being active is not sufficient if the group's home org has been suspended,
+// and vice versa. This performs one unlocked read -- it must never hold a row
+// or advisory lock across an outbound backend call, so a membership/binding
+// revocation can always commit immediately and take effect on the very next
+// call.
 //
 // Call it once to select a backend and once more, passing the previously
 // resolved brain ID, after any outbound callback returns and before any
-// private result reaches the caller -- see RecheckGroupBrain.
+// private result reaches the caller -- see RecheckGroupBrain. A test driving
+// Guard/Recheck directly around a simulated callback proves these primitives
+// hold that contract; it does not prove any future real handler actually
+// calls them that way -- that remains the real handler's obligation.
 func (s *Service) GuardGroupBrain(ctx context.Context, actor, groupID string) (string, error) {
 	var brainID string
 	err := s.Pool.QueryRow(ctx, `SELECT gb.brain_id::text
  FROM group_members gm
  JOIN groups g ON g.id=gm.group_id
+ JOIN organizations go ON go.id=g.org_id
  JOIN agents a ON a.id=gm.agent_id
- JOIN organizations o ON o.id=a.org_id
+ JOIN organizations ao ON ao.id=a.org_id
  JOIN group_knowledge_bindings gb ON gb.group_id=gm.group_id
  JOIN knowledge_brains b ON b.id=gb.brain_id
  WHERE gm.group_id=$1 AND gm.agent_id=$2 AND gm.state='accepted'
- AND g.archived_at IS NULL AND g.visibility<>'public'
- AND a.status='active' AND o.status='active'
+ AND g.archived_at IS NULL AND g.visibility='private'
+ AND a.status='active' AND ao.status='active' AND go.status='active'
  AND gb.revoked_at IS NULL AND b.scope='group_private'`, groupID, actor).Scan(&brainID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrGroupBrainUnavailable

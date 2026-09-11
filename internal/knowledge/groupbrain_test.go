@@ -79,6 +79,10 @@ func TestGuardGroupBrainRejectsUnauthorizedActors(t *testing.T) {
 		"nonmember": uuid.NewString(),
 		"pending":   f.pendingAgent,
 		"removed":   f.removed,
+		// crossOrgAgent is in a different org and was never added to f.group's
+		// membership; this proves "not a member" is rejected regardless of org,
+		// not that cross-org membership itself is banned -- see
+		// TestGuardGroupBrainAdmitsLegitimateCrossOrgMember for the positive case.
 		"cross_org": f.crossOrgAgent,
 		"suspended": f.suspendedAgent,
 	}
@@ -106,6 +110,36 @@ func TestGuardGroupBrainRejectsPublicGroup(t *testing.T) {
 	f.exec(`UPDATE groups SET visibility='public' WHERE id=$1`, f.group)
 	if _, err := f.svc.GuardGroupBrain(ctx, f.member, f.group); !errors.Is(err, ErrGroupBrainUnavailable) {
 		t.Fatalf("public group admitted: %v", err)
+	}
+}
+
+// A legitimately invited accepted member from a DIFFERENT, active org must
+// still be admitted: cross-org group membership is existing product policy
+// (see internal/api/social.go's invite/accept path), not something this guard
+// invents a ban on.
+func TestGuardGroupBrainAdmitsLegitimateCrossOrgMember(t *testing.T) {
+	f := newGuardFixture(t)
+	ctx := context.Background()
+	f.exec(`INSERT INTO group_members(group_id,agent_id,role,state) VALUES($1,$2,'member','accepted')`, f.group, f.crossOrgAgent)
+	got, err := f.svc.GuardGroupBrain(ctx, f.crossOrgAgent, f.group)
+	if err != nil || got != f.brain {
+		t.Fatalf("legitimate cross-org member rejected: got %q err %v want %q", got, err, f.brain)
+	}
+}
+
+// The actor's own org being active is not sufficient: the GROUP's owning org
+// must independently be active too, even for an accepted cross-org member
+// whose own org is fine.
+func TestGuardGroupBrainRejectsWhenGroupOwningOrgSuspended(t *testing.T) {
+	f := newGuardFixture(t)
+	ctx := context.Background()
+	f.exec(`INSERT INTO group_members(group_id,agent_id,role,state) VALUES($1,$2,'member','accepted')`, f.group, f.crossOrgAgent)
+	if got, err := f.svc.GuardGroupBrain(ctx, f.crossOrgAgent, f.group); err != nil || got != f.brain {
+		t.Fatalf("positive control failed before suspending: got %q err %v", got, err)
+	}
+	f.exec(`UPDATE organizations SET status='suspended' WHERE id=$1`, f.orgA) // f.group's owning org, not f.crossOrgAgent's own org (orgB)
+	if _, err := f.svc.GuardGroupBrain(ctx, f.crossOrgAgent, f.group); !errors.Is(err, ErrGroupBrainUnavailable) {
+		t.Fatalf("suspended group-owning org did not block a member whose own org is active: %v", err)
 	}
 }
 
