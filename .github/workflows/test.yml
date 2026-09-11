@@ -31,13 +31,12 @@ jobs:
           restore-keys: ${{ runner.os }}-infra-go-${{ hashFiles('infra/go.mod', 'infra/go.sum') }}-
       - run: go mod download
         working-directory: infra
-      # go test typechecks the package. A separate go vet recompiled the generated
-      # pulumi-cloudflare SDK and OOM-killed the self-hosted runner; -vet=off
-      # avoids a second analysis pass over that SDK during test.
-      - run: go test -vet=off -v ./...
+      # CI omits the generated pulumi-cloudflare SDK (-tags infra_ci); that package
+      # alone OOM-kills the shared runner. Production builds keep the real SDK.
+      - run: go test -tags infra_ci -vet=off -v ./...
         working-directory: infra
       - run: python3 -m unittest discover -s infra/tests -p '*_test.py'
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 -tags infra_ci ./...
         working-directory: infra
       - run: node --test public-site/worker.test.mjs
       - run: python3 -m unittest discover -s internal/web/onboarding -p '*_test.py'

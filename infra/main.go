@@ -13,7 +13,6 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/secretsmanager"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/sns"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ssm"
-	"github.com/pulumi/pulumi-cloudflare/sdk/v6/go/cloudflare"
 	"github.com/pulumi/pulumi-random/sdk/v4/go/random"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
@@ -275,7 +274,7 @@ func deploy(ctx *pulumi.Context, s settings) error {
 			} else {
 				content = address.PublicIp
 			}
-			if _, err = cloudflare.NewDnsRecord(ctx, "production-dns", &cloudflare.DnsRecordArgs{ZoneId: pulumi.String(s.CloudflareZoneID), Name: pulumi.String(s.Hostname), Type: pulumi.String(kind), Content: content, Ttl: pulumi.Float64(300), Proxied: pulumi.Bool(false), Comment: pulumi.String("Ajent service; DNS-only")}, pulumi.Aliases([]pulumi.Alias{{Name: pulumi.String("dogfood-dns")}})); err != nil {
+			if err = registerProductionDNS(ctx, s.CloudflareZoneID, s.Hostname, kind, content); err != nil {
 				return err
 			}
 		}
