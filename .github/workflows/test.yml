@@ -8,7 +8,7 @@ permissions:
 jobs:
   infrastructure:
     timeout-minutes: 90
-    runs-on: [self-hosted, linux, x64]
+    runs-on: [self-hosted, linux, arm64]
     env:
       CGO_ENABLED: '0'
       GOMAXPROCS: '1'
@@ -49,7 +49,7 @@ jobs:
             ~/go/pkg/mod
           key: ${{ steps.infra-cache.outputs.cache-primary-key }}
   ui:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: [self-hosted, linux, arm64]
     services:
       postgres:
         image: postgres:16-alpine
@@ -134,7 +134,7 @@ jobs:
           path: ajent-arm64.tar.gz
           retention-days: 1
   test:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: [self-hosted, linux, arm64]
     services:
       postgres:
         image: postgres:16-alpine
