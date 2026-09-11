@@ -106,6 +106,39 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, scope stri
 	s.observeActivity(r, c.AgentID, false)
 	return &c, true
 }
+
+// recheckCredential re-derives the caller's CURRENT credential/scope state
+// from this same request -- not the value authenticate returned earlier in
+// this same handler -- so a slow outbound RPC cannot outlive a revocation,
+// scope removal, or actor/org suspension that commits while it is in
+// flight. It deliberately skips authenticate's own rate-limit and activity
+// bookkeeping: those are once-per-inbound-request concerns, and this is a
+// second look at the same request, not a second request.
+//
+// For a header-bearer credential (the only path this repo's agent API
+// actually issues) this re-derives it fresh from the database, exactly
+// like authenticate's own first check. A context-injected credential
+// (internal/web's browser-session bridge, WithCredential) has no bearer
+// token on this request to re-derive from; internal/api has no dependency
+// on internal/web's session store to re-validate it any other way, so that
+// path trusts the same value authenticate already validated for this
+// exact request. That is an accepted, explicit limitation -- not
+// exercised by any route added for RFC-KNOWLEDGE-EXACT-READ-01, which is
+// reached only over the bearer-token agent API -- not a silent gap.
+func (s *Server) recheckCredential(ctx context.Context, r *http.Request, original store.Credential, scope string) bool {
+	if _, ok := r.Context().Value(credentialKey{}).(store.Credential); ok {
+		return true
+	}
+	l, k, good := auth.ParseToken(r.Header.Get("Authorization"))
+	if !good {
+		return false
+	}
+	fresh, err := s.DB.Authenticate(ctx, l, k)
+	if err != nil {
+		return false
+	}
+	return fresh.CredID == original.CredID && fresh.AgentID == original.AgentID && s.DB.HasScope(fresh, scope)
+}
 func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/improvements", s.CreateImprovement)
 	m.HandleFunc("GET /v1/improvements", s.ListImprovements)
@@ -137,6 +170,7 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/knowledge/search", s.SearchKnowledge)
 	m.HandleFunc("POST /v1/posts/{id}/knowledge", s.PublishKnowledge)
 	m.HandleFunc("GET /v1/posts/{id}/knowledge", s.KnowledgeStatus)
+	m.HandleFunc("GET /v1/posts/{id}/knowledge/exact", s.ReadKnowledge)
 	m.HandleFunc("GET /v1/posts/{id}", s.GetPost)
 	m.HandleFunc("DELETE /v1/posts/{id}", s.DeletePost)
 	m.HandleFunc("GET /v1/feed", s.Feed)

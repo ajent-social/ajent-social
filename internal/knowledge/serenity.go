@@ -53,6 +53,21 @@ type CancelResult struct {
 }
 type SearchHit struct{ ID, Snippet string }
 
+// ReadFactResult is Serenity's read_memory_fact response shape. Only the
+// fields this gateway actually forwards are decoded; Kind/EntitySlug are
+// always the fixed "fact"/post-derived values worker.go's Remember call
+// already wrote, so they carry no information this boundary needs to
+// surface a second time.
+type ReadFactResult struct {
+	ProtocolVersion  int    `json:"protocol_version"`
+	ID               string `json:"id"`
+	Fact             string `json:"fact"`
+	Visibility       string `json:"visibility"`
+	Provenance       string `json:"provenance"`
+	ValidUntil       string `json:"valid_until"`
+	ContentUntrusted bool   `json:"content_untrusted"`
+}
+
 func NewSerenity(endpoint, token string) (*Serenity, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.TrimSpace(token) == "" || strings.ContainsAny(token, "\r\n") {
@@ -106,7 +121,12 @@ func (b *limitedBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (s *Serenity) call(ctx context.Context, name string, args any, out any) error {
+// call requires the baseline keyed-remember + cancellation capability every
+// operation depends on, plus any additional tool names this specific
+// operation needs (e.g. "read_memory_fact") -- an older backend missing
+// only the extra capability is refused the same honest way, without
+// disturbing the baseline check every other operation already relies on.
+func (s *Serenity) call(ctx context.Context, name string, args any, out any, requireTools ...string) error {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	client := mcp.NewClient(&mcp.Implementation{Name: "ajent-knowledge-gateway", Version: "1"}, nil)
@@ -119,8 +139,10 @@ func (s *Serenity) call(ctx context.Context, name string, args any, out any) err
 	if err != nil {
 		return ErrUnavailable
 	}
+	present := map[string]bool{}
 	keyed, cancellable := false, false
 	for _, tool := range listed.Tools {
+		present[tool.Name] = true
 		if tool.Name == "cancel_memory_operation" {
 			cancellable = true
 		}
@@ -139,6 +161,11 @@ func (s *Serenity) call(ctx context.Context, name string, args any, out any) err
 	}
 	if !keyed || !cancellable {
 		return ErrUnsupported
+	}
+	for _, required := range requireTools {
+		if !present[required] {
+			return ErrUnsupported
+		}
 	}
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 	if err != nil {
@@ -234,4 +261,27 @@ func (s *Serenity) Search(ctx context.Context, query string) ([]SearchHit, error
 		hits = append(hits, SearchHit{ID: id, Snippet: r.Chunk})
 	}
 	return hits, nil
+}
+
+// ReadExact resolves one exact opaque fact ID to its live canonical content
+// through Serenity's read_memory_fact extension -- never recall/search, and
+// never a copied/cached post body. A backend that does not yet register
+// read_memory_fact (an older Serenity) is refused as ErrUnsupported before
+// any call is attempted, the same honest, non-fallback outcome remember/
+// cancel already produce for their own required capabilities. The MCP
+// tool-result envelope itself is already bounded by call()'s existing 1MiB
+// content-length check and the transport's own limitedBody cap -- both
+// apply generically to every s.call invocation, this one included.
+func (s *Serenity) ReadExact(ctx context.Context, factID string) (ReadFactResult, error) {
+	if !validFactID(factID) {
+		return ReadFactResult{}, ErrUnsupported
+	}
+	var out ReadFactResult
+	if err := s.call(ctx, "read_memory_fact", map[string]any{"id": factID}, &out, "read_memory_fact"); err != nil {
+		return ReadFactResult{}, err
+	}
+	if out.ProtocolVersion != 1 || out.ID != factID || out.Visibility != "world" || !out.ContentUntrusted {
+		return ReadFactResult{}, ErrUnavailable
+	}
+	return out, nil
 }

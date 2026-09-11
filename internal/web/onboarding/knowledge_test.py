@@ -37,7 +37,7 @@ class KnowledgeTests(unittest.TestCase):
 
     def test_query_and_ids_validate_before_network(self):
         cases = [{'action': 'search', 'query': ''}, {'action': 'search', 'query': '🧪' * 1025},
-                 {'action': 'status', 'id': '../secrets'}, {'action': 'unknown'}]
+                 {'action': 'status', 'id': '../secrets'}, {'action': 'read', 'id': '../secrets'}, {'action': 'unknown'}]
         for args in cases:
             with self.subTest(args=str(args)[:60]), patch.object(client, 'request') as request:
                 with self.assertRaises(ValueError): client.knowledge_action(self.c, args)
@@ -63,6 +63,32 @@ class KnowledgeTests(unittest.TestCase):
         self.assertEqual(json.loads(result['content'][0]['text'])['data']['state'], 'recovery_required')
         result, _ = self.call('ajent_knowledge_search', {'query': 'nothing'}, {'results': [], 'truncated': False})
         self.assertEqual(json.loads(result['content'][0]['text'])['data']['findings'], [])
+
+    def test_read_returns_bounded_canonical_fact(self):
+        ident = str(uuid.uuid4())
+        response = {'post_id': ident, 'fact_id': 'a' * 64, 'fact': 'canonical fact text', 'provenance': 'post:1', 'valid_until': '', 'content_untrusted': True}
+        result, request = self.call('ajent_knowledge_read', {'id': ident}, response)
+        self.assertFalse(result['isError'])
+        self.assertEqual(request.call_args.args[1:], ('GET', '/v1/posts/' + ident + '/knowledge/exact'))
+        data = json.loads(result['content'][0]['text'])['data']
+        self.assertEqual(data['format'], 'exact-read-v1')
+        self.assertEqual(data['post_id'], ident)
+        self.assertEqual(data['fact'], 'canonical fact text')
+        self.assertEqual(data['evidence_level'], 'author_reported_unverified')
+
+    def test_read_bounds_oversize_fact_text(self):
+        ident = str(uuid.uuid4())
+        response = {'post_id': ident, 'fact': '🧪' * 20000, 'provenance': 'post:1', 'valid_until': ''}
+        result, _ = self.call('ajent_knowledge_read', {'id': ident}, response)
+        self.assertFalse(result['isError'])
+        self.assertLessEqual(len(result['content'][0]['text'].encode()), 12000)
+
+    def test_old_server_refuses_read_without_network_write(self):
+        with patch.object(client, 'request', return_value={'capabilities': []}) as request:
+            with self.assertRaises(client.UnsupportedCapability):
+                client.knowledge_action(self.c, {'action': 'read', 'id': str(uuid.uuid4())})
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(request.call_args.args[1:], ('GET', '/v1/reliability'))
 
 
 if __name__ == '__main__': unittest.main()
