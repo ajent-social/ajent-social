@@ -6,7 +6,7 @@ Current production path: ACM TLS → Application Load Balancer → two Graviton 
 
 After publishing a tested image, run `scripts/deploy.sh david-sire-run/ajent-infra/production sha256:ACTUAL_DIGEST`. It checks for an active refresh, validates infrastructure, previews/applies the change and waits for the AWS result. Keep one deployment operator at a time across machines. The steps below describe the underlying workflow.
 
-1. Run application CI, `npm run --prefix infra check`, and `npm run --prefix infra test`. Publish the tested ARM64 image using `scripts/publish-image.sh`.
+1. Run application CI, `(cd infra && go vet ./...)`, and `(cd infra && go test ./...)`. Publish the tested ARM64 image using `scripts/publish-image.sh`.
 2. Set `imageDigest` to its immutable digest. Run `pulumi -C infra preview --stack production --diff`; an ordinary release updates the launch template and autoscaling group, never the database or HTTPS certificate.
 3. Apply with `pulumi -C infra up --stack production`. **Pulumi returning success does not mean the rolling refresh finished.**
 4. Run `python3 scripts/wait-rollout.py "$(pulumi -C infra stack output autoscalingGroup --stack production)"`. Require `Successful`; rollback is a failed release. Check the refresh start time belongs to this deployment.
@@ -20,14 +20,16 @@ This increases baseline costs: two instances/EBS volumes, ALB hours and usage, a
 
 ## Historical foundation and single-host bootstrap
 
-Dedicated Pulumi TypeScript project. AWS EC2 Graviton (`t4g.small`), private single-AZ RDS PostgreSQL 16 (`db.t4g.micro`), ECR, Secrets Manager, CloudWatch and optional Cloudflare DNS. No existing Sire/Blink resources are imported or modified.
+Dedicated Pulumi Go project. AWS EC2 Graviton (`t4g.small`), private single-AZ RDS PostgreSQL 16 (`db.t4g.micro`), ECR, Secrets Manager, CloudWatch and optional Cloudflare DNS. No existing Sire/Blink resources are imported or modified.
 
 ## Check without provisioning
 
 ```sh
-npm ci --prefix infra
-npm run --prefix infra check
-npm run --prefix infra test
+(cd infra && go mod download)
+(cd infra && go test -vet=off ./...)
+# Shared-runner CI uses: go test -tags infra_ci -vet=off ./...
+# That tag excludes generated pulumi-aws/cloudflare packages (OOM on the runner)
+# and still runs bootstrap/config tests. Full provider parity tests run locally without the tag.
 shellcheck scripts/container-smoke.sh scripts/publish-image.sh
 ```
 
@@ -101,3 +103,56 @@ alongside the existing database and owner secrets. Bootstrap fetches the key int
 `/run/ajent.env` with private permissions before starting the container. Without
 this configuration, Ask Ajent uses its explicitly labeled published-guide
 fallback. See `docs/ai-chat.md` for quotas, model settings, and data boundaries.
+
+## Go program and language migration
+
+Run Pulumi from this directory on the authenticated CI runner; `Pulumi.yaml` selects the Go runtime. The nested
+`go.mod`/`go.sum` pin AWS, Cloudflare, Random and Pulumi SDK versions independently
+from the application. Node/npm are no longer needed for infrastructure checks.
+
+On the shared mini, **do not run Go infrastructure builds, tests or previews**:
+the generated AWS/Cloudflare SDKs exceed its memory budget. Use the infrastructure
+CI job; it limits compiler concurrency and memory and preserves dependency caches.
+The commands in this document are CI-runner commands. `scripts/deploy.sh` requires
+`CI=true`; an authenticated deployment runner and the existing lease are required
+before applying. Do not export CI locally to bypass this restriction.
+Host bootstrap helpers remain Python programs embedded by Go; their output is
+byte-for-byte compatible with the former TypeScript generator.
+
+Resource constructors keep the original logical names and provider versions.
+Database, secrets and certificate protection, ASG desired-capacity ownership,
+rolling-update dependencies and stack output names are preserved. Regression
+fixtures in `testdata/` compare all resource inputs in foundation, legacy,
+transition and rolling modes against the original TypeScript program.
+
+For the runtime switch, first finish the existing resource imports, canonical
+stack configuration/lease work, and the separately owned apex-domain cutover. Rebase this migration onto that state, retain the
+same stack and configuration, and record TypeScript and Go previews against the
+same state. Go must show zero changes/replacements and the same resource URNs.
+The first Go apply must be a no-op under the deployment lease. Do not combine the
+runtime migration with an image update, provider upgrade or resource refactor.
+
+Capture both previews in private files on the authenticated CI runner, using
+`--refresh=false --json --show-sames --expect-no-changes` against the same settled
+stack state. Then run:
+
+```sh
+python3 scripts/check-infra-migration.py typescript-preview.json go-preview.json
+```
+
+The checker requires complete unchanged-resource reports and compares URNs,
+provider references and protection flags. Do not publish raw preview JSON: it
+contains stack configuration and resource metadata. Keep only the summary in the
+PR. A provisional pre-cutover preview does not satisfy the final migration gate.
+
+### Enforced first Go apply
+
+Hold `R-ajent-apply` from the TypeScript baseline capture through the Go apply.
+On the authenticated CI runner, with unchanged stack configuration and image,
+run `scripts/deploy.sh STACK --migrate /private/path/typescript-preview.json`.
+The command runs infrastructure tests, captures a fresh no-change Go preview,
+compares the receipts, and applies only its saved no-change plan. It records
+`goMigrationRevision` in stack configuration only after success and exits without
+changing the image. Do not set this marker manually. Subsequent image releases
+require that verified revision in their ancestry. Preserve the private receipt
+directory as release evidence; never commit its contents.

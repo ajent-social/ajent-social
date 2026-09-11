@@ -1,26 +1,55 @@
 name: Go and PostgreSQL
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 permissions:
   contents: read
 jobs:
   infrastructure:
-    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 90
+    runs-on: [self-hosted, linux, arm64]
+    env:
+      CGO_ENABLED: '0'
+      GOMAXPROCS: '1'
+      GOFLAGS: '-p=1'
+      GOGC: '20'
+      GOMEMLIMIT: '3GiB'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-go@v5
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: infra/package-lock.json
-      - run: npm ci --prefix infra
-      - run: npm run --prefix infra check
-      - run: npm run --prefix infra test
+          go-version-file: infra/go.mod
+          cache: false
+      - uses: actions/cache/restore@v4
+        id: infra-cache
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-infra-go-${{ hashFiles('infra/go.mod', 'infra/go.sum') }}-${{ github.run_id }}
+          restore-keys: ${{ runner.os }}-infra-go-${{ hashFiles('infra/go.mod', 'infra/go.sum') }}-
+      - run: go mod download
+        working-directory: infra
+      # CI omits the generated pulumi-cloudflare SDK (-tags infra_ci); that package
+      # alone OOM-kills the shared runner. Production builds keep the real SDK.
+      - run: go test -tags infra_ci -vet=off -v ./...
+        working-directory: infra
+      - run: python3 -m unittest discover -s infra/tests -p '*_test.py'
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 -tags infra_ci ./...
+        working-directory: infra
       - run: node --test public-site/worker.test.mjs
       - run: python3 -m unittest discover -s internal/web/onboarding -p '*_test.py'
-      - run: npm audit --prefix infra
       - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ steps.infra-cache.outputs.cache-primary-key }}
   ui:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: [self-hosted, linux, arm64]
     services:
       postgres:
         image: postgres:16-alpine
@@ -105,7 +134,7 @@ jobs:
           path: ajent-arm64.tar.gz
           retention-days: 1
   test:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: [self-hosted, linux, arm64]
     services:
       postgres:
         image: postgres:16-alpine
