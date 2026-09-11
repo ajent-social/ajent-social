@@ -44,3 +44,36 @@ func configureKnowledge(ctx context.Context, pool *pgxpool.Pool) (*knowledge.Ser
 	}
 	return &knowledge.Service{Pool: pool, BrainID: parsed.String(), Backend: backend}, nil
 }
+
+// configureGroupKnowledgeProfile builds the operator-configured writer for
+// exactly one group-private credential profile. It never touches
+// knowledge_brains or group_knowledge_bindings: which brain(s) actually use
+// this profile is decided entirely by CreateBinding's own out-of-band,
+// operator-controlled setup (internal/knowledge groupbrain.go) -- this
+// function only ever supplies the in-process (endpoint,token) writer handle
+// a resolved profile name maps to at RPC time.
+//
+// Absent configuration is preserved exactly as before (nil, nil): a
+// deployment that names no group profile keeps running with no group-private
+// writer capability at all, the same as today. Partial or malformed
+// configuration fails startup loudly instead of silently running with no
+// private writer or falling back to any other credential -- this is the
+// "no implicit profile or global fallback" contract at the one place a
+// deployment's operator-set profile ever gets read from the environment.
+func configureGroupKnowledgeProfile() (map[string]knowledge.Backend, error) {
+	profile, endpoint, token := os.Getenv("AJENT_GROUP_BRAIN_PROFILE"), os.Getenv("AJENT_GROUP_BRAIN_ENDPOINT"), os.Getenv("AJENT_GROUP_BRAIN_TOKEN")
+	if profile == "" && endpoint == "" && token == "" {
+		return nil, nil
+	}
+	if profile == "" || endpoint == "" || token == "" {
+		return nil, errors.New("group knowledge profile configuration requires a profile name, endpoint and token")
+	}
+	if !knowledge.ValidCredentialProfile(profile) {
+		return nil, errors.New("invalid AJENT_GROUP_BRAIN_PROFILE")
+	}
+	backend, err := knowledge.NewSerenity(endpoint, token)
+	if err != nil {
+		return nil, errors.New("invalid group knowledge writer configuration")
+	}
+	return map[string]knowledge.Backend{profile: backend}, nil
+}

@@ -97,6 +97,10 @@ func (s *Service) ProcessOne(ctx context.Context) (bool, error) {
 
 // Start uses the product's cancellable background-job lifecycle. Content and
 // provider errors never enter logs; durable metadata exposes safe status codes.
+// It drains the global outbox only when a global partition is configured
+// (BrainID set) and the group-private outbox only when at least one profile
+// backend is configured -- either, both, or neither can be true for a given
+// deployment, and an unconfigured side is a silent no-op, never an error.
 func (s *Service) Start(ctx context.Context) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
@@ -109,7 +113,12 @@ func (s *Service) Start(ctx context.Context) <-chan struct{} {
 				return
 			case <-ticker.C:
 				callCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
-				_, _ = s.ProcessOne(callCtx)
+				if s.BrainID != "" {
+					_, _ = s.ProcessOne(callCtx)
+				}
+				if len(s.ProfileBackends) > 0 {
+					_, _ = s.ProcessOneGroup(callCtx)
+				}
 				cancel()
 			}
 		}

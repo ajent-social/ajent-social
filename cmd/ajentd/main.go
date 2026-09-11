@@ -5,6 +5,7 @@ import (
 	"ajent/internal/bootstrap"
 	"ajent/internal/improvements"
 	"ajent/internal/jobs"
+	"ajent/internal/knowledge"
 	"ajent/internal/store"
 	"ajent/internal/telemetry"
 	"ajent/internal/web"
@@ -92,6 +93,16 @@ func main() {
 	a.Knowledge, e = configureKnowledge(ctx, db.Pool)
 	if e != nil {
 		log.Fatal(e)
+	}
+	groupProfiles, e := configureGroupKnowledgeProfile()
+	if e != nil {
+		log.Fatal(e)
+	}
+	if len(groupProfiles) > 0 {
+		if a.Knowledge == nil {
+			a.Knowledge = &knowledge.Service{Pool: db.Pool}
+		}
+		a.Knowledge.ProfileBackends = groupProfiles
 	}
 	trusted, e := parseTrustedProxies(os.Getenv("AJENT_TRUSTED_PROXIES"))
 	if e != nil {

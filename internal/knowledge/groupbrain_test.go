@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +19,7 @@ type gbFixture struct {
 	svc                                                          *Service
 	orgA, orgB                                                   string
 	member, pendingAgent, suspendedAgent, crossOrgAgent, removed string
-	group, brain                                                 string
+	group, brain, brainProfile                                   string
 }
 
 func (f *gbFixture) exec(sql string, args ...any) {
@@ -58,7 +59,10 @@ func newGuardFixture(t *testing.T) *gbFixture {
 	f.exec(`INSERT INTO group_members(group_id,agent_id,role,state) VALUES($1,$2,'member','accepted')`, f.group, f.removed)
 	f.exec(`DELETE FROM group_members WHERE group_id=$1 AND agent_id=$2`, f.group, f.removed)
 	f.brain = uuid.NewString()
-	if err := f.svc.CreateBinding(context.Background(), f.group, f.brain); err != nil {
+	// credential_profile is globally unique across the whole (shared, not
+	// per-test) disposable database, so every fixture instance needs its own.
+	f.brainProfile = uuid.NewString()
+	if err := f.svc.CreateBinding(context.Background(), f.group, f.brain, f.brainProfile); err != nil {
 		t.Fatal(err)
 	}
 	return f
@@ -168,7 +172,7 @@ func TestGuardGroupBrainNeverResolvesAnotherGroupsBrain(t *testing.T) {
 	f.exec(`INSERT INTO agents(id,org_id,handle) VALUES($1,$2,'memberb')`, memberB, f.orgB)
 	f.exec(`INSERT INTO group_members(group_id,agent_id,role,state) VALUES($1,$2,'owner','accepted')`, groupB, memberB)
 	brainB := uuid.NewString()
-	if err := f.svc.CreateBinding(ctx, groupB, brainB); err != nil {
+	if err := f.svc.CreateBinding(ctx, groupB, brainB, uuid.NewString()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.svc.GuardGroupBrain(ctx, f.member, groupB); !errors.Is(err, ErrGroupBrainUnavailable) {
@@ -200,13 +204,44 @@ func TestRecheckGroupBrainRejectsMismatchedBrain(t *testing.T) {
 func TestCreateBindingEnforcesUniqueness(t *testing.T) {
 	f := newGuardFixture(t)
 	ctx := context.Background()
-	if err := f.svc.CreateBinding(ctx, f.group, uuid.NewString()); !errors.Is(err, ErrBindingRejected) {
+	if err := f.svc.CreateBinding(ctx, f.group, uuid.NewString(), uuid.NewString()); !errors.Is(err, ErrBindingRejected) {
 		t.Fatalf("second brain admitted for already-bound group: %v", err)
 	}
 	otherGroup := uuid.NewString()
 	f.exec(`INSERT INTO groups(id,org_id,name,visibility) VALUES($1,$2,'other','private')`, otherGroup, f.orgA)
-	if err := f.svc.CreateBinding(ctx, otherGroup, f.brain); !errors.Is(err, ErrBindingRejected) {
+	// Same profile as f.brain's own row: this must fail on the bindings
+	// UNIQUE(brain_id) constraint specifically, not on a profile mismatch.
+	if err := f.svc.CreateBinding(ctx, otherGroup, f.brain, f.brainProfile); !errors.Is(err, ErrBindingRejected) {
 		t.Fatalf("second group admitted for already-bound brain: %v", err)
+	}
+}
+
+// Two distinct brains (global or private) can never share one writer identity:
+// migration 022's partial unique index on credential_profile is the actual
+// duplicate-reuse rejection, not a naming convention.
+func TestCreateBindingRejectsReusedCredentialProfile(t *testing.T) {
+	f := newGuardFixture(t)
+	ctx := context.Background()
+	otherGroup := uuid.NewString()
+	f.exec(`INSERT INTO groups(id,org_id,name,visibility) VALUES($1,$2,'reuse-profile','private')`, otherGroup, f.orgA)
+	if err := f.svc.CreateBinding(ctx, otherGroup, uuid.NewString(), f.brainProfile); !errors.Is(err, ErrBindingRejected) {
+		t.Fatalf("second brain admitted with a reused credential profile: %v", err)
+	}
+	// The rejected attempt must never have mutated the original binding.
+	if got, err := f.svc.GuardGroupBrain(ctx, f.member, f.group); err != nil || got != f.brain {
+		t.Fatalf("original binding disturbed by a rejected reuse attempt: got %q err %v", got, err)
+	}
+}
+
+func TestCreateBindingRejectsMalformedProfile(t *testing.T) {
+	f := newGuardFixture(t)
+	ctx := context.Background()
+	otherGroup := uuid.NewString()
+	f.exec(`INSERT INTO groups(id,org_id,name,visibility) VALUES($1,$2,'malformed-profile','private')`, otherGroup, f.orgA)
+	for _, bad := range []string{"", "Upper-Case", "has spaces", "-leading-dash", "trailing-dash-", strings.Repeat("a", 65)} {
+		if err := f.svc.CreateBinding(ctx, otherGroup, uuid.NewString(), bad); !errors.Is(err, ErrBindingRejected) {
+			t.Fatalf("malformed profile %q admitted: %v", bad, err)
+		}
 	}
 }
 
@@ -217,7 +252,7 @@ func TestCreateBindingForbidsExistingGlobalBrain(t *testing.T) {
 	f.exec(`INSERT INTO knowledge_brains(id,scope) VALUES($1,'global_web_findings')`, global)
 	otherGroup := uuid.NewString()
 	f.exec(`INSERT INTO groups(id,org_id,name,visibility) VALUES($1,$2,'other-2','private')`, otherGroup, f.orgA)
-	if err := f.svc.CreateBinding(ctx, otherGroup, global); !errors.Is(err, ErrBindingRejected) {
+	if err := f.svc.CreateBinding(ctx, otherGroup, global, uuid.NewString()); !errors.Is(err, ErrBindingRejected) {
 		t.Fatalf("existing global brain admitted as private: %v", err)
 	}
 }
@@ -228,12 +263,12 @@ func TestCreateBindingCannotResurrectRevokedGrant(t *testing.T) {
 	if err := f.svc.RevokeBinding(ctx, f.group); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.svc.CreateBinding(ctx, f.group, uuid.NewString()); !errors.Is(err, ErrBindingRejected) {
+	if err := f.svc.CreateBinding(ctx, f.group, uuid.NewString(), uuid.NewString()); !errors.Is(err, ErrBindingRejected) {
 		t.Fatalf("revoked group rebound to a fresh brain: %v", err)
 	}
 	otherGroup := uuid.NewString()
 	f.exec(`INSERT INTO groups(id,org_id,name,visibility) VALUES($1,$2,'other-3','private')`, otherGroup, f.orgA)
-	if err := f.svc.CreateBinding(ctx, otherGroup, f.brain); !errors.Is(err, ErrBindingRejected) {
+	if err := f.svc.CreateBinding(ctx, otherGroup, f.brain, f.brainProfile); !errors.Is(err, ErrBindingRejected) {
 		t.Fatalf("revoked brain rebound to a new group: %v", err)
 	}
 	if _, err := f.svc.GuardGroupBrain(ctx, f.member, f.group); !errors.Is(err, ErrGroupBrainUnavailable) {

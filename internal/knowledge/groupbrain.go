@@ -3,6 +3,7 @@ package knowledge
 import (
 	"context"
 	"errors"
+	"regexp"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -18,9 +19,27 @@ var (
 	ErrGroupBrainUnavailable = errors.New("group knowledge binding unavailable")
 	// ErrBindingRejected covers every operator-setup failure: the group is
 	// already bound, the brain is already bound to a different (possibly
-	// revoked) group, or the brain ID already names the global partition.
+	// revoked) group, the brain ID already names the global partition, the
+	// credential profile is malformed, or the profile is already the writer
+	// identity for a different brain (or this brain was already bound to a
+	// different profile than the one now given).
 	ErrBindingRejected = errors.New("group knowledge binding rejected")
 )
+
+// credentialProfilePattern matches Serenity's own --credential-profile
+// grammar (RFC-BRAIN-AUTH-02/dec-1204) so a profile name an operator types
+// here is valid on both sides of the boundary. Ajent never imports or calls
+// into that mechanism directly; it only ever holds the label plus its own
+// operator-configured (endpoint,token) writer for it (see knowledge_env.go).
+var credentialProfilePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$`)
+
+// ValidCredentialProfile reports whether name is a well-formed, non-empty
+// profile label. An empty string is never valid here: CreateBinding always
+// requires an explicit profile, and "" is reserved to mean "unconfigured"
+// on a knowledge_brains row (see migration 022).
+func ValidCredentialProfile(name string) bool {
+	return name != "" && credentialProfilePattern.MatchString(name)
+}
 
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
@@ -29,12 +48,20 @@ func isUniqueViolation(err error) bool {
 
 // CreateBinding is operator-controlled internal setup, never an agent-writable
 // API; callers authorize it out of band. It admits brainID as a private
-// partition (creating its knowledge_brains row on first use) and binds it to
-// groupID in one transaction. group_knowledge_bindings' PRIMARY KEY(group_id)
-// and UNIQUE(brain_id) are the actual source of truth for "one brain per
-// group, one group per brain" -- this function never deletes or updates an
-// existing row, so a prior binding for either ID, revoked or not, always wins.
-func (s *Service) CreateBinding(ctx context.Context, groupID, brainID string) error {
+// partition (creating its knowledge_brains row on first use) bound to
+// credentialProfile -- the operator-typed label that must separately resolve
+// to a configured writer at RPC time (resolveProfileBackend) -- and binds it
+// to groupID in one transaction. group_knowledge_bindings' PRIMARY
+// KEY(group_id) and UNIQUE(brain_id) are the actual source of truth for "one
+// brain per group, one group per brain"; migration 022's partial unique index
+// on knowledge_brains.credential_profile is the actual source of truth for
+// "one writer identity per brain" -- this function never deletes or updates
+// an existing row, so a prior binding or profile for either ID, revoked or
+// not, always wins.
+func (s *Service) CreateBinding(ctx context.Context, groupID, brainID, credentialProfile string) error {
+	if !ValidCredentialProfile(credentialProfile) {
+		return ErrBindingRejected
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -44,14 +71,17 @@ func (s *Service) CreateBinding(ctx context.Context, groupID, brainID string) er
 	// never left aborted: Postgres refuses every later statement in a tx after
 	// a raised error unless rolled back to a savepoint, and the scope check
 	// below needs to run in the same transaction as the binding insert.
-	if _, err = tx.Exec(ctx, `INSERT INTO knowledge_brains(id,scope) VALUES($1,'group_private') ON CONFLICT(id) DO NOTHING`, brainID); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO knowledge_brains(id,scope,credential_profile) VALUES($1,'group_private',$2) ON CONFLICT(id) DO NOTHING`, brainID, credentialProfile); err != nil {
+		if isUniqueViolation(err) {
+			return ErrBindingRejected
+		}
 		return err
 	}
-	var scope string
-	if err = tx.QueryRow(ctx, `SELECT scope FROM knowledge_brains WHERE id=$1`, brainID).Scan(&scope); err != nil {
+	var scope, profile string
+	if err = tx.QueryRow(ctx, `SELECT scope,credential_profile FROM knowledge_brains WHERE id=$1`, brainID).Scan(&scope, &profile); err != nil {
 		return err
 	}
-	if scope != "group_private" {
+	if scope != "group_private" || profile != credentialProfile {
 		return ErrBindingRejected
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO group_knowledge_bindings(group_id,brain_id) VALUES($1,$2)`, groupID, brainID); err != nil {
@@ -141,4 +171,37 @@ func (s *Service) RecheckGroupBrain(ctx context.Context, actor, groupID, expectB
 		return ErrGroupBrainUnavailable
 	}
 	return nil
+}
+
+// rowQuerier is satisfied by both *pgxpool.Pool and pgx.Tx, so
+// resolveProfileBackend can be called either standalone or, more usually,
+// inside the same transaction that just selected the row it is about to act
+// on -- resolution and the row it authorizes never straddle two snapshots.
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// resolveProfileBackend looks up brainID's current credential_profile and
+// returns the operator-configured Backend for it. This is the one place a
+// private RPC's writer identity is chosen, and it is always called again,
+// freshly, immediately before that RPC -- never cached across calls or
+// resolved from anything a caller/agent supplied. An empty or unconfigured
+// profile fails closed (ErrProfileUnavailable): it never falls back to
+// s.Backend (the global writer) or to any other brain's profile.
+func (s *Service) resolveProfileBackend(ctx context.Context, q rowQuerier, brainID string) (Backend, error) {
+	var profile string
+	if err := q.QueryRow(ctx, `SELECT credential_profile FROM knowledge_brains WHERE id=$1 AND scope='group_private'`, brainID).Scan(&profile); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrGroupBrainUnavailable
+		}
+		return nil, err
+	}
+	if profile == "" {
+		return nil, ErrProfileUnavailable
+	}
+	backend, ok := s.ProfileBackends[profile]
+	if !ok {
+		return nil, ErrProfileUnavailable
+	}
+	return backend, nil
 }
