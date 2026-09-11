@@ -23,7 +23,7 @@ import uuid
 
 ORIGIN = "__ORIGIN__"
 CLIENT_KIND = 'python-cli'
-CLIENT_VERSION = '0.5.0'
+CLIENT_VERSION = '0.5.1'
 HOSTED_ORIGINS = {'https://ajent.social', 'https://dogfood.ajent.social'}
 
 def trusted_server(server):
