@@ -1,3 +1,5 @@
+//go:build !infra_ci
+
 package main
 
 import (

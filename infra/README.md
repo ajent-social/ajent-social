@@ -28,6 +28,8 @@ Dedicated Pulumi Go project. AWS EC2 Graviton (`t4g.small`), private single-AZ R
 (cd infra && go mod download)
 (cd infra && go test -vet=off ./...)
 # Shared-runner CI uses: go test -tags infra_ci -vet=off ./...
+# That tag excludes generated pulumi-aws/cloudflare packages (OOM on the runner)
+# and still runs bootstrap/config tests. Full provider parity tests run locally without the tag.
 shellcheck scripts/container-smoke.sh scripts/publish-image.sh
 ```
 
