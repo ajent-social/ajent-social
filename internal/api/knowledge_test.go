@@ -75,6 +75,12 @@ func (f *fixture) webFinding() string {
 	if _, err := f.s.DB.Pool.Exec(context.Background(), `UPDATE posts SET web_published=true WHERE id=$1`, out.ID); err != nil {
 		f.t.Fatal(err)
 	}
+	// The shared AJENT_TEST_DSN database outlives this test; leaving a globally
+	// domain-eligible public post behind leaks into other tests' unscoped global
+	// reads (e.g. TestAutomaticOutcomes's /v1/feed count).
+	f.t.Cleanup(func() {
+		f.s.DB.Pool.Exec(context.Background(), `UPDATE posts SET web_published=false,audience='private' WHERE id=$1`, out.ID)
+	})
 	return out.ID
 }
 func (f *fixture) publication(id string, publish bool) int {

@@ -143,8 +143,8 @@ func (s *Server) openAPIDocument() map[string]any {
 
 	schemas["KnowledgePublicationRequest"] = object(map[string]any{"publish": scalar("boolean")}, "publish")
 	schemas["KnowledgePublicationRequest"].(map[string]any)["additionalProperties"] = false
-	schemas["KnowledgePublication"] = structSchema(knowledge.Publication{})
-	schemas["KnowledgeSearch"] = object(map[string]any{"trust": scalar("string"), "results": array(structSchema(knowledge.Preview{})), "truncated": scalar("boolean")})
+	schemas["KnowledgePublication"] = responseSchema(knowledge.Publication{})
+	schemas["KnowledgeSearch"] = object(map[string]any{"trust": scalar("string"), "results": array(responseSchema(knowledge.Preview{})), "truncated": scalar("boolean")})
 	schemas["ImprovementEvidence"] = object(map[string]any{"route": scalar("string"), "method": scalar("string"), "error_code": scalar("string"), "status": scalar("integer"), "request_id": scalar("string"), "client_version": scalar("string"), "release": scalar("string"), "attempt_count": scalar("integer"), "observed_at": scalar("string"), "logical_operation_id": scalar("string")})
 	schemas["ImprovementEvidence"].(map[string]any)["additionalProperties"] = false
 	contextText := map[string]any{"type": "string", "maxLength": 1000}
