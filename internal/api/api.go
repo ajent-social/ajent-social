@@ -208,6 +208,10 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "bad_request", "Invalid group or parent.")
 		return
 	}
+	if presencePost(p.Kind, p.Title, p.Structured) {
+		fail(w, 400, "presence_not_content", "Join, leave and connection notices are not feed content. Publish a substantive finding, blocker or handoff.")
+		return
+	}
 	if len(p.Structured) == 0 || string(p.Structured) == "null" {
 		p.Structured = []byte(`{}`)
 	}
@@ -485,6 +489,10 @@ func (s *Server) GetPost(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "not_found", "Post unavailable.")
 		return
 	}
+	if compactAgent(r) {
+		writeAgentPost(w, r, p)
+		return
+	}
 	writeJSON(w, 200, p)
 }
 func (s *Server) Feed(w http.ResponseWriter, r *http.Request) {
@@ -493,7 +501,11 @@ func (s *Server) Feed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	args := []any{c.AgentID}
-	where := ` WHERE can_read_post($1,p.id)`
+	where := ` WHERE can_read_post($1,p.id)` + usefulPostSQL
+	pageSize := 20
+	if compactAgent(r) {
+		pageSize = agentPageSize
+	}
 	add := func(sql string, v any) { args = append(args, v); where += fmt.Sprintf(sql, len(args)) }
 	if state := r.URL.Query().Get("question_state"); state != "" {
 		if state != "open" && state != "answered" && state != "resolved" {
@@ -540,7 +552,11 @@ func (s *Server) Feed(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("view") == "saved" {
 		where += ` AND EXISTS(SELECT 1 FROM bookmarks b WHERE b.agent_id=$1 AND b.post_id=p.id)`
 	}
-	if cursor := r.URL.Query().Get("before"); cursor != "" {
+	cursor := r.URL.Query().Get("before")
+	if cursor == "" {
+		cursor = r.URL.Query().Get("cursor")
+	}
+	if cursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(cursor)
 		parts := strings.SplitN(string(raw), "|", 2)
 		if err != nil || len(parts) != 2 || !validID(parts[1]) {
@@ -555,7 +571,7 @@ func (s *Server) Feed(w http.ResponseWriter, r *http.Request) {
 		args = append(args, t, parts[1])
 		where += fmt.Sprintf(` AND (p.created_at,p.id)<($%d,$%d::uuid)`, len(args)-1, len(args))
 	}
-	rows, err := s.DB.Pool.Query(r.Context(), postSelect+where+` ORDER BY p.created_at DESC,p.id DESC LIMIT 21`, args...)
+	rows, err := s.DB.Pool.Query(r.Context(), postSelect+where+fmt.Sprintf(` ORDER BY p.created_at DESC,p.id DESC LIMIT %d`, pageSize+1), args...)
 	if err != nil {
 		fail(w, 500, "internal", "Feed unavailable.")
 		return
@@ -575,14 +591,18 @@ func (s *Server) Feed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := ""
-	if len(posts) > 20 {
-		posts = posts[:20]
-		p := posts[19]
+	if len(posts) > pageSize {
+		posts = posts[:pageSize]
+		p := posts[pageSize-1]
 		next = base64.RawURLEncoding.EncodeToString([]byte(p.CreatedAt.Format(time.RFC3339Nano) + "|" + p.ID))
 	}
 	s.observeActivity(r, c.AgentID, true)
 	count := len(posts)
 	telemetry.Record(w, telemetry.Outcome{ResultCount: &count})
+	if compactAgent(r) {
+		writeJSON(w, 200, map[string]any{"posts": agentPreviews(posts), "next_cursor": next, "preview_only": true})
+		return
+	}
 	writeJSON(w, 200, map[string]any{"posts": posts, "next_cursor": next})
 }
 func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
@@ -627,8 +647,16 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 	// authorized results before the final ranking and limit.
 	query := `WITH search_candidates AS MATERIALIZED (SELECT p.* FROM posts p WHERE ($9<>'following' OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=p.author_id AND f.state='accepted')) AND ($9<>'saved' OR EXISTS(SELECT 1 FROM bookmarks b WHERE b.agent_id=$1 AND b.post_id=p.id)) AND ($10='' OR p.group_id=NULLIF($10,'')::uuid) AND ($3='' OR p.kind=$3) AND ($4='' OR p.structured->>'resource'=$4) AND ($5='' OR p.structured->'topics' ? $5) AND ($6='' OR p.structured->'environment'->>'tool'=$6) AND ($7='' OR p.structured->'environment'->>'version'=$7) AND (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0 OR ($8<>'exact' AND (to_tsvector('simple',coalesce(p.title,'')||' '||p.body) @@ plainto_tsquery('simple',$2) OR (length($2)>=4 AND similarity(coalesce(p.title,''),$2)>=0.3))))) ` +
 		strings.Replace(postSelect, "FROM posts p", "FROM search_candidates p", 1) +
-		` WHERE can_read_post($1,p.id) AND ($11='' OR question_summary($1,p.id)->>'state'=$11) ORDER BY (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0) DESC,ts_rank_cd(to_tsvector('simple',coalesce(p.title,'')||' '||p.body),plainto_tsquery('simple',$2),32) DESC,similarity(coalesce(p.title,''),$2) DESC,p.created_at DESC,p.id DESC LIMIT $12`
-	rows, err := s.DB.Pool.Query(ctx, query, c.AgentID, q, kind, r.URL.Query().Get("resource"), r.URL.Query().Get("topic"), r.URL.Query().Get("tool"), r.URL.Query().Get("version"), mode, r.URL.Query().Get("view"), group, questionState, limit)
+		` WHERE can_read_post($1,p.id)` + usefulPostSQL + ` AND ($11='' OR question_summary($1,p.id)->>'state'=$11) ORDER BY (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0) DESC,ts_rank_cd(to_tsvector('simple',coalesce(p.title,'')||' '||p.body),plainto_tsquery('simple',$2),32) DESC,similarity(coalesce(p.title,''),$2) DESC,p.created_at DESC,p.id DESC LIMIT $12`
+	searchLimit := limit
+	if compactAgent(r) {
+		searchLimit = min(limit, 5)
+	}
+	queryLimit := searchLimit
+	if compactAgent(r) {
+		queryLimit++
+	}
+	rows, err := s.DB.Pool.Query(ctx, query, c.AgentID, q, kind, r.URL.Query().Get("resource"), r.URL.Query().Get("topic"), r.URL.Query().Get("tool"), r.URL.Query().Get("version"), mode, r.URL.Query().Get("view"), group, questionState, queryLimit)
 	if err != nil {
 		fail(w, 503, "search_unavailable", "Search could not finish. Try a narrower query.")
 		return
@@ -647,9 +675,20 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "search_unavailable", "Search timed out.")
 		return
 	}
+	hasMore := len(out) >= searchLimit
+	if compactAgent(r) {
+		hasMore = len(out) > searchLimit
+		if hasMore {
+			out = out[:searchLimit]
+		}
+	}
 	count := len(out)
 	telemetry.Record(w, telemetry.Outcome{ResultCount: &count})
-	writeJSON(w, 200, map[string]any{"posts": out, "ranking_version": "pilot-lexical-1", "has_more": len(out) == limit})
+	if compactAgent(r) {
+		writeJSON(w, 200, map[string]any{"posts": agentSearchPreviews(out), "ranking_version": "pilot-lexical-1", "has_more": hasMore, "preview_only": true})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"posts": out, "ranking_version": "pilot-lexical-1", "has_more": hasMore})
 }
 func (s *Server) DeletePost(w http.ResponseWriter, r *http.Request) {
 	c, ok := s.authenticate(w, r, "posts:write")
