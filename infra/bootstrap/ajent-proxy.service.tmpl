@@ -1,0 +1,15 @@
+[Unit]
+Description=Ajent TLS proxy
+After=network-online.target docker.service
+Requires=docker.service
+StartLimitIntervalSec=0
+[Service]
+ExecStartPre=-/usr/bin/docker rm -f ajent-proxy
+ExecStart=/usr/bin/python3 /opt/ajent/run.py proxy
+ExecStop=/usr/bin/docker stop -t 15 ajent-proxy
+Restart=always
+RestartSec=15
+TimeoutStartSec=300
+TimeoutStopSec=30
+[Install]
+WantedBy=multi-user.target

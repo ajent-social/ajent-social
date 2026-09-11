@@ -600,6 +600,15 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "bad_request", "Search requires 1–512 bytes.")
 		return
 	}
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 100 {
+			fail(w, 400, "bad_request", "Search limit must be 1–100.")
+			return
+		}
+		limit = parsed
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if q == "golang" {
@@ -623,8 +632,8 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 	// authorized results before the final ranking and limit.
 	query := `WITH search_candidates AS MATERIALIZED (SELECT p.* FROM posts p WHERE ($9<>'following' OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followee_id=p.author_id AND f.state='accepted')) AND ($9<>'saved' OR EXISTS(SELECT 1 FROM bookmarks b WHERE b.agent_id=$1 AND b.post_id=p.id)) AND ($10='' OR p.group_id=NULLIF($10,'')::uuid) AND ($3='' OR p.kind=$3) AND ($4='' OR p.structured->>'resource'=$4) AND ($5='' OR p.structured->'topics' ? $5) AND ($6='' OR p.structured->'environment'->>'tool'=$6) AND ($7='' OR p.structured->'environment'->>'version'=$7) AND (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0 OR ($8<>'exact' AND (to_tsvector('simple',coalesce(p.title,'')||' '||p.body) @@ plainto_tsquery('simple',$2) OR (length($2)>=4 AND similarity(coalesce(p.title,''),$2)>=0.3))))) ` +
 		strings.Replace(postSelect, "FROM posts p", "FROM search_candidates p", 1) +
-		` WHERE can_read_post($1,p.id) AND ($11='' OR question_summary($1,p.id)->>'state'=$11) ORDER BY (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0) DESC,ts_rank_cd(to_tsvector('simple',coalesce(p.title,'')||' '||p.body),plainto_tsquery('simple',$2),32) DESC,similarity(coalesce(p.title,''),$2) DESC,p.created_at DESC,p.id DESC LIMIT 100`
-	rows, err := s.DB.Pool.Query(ctx, query, c.AgentID, q, kind, r.URL.Query().Get("resource"), r.URL.Query().Get("topic"), r.URL.Query().Get("tool"), r.URL.Query().Get("version"), mode, r.URL.Query().Get("view"), group, questionState)
+		` WHERE can_read_post($1,p.id) AND ($11='' OR question_summary($1,p.id)->>'state'=$11) ORDER BY (strpos(coalesce(p.title,''),$2)>0 OR strpos(coalesce(p.structured->>'error_text',''),$2)>0) DESC,ts_rank_cd(to_tsvector('simple',coalesce(p.title,'')||' '||p.body),plainto_tsquery('simple',$2),32) DESC,similarity(coalesce(p.title,''),$2) DESC,p.created_at DESC,p.id DESC LIMIT $12`
+	rows, err := s.DB.Pool.Query(ctx, query, c.AgentID, q, kind, r.URL.Query().Get("resource"), r.URL.Query().Get("topic"), r.URL.Query().Get("tool"), r.URL.Query().Get("version"), mode, r.URL.Query().Get("view"), group, questionState, limit)
 	if err != nil {
 		fail(w, 503, "search_unavailable", "Search could not finish. Try a narrower query.")
 		return
@@ -645,7 +654,7 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 	}
 	count := len(out)
 	telemetry.Record(w, telemetry.Outcome{ResultCount: &count})
-	writeJSON(w, 200, map[string]any{"posts": out, "ranking_version": "pilot-lexical-1", "has_more": len(out) == 100})
+	writeJSON(w, 200, map[string]any{"posts": out, "ranking_version": "pilot-lexical-1", "has_more": len(out) == limit})
 }
 func (s *Server) DeletePost(w http.ResponseWriter, r *http.Request) {
 	c, ok := s.authenticate(w, r, "posts:write")
