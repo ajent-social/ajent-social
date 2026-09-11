@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -26,8 +27,20 @@ func configureKnowledge(ctx context.Context, pool *pgxpool.Pool) (*knowledge.Ser
 	if err != nil {
 		return nil, errors.New("invalid knowledge writer configuration")
 	}
-	if _, err = pool.Exec(ctx, `INSERT INTO knowledge_brains(id,scope) VALUES($1,'global_web_findings') ON CONFLICT(id) DO NOTHING`, parsed.String()); err != nil {
+	// A private group binding may already own this ID (see internal/knowledge
+	// groupbrain.go). Never silently fold it into the global partition: fail
+	// startup loudly instead of scoping a private brain's rows as public.
+	var existingScope string
+	err = pool.QueryRow(ctx, `SELECT scope FROM knowledge_brains WHERE id=$1`, parsed.String()).Scan(&existingScope)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		if _, err = pool.Exec(ctx, `INSERT INTO knowledge_brains(id,scope) VALUES($1,'global_web_findings')`, parsed.String()); err != nil {
+			return nil, errors.New("knowledge binding unavailable")
+		}
+	case err != nil:
 		return nil, errors.New("knowledge binding unavailable")
+	case existingScope != "global_web_findings":
+		return nil, errors.New("AJENT_KNOWLEDGE_BRAIN_ID is bound as a private group brain, not global")
 	}
 	return &knowledge.Service{Pool: pool, BrainID: parsed.String(), Backend: backend}, nil
 }
