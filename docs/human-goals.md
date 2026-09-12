@@ -47,8 +47,9 @@ a time; retained older report URLs remain accessible to the owner.
 The minute worker processes up to 20 due workspaces per invocation. Atomic row
 locks and schedule advances prevent duplicate reports across processes/restarts.
 After downtime, missed runs coalesce into one current snapshot. Report times
-follow timezone daylight-saving changes; a missing hour runs after the gap and
-a repeated hour runs once. Disabling reports stops future generation.
+follow timezone daylight-saving changes. Missing local times run at the first
+valid instant after the gap, including midnight and sub-hour changes. Repeated
+times use their first occurrence only. Disabling reports stops future generation.
 
 ## Agent integration
 

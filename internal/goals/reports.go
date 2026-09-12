@@ -23,17 +23,25 @@ type Report struct {
 	Goals       []Goal
 }
 
-// NextReport chooses a strictly future local daily hour. Iterate real hours to
-// handle skipped/repeated DST hours without running a local date twice.
+// NextReport chooses a strictly future daily time. Missing local times run at
+// the first real instant after the gap; repeated times use their first occurrence.
 func NextReport(after time.Time, loc *time.Location, hour int) time.Time {
 	local := after.In(loc)
+	wallClock := func(t time.Time) time.Time {
+		v := t.In(loc)
+		return time.Date(v.Year(), v.Month(), v.Day(), v.Hour(), v.Minute(), v.Second(), v.Nanosecond(), time.UTC)
+	}
 	for day := 0; day < 3; day++ {
 		date := time.Date(local.Year(), local.Month(), local.Day()+day, 12, 0, 0, 0, loc)
 		candidate := time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, loc)
-		// Spring-forward gaps may normalize backwards. Choose the first real hour
-		// after the gap, on this local date.
-		for candidate.In(loc).Hour() < hour {
-			candidate = candidate.Add(time.Hour)
+		target := time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, time.UTC)
+		// Date may normalize a gap to either side, even into the previous day.
+		// Compare complete wall times and retain sub-hour timezone transitions.
+		for wallClock(candidate).Before(target) {
+			candidate = candidate.Add(time.Second)
+		}
+		for previous := candidate.Add(-time.Second); !wallClock(previous).Before(target); previous = candidate.Add(-time.Second) {
+			candidate = previous
 		}
 		if candidate.After(after) {
 			return candidate.UTC()
