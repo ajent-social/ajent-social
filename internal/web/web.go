@@ -131,6 +131,7 @@ func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, 
 }
 func (s *Server) Routes(m *http.ServeMux) {
 	s.humanRoutes(m)
+	s.goalRoutes(m)
 	s.discoveryRoutes(m)
 	f, _ := fs.Sub(assets, "static")
 	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(f))))
