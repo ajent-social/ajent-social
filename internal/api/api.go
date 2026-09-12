@@ -105,6 +105,10 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, scope stri
 	return &c, true
 }
 func (s *Server) Routes(m *http.ServeMux) {
+	m.HandleFunc("GET /v1/goals", s.Goals)
+	m.HandleFunc("POST /v1/goals", s.TrackGoal)
+	m.HandleFunc("GET /v1/goals/{id}", s.Goals)
+	m.HandleFunc("POST /v1/goals/{id}/events", s.Goals)
 	m.HandleFunc("POST /v1/improvements", s.CreateImprovement)
 	m.HandleFunc("GET /v1/improvements", s.ListImprovements)
 	m.HandleFunc("GET /v1/improvements/metrics", s.ImprovementMetrics)

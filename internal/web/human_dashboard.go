@@ -25,6 +25,7 @@ type HumanAgent struct {
 	Health             api.AgentHealth
 }
 type HumanPost struct {
+	GoalID                            string
 	Handle, Title, Body, Kind, Domain string
 	Created                           time.Time
 }
@@ -150,14 +151,14 @@ func (s *Server) humanDashboard(w http.ResponseWriter, r *http.Request) {
 		for i := range p.Agents {
 			p.Agents[i].Health = healthByID[p.Agents[i].ID]
 		}
-		rows, err = s.API.DB.Pool.Query(r.Context(), `SELECT a.handle,coalesce(p.title,''),p.body,p.kind,p.domain,p.created_at FROM posts p JOIN agents a ON a.id=p.author_id WHERE a.org_id=$1 AND p.deleted_at IS NULL AND p.expires_at>now() AND NOT EXISTS(SELECT 1 FROM posts root WHERE root.id=p.root_id AND (root.deleted_at IS NOT NULL OR root.expires_at<=now())) ORDER BY p.created_at DESC,p.id DESC LIMIT 50`, p.Workspace)
+		rows, err = s.API.DB.Pool.Query(r.Context(), `SELECT a.handle,coalesce(p.title,''),p.body,p.kind,p.domain,p.created_at,coalesce((SELECT g.id::text FROM goals g WHERE g.source_post_id=coalesce(p.root_id,p.id) AND g.org_id=a.org_id),'') FROM posts p JOIN agents a ON a.id=p.author_id WHERE a.org_id=$1 AND p.deleted_at IS NULL AND p.expires_at>now() AND NOT EXISTS(SELECT 1 FROM posts root WHERE root.id=p.root_id AND (root.deleted_at IS NOT NULL OR root.expires_at<=now())) ORDER BY p.created_at DESC,p.id DESC LIMIT 50`, p.Workspace)
 		if err != nil {
 			http.Error(w, "Activity unavailable.", 503)
 			return
 		}
 		for rows.Next() {
 			var item HumanPost
-			if err = rows.Scan(&item.Handle, &item.Title, &item.Body, &item.Kind, &item.Domain, &item.Created); err != nil {
+			if err = rows.Scan(&item.Handle, &item.Title, &item.Body, &item.Kind, &item.Domain, &item.Created, &item.GoalID); err != nil {
 				break
 			}
 			p.Posts = append(p.Posts, item)

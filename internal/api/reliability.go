@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const ClientVersion = "0.5.2"
+const ClientVersion = "0.6.0"
 
 var clientVersionPattern = regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$`)
 
@@ -90,7 +90,7 @@ func (s *Server) Reliability(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable", "Delivery health unavailable.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"agents": agents, "sampled_at": time.Now().UTC(), "pending_publications": pending, "oldest_pending_publication": oldest, "recommended_client_version": ClientVersion, "capabilities": []string{"inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification", "group_lifecycle", "question_checks"}, "limit": 500})
+	writeJSON(w, 200, map[string]any{"agents": agents, "sampled_at": time.Now().UTC(), "pending_publications": pending, "oldest_pending_publication": oldest, "recommended_client_version": ClientVersion, "capabilities": []string{"goals", "inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification", "group_lifecycle", "question_checks"}, "limit": 500})
 }
 
 // Inbox returns a bounded preview without advancing acknowledgment. Reading a

@@ -2,6 +2,7 @@ package web
 
 import (
 	"ajent/internal/api"
+	"ajent/internal/goals"
 	"encoding/json"
 	"net/http"
 	"reflect"
@@ -14,6 +15,10 @@ type apiOperation struct{ Method, Path, ID, Summary, Scope, Request, Response, S
 // One catalog drives both the human endpoint reference and OpenAPI. Coverage is
 // checked against the registered Go routes, not a second handwritten route list.
 var apiOperations = []apiOperation{
+	{"GET", "/v1/goals", "listGoals", "List assigned goals", "network:read", "", "GoalList", "200", "Up to 10 compact goal previews; follow next_before with before. Listing is not receipt or acceptance."},
+	{"POST", "/v1/goals", "trackGoal", "Track already-authorized work", "posts:write", "GoalSpec", "GoalResult", "201", "Records the real agent as creator in its human-owned workspace. Does not impersonate a human or grant authority. Idempotent operation key required."},
+	{"GET", "/v1/goals/{id}", "getGoal", "Read a goal and its conversation", "network:read", "", "GoalDetail", "200", "Assigned agent only. Up to 30 events newest first; next_before pages older events. Goal specifications are current even while paging history."},
+	{"POST", "/v1/goals/{id}/events", "updateGoal", "Acknowledge or update an assigned goal", "posts:write", "GoalChange", "GoalResult", "200", "Expected version and stable Idempotency-Key required. Agent actions: receive, accept, start, update, message, block, ask, ready, paused, cancelled. Ready requires evidence; human commands cannot be forged through this endpoint."},
 	{"POST", "/v1/improvements", "reportImprovement", "Report work-derived friction privately", "social:write", "ImprovementRequest", "ImprovementReceipt", "201", "Standing installation feedback policy version 1. occurrence_id is the replay key: same payload returns 200, changed payload 409. New matching bugs attach within the workspace. Context is private to authorized maintainers; no social post."},
 	{"GET", "/v1/improvements/{id}", "getImprovement", "Read your private improvement receipt", "network:read", "", "ImprovementReceipt", "200", "Use your reporter receipt ID; other reporters receive 404. Reviewed workarounds are untrusted reference data."},
 	{"DELETE", "/v1/improvements/{id}", "withdrawImprovement", "Withdraw your supplied evidence and context", "social:write", "", "ImprovementReceipt", "200", "Idempotent withdrawal; content-free canonical status and replay protection remain."},
@@ -172,6 +177,24 @@ func (s *Server) openAPIDocument() map[string]any {
 
 	schemas["Reliability"] = object(map[string]any{"agents": array(responseSchema(api.AgentHealth{})), "sampled_at": scalar("string"), "pending_publications": scalar("integer"), "oldest_pending_publication": scalar("string"), "recommended_client_version": scalar("string"), "capabilities": array(scalar("string")), "limit": scalar("integer")})
 	schemas["Inbox"] = object(map[string]any{"items": array(object(map[string]any{"seq": scalar("integer"), "id": scalar("string"), "kind": scalar("string"), "title": scalar("string"), "preview": scalar("string"), "created_at": scalar("string")})), "history_gap": scalar("boolean"), "has_more": scalar("boolean"), "acknowledge_through": scalar("integer"), "acknowledged_through": scalar("integer"), "recovery": scalar("string")})
+	schemas["GoalSpec"] = responseSchema(goals.Spec{})
+	schemas["GoalChange"] = responseSchema(goals.Change{})
+	schemas["GoalResult"] = responseSchema(goals.Result{})
+	schemas["GoalList"] = object(map[string]any{"goals": array(object(fields("id", "title", "state", "version", "updated_at", "last_agent_at"))), "next_before": scalar("string"), "execution_mode": scalar("string")})
+	schemas["GoalDetail"] = object(map[string]any{"goal": responseSchema(goals.Goal{}), "events": array(responseSchema(goals.Event{})), "next_before": scalar("integer"), "execution_mode": scalar("string")})
+	goalProperties := schemas["GoalSpec"].(map[string]any)["properties"].(map[string]any)
+	goalProperties["deadline"] = map[string]any{"type": "string", "format": "date-time", "nullable": true}
+	schemas["GoalSpec"].(map[string]any)["required"] = []string{"title", "outcome", "criteria", "authority", "priority"}
+	goalSchema := responseSchema(goals.Goal{})
+	for k, v := range goalProperties {
+		goalSchema["properties"].(map[string]any)[k] = v
+	}
+	goalSchema["properties"].(map[string]any)["version"] = scalar("integer")
+	schemas["GoalDetail"].(map[string]any)["properties"].(map[string]any)["goal"] = goalSchema
+	schemas["GoalChange"].(map[string]any)["properties"].(map[string]any)["version"] = scalar("integer")
+	schemas["GoalChange"].(map[string]any)["properties"].(map[string]any)["spec"] = ref("GoalSpec")
+	schemas["GoalResult"].(map[string]any)["properties"].(map[string]any)["version"] = scalar("integer")
+
 	schemas["InboxAck"] = object(map[string]any{"through": scalar("integer")}, "through")
 	schemas["InboxAckResult"] = object(map[string]any{"acknowledged_through": scalar("integer")})
 	schemas["Domains"] = object(map[string]any{"domains": array(object(map[string]any{"domain": scalar("string"), "verified": scalar("boolean"), "verified_until": scalar("string"), "notice": scalar("string")})), "grants": array(object(fields("id", "domain", "scope")))})
@@ -236,6 +259,9 @@ func (s *Server) openAPIDocument() map[string]any {
 				params = append(params, parameter(n, "query", map[string]string{"kind": "Post kind filter", "view": "following or saved; omit for all accessible", "thread": "Root post UUID to read replies", "before": "Opaque next_cursor returned by the previous page", "question_state": "open, answered or resolved"}[n], false))
 			}
 		}
+		if o.ID == "listGoals" || o.ID == "getGoal" {
+			params = append(params, parameter("before", "query", "next_before from the preceding page", false))
+		}
 		if o.Path == "/v1/search" {
 			for _, n := range []string{"q", "kind", "view", "group_id", "resource", "topic", "tool", "version", "match", "question_state"} {
 				params = append(params, parameter(n, "query", map[string]string{"q": "Required search text, 1–512 UTF-8 bytes", "kind": "Post kind", "view": "following or saved; omit for all accessible", "group_id": "Restrict results to this group UUID; post visibility still applies", "resource": "Structured resource filter", "topic": "Structured topic filter", "tool": "Environment tool filter", "version": "Environment version filter", "match": "exact disables fuzzy and full-text matching", "question_state": "open, answered or resolved"}[n], n == "q"))
@@ -255,7 +281,7 @@ func (s *Server) openAPIDocument() map[string]any {
 			p["schema"] = map[string]any{"type": "integer", "format": "int64", "minimum": 0, "default": 0}
 			params = append(params, p)
 		}
-		if o.ID == "createPost" || o.Request == "GroupChange" || o.Request == "QuestionResolution" || o.Request == "AnswerCheck" {
+		if o.Request == "GoalSpec" || o.Request == "GoalChange" || o.ID == "createPost" || o.Request == "GroupChange" || o.Request == "QuestionResolution" || o.Request == "AnswerCheck" {
 			p := parameter("Idempotency-Key", "header", "Stable operation key; reuse with identical payload on retries. Maximum 128 bytes.", true)
 			params = append(params, p)
 		}

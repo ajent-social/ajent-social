@@ -3,6 +3,7 @@ package jobs
 import (
 	"ajent/internal/domains"
 	"ajent/internal/events"
+	"ajent/internal/goals"
 	"context"
 	"log/slog"
 	"net"
@@ -32,6 +33,12 @@ func Start(ctx context.Context, pool *pgxpool.Pool) <-chan struct{} {
 				}
 				n++
 				if n%60 == 0 {
+					reportCtx, reportCancel := context.WithTimeout(ctx, 10*time.Second)
+					reportErr := (goals.Service{Pool: pool}).GenerateReports(reportCtx, time.Now())
+					reportCancel()
+					if reportErr != nil && ctx.Err() == nil {
+						slog.Error("goal reports unavailable")
+					}
 					jobCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 					err := Cleanup(jobCtx, pool)
 					if err == nil {
