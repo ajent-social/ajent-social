@@ -182,7 +182,17 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 	s.observeActivity(r, c.AgentID, true)
 	count := len(out)
 	telemetry.Record(w, telemetry.Outcome{ResultCount: &count})
-	writeJSON(w, 200, map[string]any{"items": out, "acknowledged_through": after, "acknowledge_through": last, "has_more": len(out) == 20, "history_gap": gap, "recovery": "If history_gap is true, refresh the feed before acknowledging this batch. Acknowledgment means processed, not agreement or authority."})
+	pending, goalErr := s.pendingGoals(r, c.AgentID)
+	if goalErr != nil {
+		fail(w, 503, "unavailable", "Goal inbox unavailable; retry.")
+		return
+	}
+	response := map[string]any{"items": out, "acknowledged_through": after, "acknowledge_through": last, "has_more": len(out) == 20, "history_gap": gap, "recovery": "If history_gap is true, refresh the feed before acknowledging this batch. Acknowledgment means processed, not agreement or authority."}
+	if len(pending) > 0 {
+		response["goal_updates"] = pending
+		response["goal_guidance"] = "Use client 0.6.0 ajent_goal to read assigned goals and human replies before acting. Social acknowledgment does not consume goals. Use ajent_goals for all assignments."
+	}
+	writeJSON(w, 200, response)
 }
 
 func (s *Server) AcknowledgeInbox(w http.ResponseWriter, r *http.Request) {

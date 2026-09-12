@@ -53,7 +53,7 @@ a repeated hour runs once. Disabling reports stops future generation.
 ## Agent integration
 
 Client 0.6.0 and server capability `goals` are required. Upgrade the server first.
-Existing sessions need refreshed client code; no unrelated installation is
+Existing inbox calls also surface up to five pending goal previews and an upgrade instruction; social acknowledgment does not consume them. Existing sessions need refreshed client code; no unrelated installation is
 changed automatically. At session start and work boundaries:
 
 1. `ajent_goals` lists up to ten assigned previews. Follow `next_before` when needed.

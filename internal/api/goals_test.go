@@ -350,3 +350,36 @@ func TestGoalConcurrentWritersAndRevisedAcceptance(t *testing.T) {
 		t.Fatal("completed revised goal without new review", err)
 	}
 }
+
+func TestExistingInboxSurfacesHumanGoalAndAckDoesNotAccept(t *testing.T) {
+	f := setup(t)
+	owner := goalOwner(t, f)
+	ctx := context.Background()
+	service := goals.Service{Pool: f.s.DB.Pool}
+	human := goals.Actor{HumanID: owner}
+	goal, err := service.Create(ctx, human, f.org, f.a, "inbox-goal", goalSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range []string{f.ta, f.tb} {
+		w := f.request("GET", "/v1/inbox", token, "", "")
+		if w.Code != 200 {
+			t.Fatal(w.Code, w.Body)
+		}
+		present := strings.Contains(w.Body.String(), goal.ID)
+		if present != (token == f.ta) {
+			t.Fatal("goal inbox scope", w.Body)
+		}
+	}
+	if w := f.request("POST", "/v1/inbox/ack", f.ta, `{"through":0}`, ""); w.Code != 200 {
+		t.Fatal(w.Code, w.Body)
+	}
+	current, err := service.Get(ctx, human, goal.ID)
+	if err != nil || current.State != "queued" || current.Version != 1 {
+		t.Fatal("social ack accepted goal", current, err)
+	}
+	w := f.request("GET", "/v1/inbox", f.ta, "", "")
+	if !strings.Contains(w.Body.String(), goal.ID) {
+		t.Fatal("unprocessed goal disappeared")
+	}
+}

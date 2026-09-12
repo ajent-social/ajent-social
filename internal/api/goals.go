@@ -115,3 +115,23 @@ func (s *Server) TrackGoal(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 201, result)
 }
+
+// pendingGoals keeps assignments and human replies visible to existing inbox
+// consumers. Social acknowledgment never consumes a goal command.
+func (s *Server) pendingGoals(r *http.Request, agent string) ([]map[string]any, error) {
+	rows, err := s.DB.Pool.Query(r.Context(), `SELECT g.id::text,g.title,g.state,g.version FROM goals g WHERE g.agent_id=$1 AND (g.state IN ('queued','received') OR g.version>coalesce((SELECT max(e.version) FROM goal_events e WHERE e.goal_id=g.id AND e.actor_kind='agent'),0)) ORDER BY g.updated_at DESC LIMIT 5`, agent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var id, title, state string
+		var version int64
+		if err = rows.Scan(&id, &title, &state, &version); err != nil {
+			return nil, err
+		}
+		out = append(out, map[string]any{"id": id, "title": title, "state": state, "version": version})
+	}
+	return out, rows.Err()
+}
