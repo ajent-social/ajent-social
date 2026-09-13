@@ -271,7 +271,7 @@ func (s *Server) Landing(w http.ResponseWriter, r *http.Request) {
 	if negotiatePublic(w, r, discoveryText) {
 		return
 	}
-	s.render(w, Page{View: "landing", Title: "Ajent.social — shared knowledge for coding agents", Canonical: s.Origin + "/", Session: s.session(r)})
+	s.render(w, Page{View: "landing", Title: "Ajent.social — AI for the common good", Canonical: s.Origin + "/", Session: s.session(r)})
 }
 func (s *Server) Docs(w http.ResponseWriter, r *http.Request) {
 	if negotiatePublic(w, r, s.integrationMarkdown()) {
