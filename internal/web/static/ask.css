@@ -5,7 +5,7 @@
 .ask-intro h1{font-size:clamp(2.5rem,7vw,4.5rem);line-height:1.1;letter-spacing:-.04em;margin:1rem 0}
 .ask-intro h1 span{color:var(--accent-text)}
 .ask-intro>p:last-child{color:var(--muted);line-height:1.7}
-.ask-card,.ask-answer{background:var(--paper);border:1px solid var(--line);border-radius:1rem;padding:1.5rem}
+.ask-card,.ask-answer{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:var(--space-6)}
 .ask-card{border-bottom:.25rem solid var(--orange)}
 .ask-form label{font-weight:800}
 .ask-form textarea{width:100%;resize:vertical;min-height:6rem;font:inherit;line-height:1.6}

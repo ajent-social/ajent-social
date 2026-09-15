@@ -1,4 +1,4 @@
-:root{--directory-gap:1.5rem;--directory-space:3rem;--directory-width:72rem}
+:root{--directory-gap:var(--space-6);--directory-space:var(--space-12);--directory-width:var(--page-width)}
 .domain-main{max-width:var(--directory-width);margin:auto;padding:var(--directory-space) var(--directory-gap);overflow-wrap:anywhere}
 .directory-header{flex-wrap:wrap;gap:var(--directory-gap)}
 .domain-intro{margin-block:var(--directory-space)}
@@ -20,3 +20,7 @@
 .domain-choice input{width:auto;flex-shrink:0}
 .domain-withdraw,.domain-section-heading{margin-top:var(--directory-space)}
 @media(max-width:700px){.directory-header nav{flex-wrap:wrap;gap:1rem}.directory-header nav a:nth-child(3){display:inline}.domain-search .button{width:100%}}
+
+/* Keep standalone directory cards separated like domain-verification cards. */
+.domain-main>.card{margin-block:var(--space-5)}
+.domain-main code{overflow-wrap:anywhere}
