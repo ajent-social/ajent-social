@@ -1,3 +1,4 @@
+import {handleWiki, wikiSitemapEntries} from './wiki/wiki.mjs';
 // Public front door. Account sessions and agent credentials belong to the app.
 export const APP = 'https://dogfood.ajent.social';
 export const PUBLIC = 'https://ajent.social';
@@ -14,6 +15,8 @@ export async function handle(request, upstream = fetch, env = {}) {
  const url = new URL(request.url);
  if (!['ajent.social','www.ajent.social'].includes(url.hostname)) return new Response('Unknown host', {status:421});
  if (url.hostname === 'www.ajent.social' || url.protocol !== 'https:') return Response.redirect(PUBLIC + url.pathname + url.search, 308);
+ const wiki = handleWiki(request, env);
+ if (wiki) return wiki;
  const destination = APP + url.pathname + url.search;
  if (accountPath(url.pathname) || setupAsset(url.pathname)) return Response.redirect(destination,307);
  const chat = url.pathname === '/api/chat' && request.method === 'POST';
@@ -44,6 +47,8 @@ export async function handle(request, upstream = fetch, env = {}) {
   html=html.replaceAll('rel="canonical" href="'+APP,'rel="canonical" href="'+PUBLIC)
    .replaceAll('property="og:url" content="'+APP,'property="og:url" content="'+PUBLIC)
    .replaceAll('"url":"'+APP+'/"','"url":"'+PUBLIC+'/"');
+  // Link the public reference from existing public navigation without touching app sessions.
+  if (env.WIKI_ENABLED !== 'false' && response.ok && !html.includes('href="/wiki"')) html = html.replace('<nav aria-label="Main">', '<nav aria-label="Main"><a href="/wiki">Wiki</a>');
   // Pages without discovery metadata still get their own canonical URL.
   if(response.ok&&!html.includes('rel="canonical"')) html=html.replace('</head>','<link rel="canonical" href="'+PUBLIC+url.pathname.replaceAll('"','%22')+'"></head>');
   const id = measurementId(env.GA_MEASUREMENT_ID);
@@ -52,10 +57,14 @@ export async function handle(request, upstream = fetch, env = {}) {
   return new Response(html,{status:response.status,headers:outputHeaders});
  }
  if(url.pathname==='/llms.txt'||type.includes('text/markdown')){
-  const text=(await response.text()).replaceAll("Use this site's origin as AJENT_URL.",'Use '+APP+' as AJENT_URL.');outputHeaders.delete('content-encoding');outputHeaders.delete('etag');return new Response(text,{status:response.status,headers:outputHeaders});
+  let text=(await response.text()).replaceAll("Use this site's origin as AJENT_URL.",'Use '+APP+' as AJENT_URL.');
+  if (url.pathname==='/llms.txt' && response.ok && env.WIKI_ENABLED!=='false') text+='\n\n## Public reference\n- '+PUBLIC+'/wiki: Public wiki.\n- '+PUBLIC+'/wiki/amsl: AMSL capability contracts and evidence.\n- '+PUBLIC+'/wiki/amsl/catalog.json: Reviewed public reference snapshot; proposed guarantees are not implementation evidence.\n';
+  outputHeaders.delete('content-encoding');outputHeaders.delete('etag');return new Response(text,{status:response.status,headers:outputHeaders});
  }
  if(['/robots.txt','/sitemap.xml'].includes(url.pathname)){
-  const text=(await response.text()).replaceAll(APP,PUBLIC);outputHeaders.delete('content-encoding');outputHeaders.delete('etag');return new Response(text,{status:response.status,headers:outputHeaders});
+  let text=(await response.text()).replaceAll(APP,PUBLIC);
+  if (url.pathname==='/sitemap.xml' && response.ok) text=text.replace('</urlset>',wikiSitemapEntries(env)+'</urlset>');
+  outputHeaders.delete('content-encoding');outputHeaders.delete('etag');return new Response(text,{status:response.status,headers:outputHeaders});
  }
  return new Response(response.body,{status:response.status,headers:outputHeaders});
 }

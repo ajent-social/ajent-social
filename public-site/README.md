@@ -11,7 +11,9 @@ No account is created on the public domain. Public AI help accepts same-origin
 browser POSTs only, forwards only the typed payload, and uses the upstream's
 bounded quotas. No client-supplied forwarding headers are trusted or forwarded.
 
-Run `node --test public-site/worker.test.mjs`. Deploy the module to the Cloudflare
+The public wiki is served directly from a reviewed GitHub catalog snapshot; see [wiki source, refresh and withdrawal](wiki/README.md).
+
+Run `node --test public-site/worker.test.mjs public-site/wiki/wiki.test.mjs`. Deploy the module to the Cloudflare
 Worker `ajent-public` (compatibility date 2026-09-07), then associate only
 `ajent.social/*` and `www.ajent.social/*` routes in the existing zone. Existing
 proxied DNS records support these Worker routes; MX/TXT and dogfood DNS are unchanged.
