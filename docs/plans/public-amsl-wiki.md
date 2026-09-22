@@ -37,7 +37,7 @@ The reference implementation is not live. Local Go web tests, `go vet`, renderer
 
 | Task | Proposed owner | Trigger / dependencies | Acceptance |
 |---|---|---|---|
-| WIKI-RELEASE-01: clear infrastructure security scan | Infrastructure maintainer | Before release; existing gRPC scan failure | Dependency patch reviewed; infrastructure tests and vulnerability scan pass in CI |
+| WIKI-RELEASE-01: clear infrastructure security scan | Infrastructure maintainer | Before release; existing gRPC scan failure | gRPC v1.83.1 patch prepared in this branch; infrastructure tests and vulnerability scan must pass in CI |
 | WIKI-RELEASE-02: complete established Go migration gate | Deployment operator with architectural review | WIKI-RELEASE-01; authenticated CI runner and deployment lease; existing migration contract in `infra/README.md` | Matching TypeScript/Go no-change receipts, saved-plan no-op apply, migration revision recorded by the deployment script |
 | WIKI-RELEASE-03: merge and release native wiki | Merge owner / deployment operator | Required CI, merge review, WIKI-RELEASE-02 | Tested immutable image released; live wiki, search, details, discovery, account routes and rollback verified |
 
