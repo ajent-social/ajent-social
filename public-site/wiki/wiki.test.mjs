@@ -1,12 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {handle,PUBLIC,APP} from '../worker.mjs';
+const PUBLIC='https://ajent.social';
 import {handleWiki,wikiPaths} from './wiki.mjs';
 import {projectCatalog} from './catalog.mjs';
 import {snapshot} from './snapshot.mjs';
 const noUpstream = () => {throw new Error('Wiki must not retrieve authenticated or remote content');};
 const request = (path,init) => new Request(PUBLIC+path,init);
-const read = (path,env={},init) => handle(request(path,init),noUpstream,env);
+const read = (path,env={},init) => handleWiki(request(path,init),env);
 
 test('wiki and every capability are public without upstream access',async()=>{
  for(const path of wikiPaths()){
@@ -56,24 +56,19 @@ test('withdrawal suppresses detail, search, JSON, both sitemaps and lists',async
  const id='identity.service-credentials',env={WIKI_HIDDEN_IDS:id};
  assert.equal((await read('/wiki/amsl/'+id,env)).status,404);
  for(const path of ['/wiki/amsl','/wiki/amsl?q=credentials','/wiki/amsl/catalog.json','/wiki/sitemap.xml'])assert.ok(!(await (await read(path,env)).text()).includes(id),path);
- const sitemap=await handle(request('/sitemap.xml'),async()=>new Response('<urlset><url><loc>'+APP+'/guide</loc></url></urlset>'),env);
- const body=await sitemap.text();assert.doesNotMatch(body,/identity\.service-credentials/);assert.match(body,/wiki\/amsl\/billing\.customer-checkout/);assert.match(body,/https:\/\/ajent.social\/guide/);
+
 });
 test('emergency disable removes discovery and returns unavailable without content',async()=>{
  const env={WIKI_ENABLED:'false'};assert.deepEqual(wikiPaths(env),[]);
  for(const path of ['/wiki','/wiki/amsl','/wiki/amsl/catalog.json','/wiki/sitemap.xml']){const r=await read(path,env);assert.equal(r.status,503);assert.doesNotMatch(await r.text(),/Scoped service credentials/)}
- const llms=await handle(request('/llms.txt'),async()=>new Response('Existing agent docs'),env);assert.equal(await llms.text(),'Existing agent docs');
+
 });
 test('machine projection excludes restricted evidence bodies and reports provenance',async()=>{
  const response=await read('/wiki/amsl/catalog.json');const data=await response.json();
  assert.equal(data.source.revision,snapshot.source.revision);assert.equal(data.capabilities.length,12);
  assert.ok(data.capabilities.every(c=>!Object.hasOwn(c,'evidence')));assert.ok(data.capabilities.some(c=>c.restrictedEvidence));
 });
-test('public sitemap, agent index and navigation discover the wiki',async()=>{
- const sitemap=await handle(request('/sitemap.xml'),async()=>new Response('<urlset></urlset>'));assert.match(await sitemap.text(),/https:\/\/ajent.social\/wiki/);
- const llms=await handle(request('/llms.txt'),async()=>new Response('Existing instructions'));assert.match(await llms.text(),/wiki\/amsl\/catalog.json/);
- const page=await handle(request('/guide'),async()=>new Response('<html><head></head><nav aria-label="Main"><a href="/guide">Guide</a></nav></html>',{headers:{'Content-Type':'text/html'}}));assert.match(await page.text(),/href="\/wiki">Wiki/);
-});
+
 function rawRecord(){return {id:'identity.example',domain:'identity',name:'Example',status:'CANDIDATE',disposition:'EXTRACT',summary:'Example contract',use_when:['Needed'],non_goals:['Everything'],proposed_guarantees:['Proposed'],failure_modes:['Failure'],open_questions:['Question'],alternatives:[{name:'Library',url:'https://example.com',assessment:'Evaluate'}],implementations:[],verification:[],evidence:[{visibility:'RESTRICTED',basis:'CONFIDENTIAL BODY',url:'https://private.example/source'}],private_notes:'DO NOT COPY'};}
 test('projection never copies restricted evidence or unknown fields',()=>{
  const projected=JSON.stringify(projectCatalog({schema_version:1,capabilities:[rawRecord()]}));

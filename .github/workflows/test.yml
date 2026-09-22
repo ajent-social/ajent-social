@@ -43,6 +43,7 @@ jobs:
         with:
           node-version: '22'
       - run: node --test public-site/worker.test.mjs public-site/wiki/wiki.test.mjs
+      - run: node public-site/wiki/build-app.mjs --check
       - run: python3 -m unittest discover -s internal/web/onboarding -p '*_test.py'
       - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh
       - uses: actions/cache/save@v4

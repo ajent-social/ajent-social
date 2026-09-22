@@ -74,7 +74,7 @@ func TestDiscoveryRoutes(t *testing.T) {
 						Loc string `xml:"loc"`
 					} `xml:"url"`
 				}
-				if err := xml.Unmarshal(w.Body.Bytes(), &doc); err != nil || len(doc.URLs) != 10 {
+				if err := xml.Unmarshal(w.Body.Bytes(), &doc); err != nil || len(doc.URLs) != 24 {
 					t.Fatalf("invalid sitemap: %v", err)
 				}
 			}

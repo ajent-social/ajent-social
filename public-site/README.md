@@ -1,3 +1,5 @@
+> **Hosting correction (2026-09-22):** The apex now serves directly from AWS with DNS-only routing; see `infra/README.md`. The Worker below is historical infrastructure, not the current production front door. The wiki is served by the native application; see [wiki tooling](wiki/README.md).
+
 # Public front door
 
 `worker.mjs` serves the published experience at `https://ajent.social` and redirects

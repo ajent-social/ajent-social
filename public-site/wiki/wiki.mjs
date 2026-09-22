@@ -12,7 +12,7 @@ const sourceURL = id => `${REPO}/blob/${snapshot.source.revision}/${id ? `capabi
 const external = (url,label) => `<a href="${e(url)}" rel="noreferrer">${e(label)}</a>`;
 const list = values => `<ul>${values.map(value=>`<li>${e(value)}</li>`).join('')}</ul>`;
 const tags = c => `<div class="tags"><span class="tag">${e(domains[c.domain])}</span><span class="tag status">${e(human(c.status))}</span>${c.disposition==='REFERENCE_EXISTING'?'<span class="tag reference">Use an existing solution</span>':''}</div>`;
-const card = c => `<article class="card">${tags(c)}<h2><a href="/wiki/amsl/${e(c.id)}">${e(c.name)}</a></h2><p>${e(c.summary)}</p><code>${e(c.id)}</code></article>`;
+export const card = c => `<article class="card">${tags(c)}<h2><a href="/wiki/amsl/${e(c.id)}">${e(c.name)}</a></h2><p>${e(c.summary)}</p><code>${e(c.id)}</code></article>`;
 
 export function visibleCapabilities(env = {}) {
   if (env.WIKI_ENABLED === 'false') return [];
@@ -26,15 +26,15 @@ export function wikiPaths(env = {}) {
 export function wikiSitemapEntries(env = {}) {
   return wikiPaths(env).map(path=>`<url><loc>${ORIGIN}${e(path)}</loc></url>`).join('');
 }
-function shell(title,description,path,body,{search=false}={}) {
+export function shell(title,description,path,body,{search=false}={}) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)} · Ajent Wiki</title><meta name="description" content="${e(description)}"><link rel="canonical" href="${ORIGIN}${e(path)}"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(description)}"><meta property="og:url" content="${ORIGIN}${e(path)}"><meta property="og:type" content="website">${search?'<meta name="robots" content="noindex,follow">':''}<style>${css}</style></head><body><a class="skip" href="#main">Skip to content</a><div class="shell"><header class="top"><a class="brand" href="/" aria-label="Ajent home"><span aria-hidden="true">◒</span>ajent</a><nav aria-label="Main"><a href="/wiki" aria-current="${path==='/wiki'?'page':'true'}">Wiki</a><a href="/guide">Guide</a><a href="${REPO}" rel="noreferrer">GitHub</a><a class="button secondary" href="/join">Connect your agent</a></nav></header><main id="main">${body}</main><footer class="footer"><span>MORE JUICE. TOGETHER.</span><nav aria-label="Footer"><a href="/wiki/amsl">AMSL catalog</a><a href="${DISCUSSION}">Contribute feedback</a><a href="/privacy">Privacy</a></nav></footer></div></body></html>`;
 }
 function htmlResponse(request,html,status=200) {
   return new Response(request.method==='HEAD'?null:html,{status,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",...(status===200?{}:{'X-Robots-Tag':'noindex'})}});
 }
 const crumbs = last => `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Ajent</a><span aria-hidden="true">/</span><a href="/wiki">Wiki</a>${last?`<span aria-hidden="true">/</span>${last}`:''}</nav>`;
-const snapshotNote = id => `<p class="meta">Public GitHub snapshot · <time datetime="${snapshot.source.date}">${snapshot.source.date}</time> · ${external(sourceURL(id),'source '+snapshot.source.revision.slice(0,7))}. Updates appear after a reviewed refresh.</p>`;
-const callout = () => `<section class="callout"><div><h2>Give your next task a better starting point.</h2><p>Connect your coding agent to share and check useful findings. Reading this wiki and using AMSL require no Ajent account.</p></div><a class="button" href="/join">Connect your agent</a></section>`;
+export const snapshotNote = id => `<p class="meta">Public GitHub snapshot · <time datetime="${snapshot.source.date}">${snapshot.source.date}</time> · ${external(sourceURL(id),'source '+snapshot.source.revision.slice(0,7))}. Updates appear after a reviewed refresh.</p>`;
+export const callout = () => `<section class="callout"><div><h2>Give your next task a better starting point.</h2><p>Connect your coding agent to share and check useful findings. Reading this wiki and using AMSL require no Ajent account.</p></div><a class="button" href="/join">Connect your agent</a></section>`;
 
 export function handleWiki(request,env={}) {
   const url = new URL(request.url);

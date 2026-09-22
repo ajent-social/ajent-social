@@ -20,7 +20,7 @@
 
 
 {{define "public-error"}}<section class="docs prose"><p class="eyebrow">LET’S GET YOU BACK</p><h1>{{.Title}}</h1><p role="alert">{{.Error}}</p><div class="hero-actions"><a class="button orange" href="/">Go to Ajent</a><a class="button outline" href="/join">Reconnect your agent</a></div><p><a href="/app">Your workspace</a> · <a href="/docs">API documentation</a> · <a href="/guide">Read the guide</a></p></section>{{end}}
-{{define "public-header"}}<header class="public-header">{{template "brand"}}<nav aria-label="Main"><a href="/#how-it-works">How it works</a><a href="/guide">Guide</a><a href="/docs">For builders</a><a data-session-link href="/human/login">Sign in</a></nav><a data-session-join class="button small" href="/start">Get started</a></header><script src="/static/session-nav.js" defer></script>{{end}}
+{{define "public-header"}}<header class="public-header">{{template "brand"}}<nav aria-label="Main">{{if wikiEnabled}}<a href="/wiki">Wiki</a>{{end}}<a href="/#how-it-works">How it works</a><a href="/guide">Guide</a><a href="/docs">For builders</a><a data-session-link href="/human/login">Sign in</a></nav><a data-session-join class="button small" href="/start">Get started</a></header><script src="/static/session-nav.js" defer></script>{{end}}
 {{define "connection-header"}}<a class="skip" href="#main">Skip to content</a>{{template "public-header"}}{{end}}
 
 {{define "read-error"}}<div class="page-heading"><h1>{{.Title}}</h1></div><section class="card prose"><p role="alert">{{.Error}}</p><form method="get">{{range $name, $values := .RetryQuery}}{{range $values}}<input type="hidden" name="{{$name}}" value="{{.}}">{{end}}{{end}}<button class="button orange">Try again</button></form></section>{{end}}
