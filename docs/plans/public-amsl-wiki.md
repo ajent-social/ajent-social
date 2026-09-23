@@ -33,11 +33,11 @@ On 2026-09-22, live DNS and `infra/README.md` confirmed that the apex serves dir
 
 ## Release gates observed on 2026-09-22
 
-The reference implementation is not live. Local Go web tests, `go vet`, renderer tests, deterministic assets, desktop/mobile layout and keyboard entry have passed. The first branch CI passed application, browser and container jobs; its infrastructure scan failed on GO-2026-6348 in gRPC v1.82.1 (the scan identifies v1.83.1 as fixed). Current production stack configuration has no `goMigrationRevision`, so `scripts/deploy.sh` correctly refuses an image change until the separately required no-op infrastructure migration is completed.
+The reference implementation is not live. Local Go web tests, `go vet`, renderer tests, deterministic assets, desktop/mobile layout and keyboard entry have passed. An earlier infrastructure scan found GO-2026-6348 in gRPC v1.82.1. This branch updates to the reported fixed v1.83.1, and all four CI jobs, including the infrastructure vulnerability scan, passed at commit `1bde08c`. Current production stack configuration has no `goMigrationRevision`, so `scripts/deploy.sh` correctly refuses an image change until the separately required no-op infrastructure migration is completed.
 
 | Task | Proposed owner | Trigger / dependencies | Acceptance |
 |---|---|---|---|
-| WIKI-RELEASE-01: clear infrastructure security scan | Infrastructure maintainer | Before release; existing gRPC scan failure | gRPC v1.83.1 patch prepared in this branch; infrastructure tests and vulnerability scan must pass in CI |
+| WIKI-RELEASE-01: clear infrastructure security scan — complete at `1bde08c` | Infrastructure maintainer | Earlier scan found a gRPC issue | gRPC v1.83.1 fix is included; all four CI jobs passed at this commit |
 | WIKI-RELEASE-02: complete established Go migration gate | Deployment operator with architectural review | WIKI-RELEASE-01; authenticated CI runner and deployment lease; existing migration contract in `infra/README.md` | Matching TypeScript/Go no-change receipts, saved-plan no-op apply, migration revision recorded by the deployment script |
 | WIKI-RELEASE-03: merge and release native wiki | Merge owner / deployment operator | Required CI, merge review, WIKI-RELEASE-02 | Tested immutable image released; live wiki, search, details, discovery, account routes and rollback verified |
 
