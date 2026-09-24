@@ -1,0 +1,129 @@
+name: Production release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production:
+        description: Confirm that this run should release the selected main commit to production
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: ajent-production-release
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_production
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    env:
+      AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+      PULUMI_STACK: ${{ vars.PULUMI_STACK }}
+      AWS_REGION: us-west-2
+
+    steps:
+      - name: Validate release configuration
+        shell: bash
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo 'Releases must use main.' >&2; exit 1; }
+          [[ "${{ inputs.confirm_production }}" == "true" ]] || { echo 'Production confirmation is required.' >&2; exit 1; }
+          [[ -n "$AWS_DEPLOY_ROLE_ARN" ]] || { echo 'Configure the AWS_DEPLOY_ROLE_ARN repository variable.' >&2; exit 1; }
+          [[ -n "$PULUMI_ACCESS_TOKEN" ]] || { echo 'Configure the PULUMI_ACCESS_TOKEN repository secret.' >&2; exit 1; }
+          [[ -n "$PULUMI_STACK" ]] || { echo 'Configure the PULUMI_STACK repository variable.' >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require selected commit to remain current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          [[ "$(git rev-parse origin/main)" == "$GITHUB_SHA" ]] || { echo 'Main advanced after this run was selected; dispatch the current main commit.' >&2; exit 1; }
+
+      - name: Require successful main CI for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test.yml --commit "$GITHUB_SHA" --json status,conclusion,event,headSha --limit 20 \
+            | jq -c '[.[] | select(.event == "push" and .headSha == env.GITHUB_SHA)][0]')
+          [[ "$run" != "null" ]] || { echo 'No main push CI run was found for this commit.' >&2; exit 1; }
+          [[ "$(jq -r .status <<<"$run")" == "completed" && "$(jq -r .conclusion <<<"$run")" == "success" ]] || {
+            echo 'The main push CI run for this commit has not succeeded.' >&2
+            exit 1
+          }
+
+      - uses: pulumi/setup-pulumi@v2
+        with:
+          pulumi-version: 3.261.0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: infra/go.mod
+          cache: false
+
+      - uses: docker/setup-qemu-action@v3
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-west-2
+          role-session-name: ajent-production-release-${{ github.run_id }}
+
+      - name: Require completed Go infrastructure migration
+        shell: bash
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          migration=$(pulumi -C infra config get goMigrationRevision --stack "$PULUMI_STACK" 2>/dev/null || true)
+          [[ "$migration" =~ ^[a-f0-9]{40}$ ]] || { echo 'Complete the separate no-op Go migration before releasing.' >&2; exit 1; }
+          git merge-base --is-ancestor "$migration" HEAD || { echo 'The recorded Go migration revision is not in this release commit.' >&2; exit 1; }
+
+      - name: Publish tested ARM64 image
+        id: image
+        shell: bash
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/publish-image.log"
+          scripts/publish-image.sh "$PULUMI_STACK" | tee "$log"
+          digest=$(sed -n 's/^Verified image pushed\. Configure imageDigest: //p' "$log")
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo 'Image publisher did not return an immutable digest.' >&2; exit 1; }
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Apply release and wait for rollout
+        env:
+          CI: 'true'
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: scripts/deploy.sh "$PULUMI_STACK" "${{ steps.image.outputs.digest }}"
+
+      - name: Verify production endpoints
+        shell: bash
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          origin=$(pulumi -C infra stack output serviceUrl --stack "$PULUMI_STACK")
+          for path in /healthz /wiki /wiki/amsl; do
+            curl --fail --silent --show-error --max-time 20 "$origin$path" >/dev/null
+            printf 'Verified %s\n' "$path"
+          done

@@ -55,8 +55,11 @@ if [[ "$digest" == "--migrate" ]]; then
   exit 0
 fi
 pulumi -C infra config set imageDigest "$digest" --stack "$stack"
-pulumi -C infra preview --stack "$stack" --diff
-pulumi -C infra up --stack "$stack" --yes
+# Routine releases must not refresh runtime secret-version resources: the
+# deploy role cannot read secret values, and an image-only release should
+# update only the launch template and rolling fleet from the committed state.
+pulumi -C infra preview --stack "$stack" --diff --refresh=false
+pulumi -C infra up --stack "$stack" --yes --refresh=false
 current=$(aws autoscaling describe-instance-refreshes --region "$region" --auto-scaling-group-name "$group" --query 'InstanceRefreshes[0].InstanceRefreshId' --output text)
 if [[ "$current" != "$before" ]]; then
   python3 scripts/wait-rollout.py "$group" --region "$region"
