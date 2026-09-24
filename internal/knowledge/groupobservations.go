@@ -124,9 +124,14 @@ func (s *Service) StatusGroupObservation(ctx context.Context, actor, postID stri
 // immediately while a write is in flight; resolveProfileBackend runs inside
 // the same transaction, right before the RPC, off the row it authorizes.
 func (s *Service) ProcessOneGroup(ctx context.Context) (bool, error) {
+	// Select only actionable rows, using the same predicate as the locked read.
+	// An idle indexed/conflicted brain must not hide another brain's pending work.
 	var candidateBrain string
 	err := s.Pool.QueryRow(ctx, `SELECT k.brain_id::text FROM group_knowledge_publications k
- WHERE k.state<>'canceled' AND k.retry_at<=now() LIMIT 1`).Scan(&candidateBrain)
+ WHERE k.state<>'canceled' AND k.retry_at<=now() AND (
+ (k.state IN('pending','applied','recovery_required','cancel_pending') AND k.last_error_code<>'operation_conflict')
+ OR k.revoked_at IS NOT NULL OR k.expires_at<=now() OR NOT group_knowledge_source_eligible(k.post_id))
+ ORDER BY CASE WHEN k.revoked_at IS NOT NULL THEN 0 ELSE 1 END,k.retry_at,k.post_id LIMIT 1`).Scan(&candidateBrain)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

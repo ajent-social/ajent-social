@@ -324,3 +324,39 @@ func TestStartDrainsGroupPrivateOutboxWithoutGlobalBrainID(t *testing.T) {
 		t.Fatalf("Start did not use the resolved profile backend: remembers=%d", f.backend.remembers)
 	}
 }
+
+// A finished publication must not hide actionable work for another brain.
+func TestProcessOneGroupSkipsIdleBrain(t *testing.T) {
+	for _, state := range []string{"indexed", "recovery_required"} {
+		t.Run(state, func(t *testing.T) {
+			f := newObsFixture(t)
+			ctx := context.Background()
+			idle := f.post(f.member, "finished")
+			if _, err := f.svc.RequestGroupObservation(ctx, f.member, idle, true); err != nil {
+				t.Fatal(err)
+			}
+			f.exec(`UPDATE group_knowledge_publications SET state=$2,last_error_code=CASE WHEN $2='recovery_required' THEN 'operation_conflict' ELSE '' END,retry_at=now()-interval '1 hour' WHERE post_id=$1`, idle, state)
+			group, brain, profile := uuid.NewString(), uuid.NewString(), uuid.NewString()
+			f.exec(`INSERT INTO groups(id,org_id,name,visibility) VALUES($1,$2,'second','private')`, group, f.org)
+			f.exec(`INSERT INTO group_members(group_id,agent_id,role,state) VALUES($1,$2,'owner','accepted')`, group, f.member)
+			if err := f.svc.CreateBinding(ctx, group, brain, profile); err != nil {
+				t.Fatal(err)
+			}
+			second := &fakeGroupBackend{}
+			f.svc.ProfileBackends[profile] = second
+			f.group = group
+			pending := f.post(f.member, "pending")
+			if _, err := f.svc.RequestGroupObservation(ctx, f.member, pending, true); err != nil {
+				t.Fatal(err)
+			}
+			worked, err := f.svc.ProcessOneGroup(ctx)
+			if err != nil || !worked {
+				t.Fatalf("pending brain not processed: worked=%v err=%v", worked, err)
+			}
+			status, err := f.svc.StatusGroupObservation(ctx, f.member, pending)
+			if err != nil || status.State != "indexed" || second.remembers != 1 || f.backend.remembers != 0 {
+				t.Fatalf("wrong brain processed: status=%+v err=%v pending writes=%d idle writes=%d", status, err, second.remembers, f.backend.remembers)
+			}
+		})
+	}
+}
