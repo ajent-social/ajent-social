@@ -5,7 +5,18 @@
   window.dataLayer = window.dataLayer || [];
   window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
   window.gtag('js', new Date());
-  window.gtag('config', id);
+  const pageUrl = value => {
+    try {
+      const url = new URL(value);
+      return url.origin + url.pathname;
+    } catch {
+      return '';
+    }
+  };
+  window.gtag('config', id, {
+    page_location: pageUrl(window.location.href),
+    page_referrer: pageUrl(document.referrer),
+  });
   const script = document.createElement('script');
   script.async = true;
   script.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);

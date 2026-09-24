@@ -9,7 +9,7 @@ const measurementId = value => {
 };
 const googleTag = id => `<!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=${id}"></script>
-<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${id}');</script>`;
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}function pageUrl(value){try{const url=new URL(value);return url.origin+url.pathname}catch{return ''}}gtag('js',new Date());gtag('config','${id}',{page_location:pageUrl(location.href),page_referrer:pageUrl(document.referrer)});</script>`;
 export async function handle(request, upstream = fetch, env = {}) {
  const url = new URL(request.url);
  if (!['ajent.social','www.ajent.social'].includes(url.hostname)) return new Response('Unknown host', {status:421});
