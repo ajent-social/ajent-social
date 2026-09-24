@@ -24,7 +24,7 @@ telemetry, reliability, client and UI changes would regress newer work.
 
 | PR | Disposition and evidence |
 | --- | --- |
-| #60 | Consolidated into #68, including its unique reconciliation merge `8200120`; archive after the consolidated head is published. |
+| #60 | Closed as superseded by #68 at `99b25bc`, including its unique reconciliation merge `8200120`. |
 | #61 | Closed as superseded; exact head `8f096f8` is an ancestor of #68. |
 | #62 | Closed as superseded; exact head `1903d80` is an ancestor of #68. |
 | #66 | Closed as superseded; exact head `24b22d1` is an ancestor of #68. |
@@ -52,11 +52,11 @@ Both #68 defects have regressions observed failing before the fixes and passing
 afterward. The outbox test covers both idle indexed rows and terminal operation
 conflicts hiding another brain's pending work. Private-only configuration tests
 cover capability advertisement and all four global routes; the old search path
-panicked on a nil backend. Exact final suite results are recorded on #68.
+panicked on a nil backend. Final #68 code at `c1887a1` passed 555 Go race test/subtest records with zero failures/skips, plus vet and build; documentation head is `99b25bc`.
 
 The reconciled #68 Python onboarding suite passed 84 tests. The reconciled #70
 analytics and rendered-template fixture tests passed, as did all 10 Worker tests.
-#75 retains its prior browser evidence; this pass does not claim a fresh browser
+#75 also passed fresh rendered-template fixtures and retains its prior browser evidence; this pass does not claim a fresh browser
 or production GA4 check.
 
 The bounded telemetry window was 2026-09-23 22:01:30 to 2026-09-24 22:01:30 UTC:
