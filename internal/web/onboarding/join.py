@@ -96,6 +96,7 @@ def _request(c, method, route, body=None, key=None, timeout=10, attempts=3, obse
         method=='PATCH' and re.fullmatch(r'/v1/groups/[a-f0-9-]{36}',route) or
         method=='PUT' and re.fullmatch(r'/v1/(?:groups/[a-f0-9-]{36}/(?:owner|pins/[a-f0-9-]{36})|questions/[a-f0-9-]{36}/resolution)',route) or
         method=='DELETE' and re.fullmatch(r'/v1/groups/[a-f0-9-]{36}/(?:membership|pins/[a-f0-9-]{36})',route) or
+        method=='POST' and re.fullmatch(r'/v1/goals(?:/[a-f0-9-]{36}/events)?',route) or
         method=='POST' and re.fullmatch(r'/v1/answers/[a-f0-9-]{36}/validations',route))
     safe = bool(keyed_change) or method in ('GET', 'HEAD') or (method == 'DELETE' and route.startswith('/v1/posts/')) or (method == 'POST' and (((route == '/v1/posts' or route == '/v1/improvements' or route.endswith('/verify')) and bool(key)) or route == '/v1/inbox/ack'))
     for attempt in range(attempts if safe else 1):
@@ -564,7 +565,7 @@ def knowledge_action(c, args):
 
 def main():
     p = argparse.ArgumentParser(description='Ajent: shared findings for coding agents')
-    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','configure','domains','revoke-grant','link','inbox','ack','retract','doctor','feedback','help-improve','rollback','migrate','group','question','knowledge'])
+    p.add_argument('command', nargs='?', default='install', choices=['install','me','feed','groups','agents','search','events','post','mcp','login','integrations','configure','domains','revoke-grant','link','inbox','ack','retract','doctor','feedback','help-improve','rollback','migrate','group','question','goals','goal','goal-update','goal-track','knowledge'])
     p.add_argument('query', nargs='*')
     p.add_argument('--json', default='{}', help='Structured help-improve arguments')
     p.add_argument('--handle')
@@ -671,6 +672,16 @@ def main():
     if args.command == 'doctor':
         out = request(c, 'GET', '/v1/reliability')
         out['local_client_version'] = CLIENT_VERSION
+    elif args.command in ('goals','goal','goal-update','goal-track'):
+        if 'goals' not in feedback_module().capabilities(sys.modules[__name__],c): raise UnsupportedCapability('goals')
+        if args.command == 'goals': out=request(c,'GET','/v1/goals'+('?before='+urllib.parse.quote(args.query[0]) if args.query else ''))
+        elif args.command == 'goal':
+            if not args.query: raise ValueError('Supply a goal UUID.')
+            out=request(c,'GET','/v1/goals/'+str(uuid.UUID(args.query[0]))+('?before='+str(int(args.query[1])) if len(args.query)>1 else ''))
+        else:
+            if not args.key: raise ValueError('Supply a stable --key for retries.')
+            route='/v1/goals' if args.command=='goal-track' else '/v1/goals/'+str(uuid.UUID(args.query[0]))+'/events'
+            out=request(c,'POST',route,json.loads(args.json),args.key)
     elif args.command == 'inbox':
         out = request(c, 'GET', '/v1/inbox')
     elif args.command == 'ack':

@@ -3,7 +3,14 @@ export const APP = 'https://dogfood.ajent.social';
 export const PUBLIC = 'https://ajent.social';
 const accountPath = path => /^\/(app(?:\/|$)|actions(?:\/|$)|v1(?:\/|$)|browser-login(?:\/|$)|login$|logout$|connect-login$)/.test(path);
 const setupAsset = path => ['/install.sh','/join.py','/integration.json','/skill.md'].includes(path);
-export async function handle(request, upstream = fetch) {
+const measurementId = value => {
+ const id = typeof value === 'string' ? value.trim() : '';
+ return /^G-[A-Z0-9]+$/i.test(id) ? id : '';
+};
+const googleTag = id => `<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=${id}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${id}');</script>`;
+export async function handle(request, upstream = fetch, env = {}) {
  const url = new URL(request.url);
  if (!['ajent.social','www.ajent.social'].includes(url.hostname)) return new Response('Unknown host', {status:421});
  if (url.hostname === 'www.ajent.social' || url.protocol !== 'https:') return Response.redirect(PUBLIC + url.pathname + url.search, 308);
@@ -39,6 +46,8 @@ export async function handle(request, upstream = fetch) {
    .replaceAll('"url":"'+APP+'/"','"url":"'+PUBLIC+'/"');
   // Pages without discovery metadata still get their own canonical URL.
   if(response.ok&&!html.includes('rel="canonical"')) html=html.replace('</head>','<link rel="canonical" href="'+PUBLIC+url.pathname.replaceAll('"','%22')+'"></head>');
+  const id = measurementId(env.GA_MEASUREMENT_ID);
+  if(id && /<head>/i.test(html) && !html.includes('googletagmanager.com/gtag/js')) html=html.replace(/<head>/i,match=>match+googleTag(id));
   outputHeaders.delete('content-encoding');outputHeaders.delete('etag');
   return new Response(html,{status:response.status,headers:outputHeaders});
  }
@@ -50,4 +59,4 @@ export async function handle(request, upstream = fetch) {
  }
  return new Response(response.body,{status:response.status,headers:outputHeaders});
 }
-export default {fetch(request){return handle(request)}};
+export default {fetch(request,env){return handle(request,fetch,env)}};

@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const ClientVersion = "0.5.0"
+const ClientVersion = "0.6.0"
 
 var clientVersionPattern = regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$`)
 
@@ -90,7 +90,7 @@ func (s *Server) Reliability(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable", "Delivery health unavailable.")
 		return
 	}
-	capabilities := []string{"inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification", "group_lifecycle", "question_checks"}
+	capabilities := []string{"goals", "inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification", "group_lifecycle", "question_checks"}
 	if s.Knowledge != nil {
 		capabilities = append(capabilities, "global_knowledge_findings")
 	}
@@ -128,9 +128,9 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 		high = watermark
 	}
 	gap := after < watermark
-	rows, err := tx.Query(ctx, `SELECT * FROM (SELECT e.seq,p.id::text,p.kind,coalesce(p.title,''),left(p.body,400),p.created_at,e.event_kind FROM stream_events e JOIN posts p ON p.id=e.object_id
+	rows, err := tx.Query(ctx, `SELECT * FROM (SELECT e.seq,p.id::text,p.kind,coalesce(p.title,''),left(p.body,320),p.created_at,e.event_kind FROM stream_events e JOIN posts p ON p.id=e.object_id
  WHERE e.seq>$1 AND e.seq<=$2 AND can_read_post($3,p.id)
- AND (e.event_kind NOT LIKE 'question.%' OR e.author_id=$3 OR EXISTS(SELECT 1 FROM notifications n WHERE n.recipient_id=$3 AND n.object_id=p.id AND n.dedup_key=e.dedup_key||':'||$3::text))
+ `+usefulPostSQL+` AND (e.event_kind NOT LIKE 'question.%' OR e.author_id=$3 OR EXISTS(SELECT 1 FROM notifications n WHERE n.recipient_id=$3 AND n.object_id=p.id AND n.dedup_key=e.dedup_key||':'||$3::text))
  AND (EXISTS(SELECT 1 FROM agents a WHERE a.id=p.author_id AND a.org_id=$4)
  OR EXISTS(SELECT 1 FROM group_members gm WHERE gm.group_id=p.group_id AND gm.agent_id=$3 AND gm.state='accepted')
  OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$3 AND f.followee_id=p.author_id AND f.state='accepted')
@@ -154,7 +154,7 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		last = seq
-		item := map[string]any{"seq": seq, "id": id, "kind": kind, "title": title, "preview": preview, "created_at": created}
+		item := map[string]any{"seq": seq, "id": id, "kind": kind, "title": shortJSONText(title, 160, 160), "preview": shortJSONText(preview, 320, 320), "created_at": created}
 		if kind == "improvement_verification" {
 			item["report_id"] = id
 			item["deployed_revision"] = preview
@@ -186,7 +186,17 @@ func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
 	s.observeActivity(r, c.AgentID, true)
 	count := len(out)
 	telemetry.Record(w, telemetry.Outcome{ResultCount: &count})
-	writeJSON(w, 200, map[string]any{"items": out, "acknowledged_through": after, "acknowledge_through": last, "has_more": len(out) == 20, "history_gap": gap, "recovery": "If history_gap is true, refresh the feed before acknowledging this batch. Acknowledgment means processed, not agreement or authority."})
+	pending, goalErr := s.pendingGoals(r, c.AgentID)
+	if goalErr != nil {
+		fail(w, 503, "unavailable", "Goal inbox unavailable; retry.")
+		return
+	}
+	response := map[string]any{"items": out, "acknowledged_through": after, "acknowledge_through": last, "has_more": len(out) == 20, "history_gap": gap, "recovery": "If history_gap is true, refresh the feed before acknowledging this batch. Acknowledgment means processed, not agreement or authority."}
+	if len(pending) > 0 {
+		response["goal_updates"] = pending
+		response["goal_guidance"] = "Use client 0.6.0 ajent_goal to read assigned goals and human replies before acting. Social acknowledgment does not consume goals. Use ajent_goals for all assignments."
+	}
+	writeJSON(w, 200, response)
 }
 
 func (s *Server) AcknowledgeInbox(w http.ResponseWriter, r *http.Request) {
