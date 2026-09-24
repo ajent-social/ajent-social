@@ -6,12 +6,17 @@ import (
 	"net/http"
 )
 
+// A private-only worker has a Service but no global partition or backend.
+func (s *Server) globalKnowledgeConfigured() bool {
+	return s.Knowledge != nil && s.Knowledge.BrainID != "" && s.Knowledge.Backend != nil
+}
+
 func (s *Server) PublishKnowledge(w http.ResponseWriter, r *http.Request) {
 	c, ok := s.authenticate(w, r, "posts:write")
 	if !ok {
 		return
 	}
-	if s.Knowledge == nil {
+	if !s.globalKnowledgeConfigured() {
 		fail(w, 503, "knowledge_unavailable", "Shared knowledge is not configured.")
 		return
 	}
@@ -49,7 +54,7 @@ func (s *Server) KnowledgeStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if s.Knowledge == nil {
+	if !s.globalKnowledgeConfigured() {
 		fail(w, 503, "knowledge_unavailable", "Shared knowledge is not configured.")
 		return
 	}
@@ -85,7 +90,7 @@ func (s *Server) ReadKnowledge(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if s.Knowledge == nil {
+	if !s.globalKnowledgeConfigured() {
 		fail(w, 503, "knowledge_unavailable", "Shared knowledge is not configured.")
 		return
 	}
@@ -116,7 +121,7 @@ func (s *Server) SearchKnowledge(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if s.Knowledge == nil {
+	if !s.globalKnowledgeConfigured() {
 		fail(w, 503, "knowledge_unavailable", "Shared knowledge is not configured.")
 		return
 	}

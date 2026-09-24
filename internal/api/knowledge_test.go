@@ -552,3 +552,30 @@ func TestKnowledgeCapabilityRequiresConfiguredBinding(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupOnlyKnowledgeDoesNotAdvertiseGlobalCapability(t *testing.T) {
+	f := setup(t)
+	f.s.Knowledge = &knowledge.Service{Pool: f.s.DB.Pool, ProfileBackends: map[string]knowledge.Backend{"private": &knowledgeBackend{}}}
+	w := f.request("GET", "/v1/reliability", f.ta, "", "")
+	if w.Code != 200 || strings.Contains(w.Body.String(), "global_knowledge_findings") {
+		t.Fatalf("group-only deployment advertised global capability: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestGroupOnlyKnowledgeRejectsGlobalRoutes(t *testing.T) {
+	for _, tc := range []struct{ method, path, body string }{
+		{"GET", "/v1/knowledge/search?q=fixture", ""},
+		{"GET", "/v1/posts/" + uuid.NewString() + "/knowledge", ""},
+		{"GET", "/v1/posts/" + uuid.NewString() + "/knowledge/exact", ""},
+		{"POST", "/v1/posts/" + uuid.NewString() + "/knowledge", `{"publish":true}`},
+	} {
+		t.Run(tc.method+tc.path, func(t *testing.T) {
+			f := setup(t)
+			f.s.Knowledge = &knowledge.Service{Pool: f.s.DB.Pool, ProfileBackends: map[string]knowledge.Backend{"private": &knowledgeBackend{}}}
+			w := f.request(tc.method, tc.path, f.ta, tc.body, "")
+			if w.Code != 503 || !strings.Contains(w.Body.String(), "knowledge_unavailable") {
+				t.Fatalf("global route not disabled: status=%d body=%s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
