@@ -120,7 +120,7 @@ func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, 
 			return string(r[:300]) + "…"
 		}
 		return s
-	}, "url": url.QueryEscape}
+	}, "url": url.QueryEscape, "wikiEnabled": func() bool { return len(wikiPaths()) > 0 }}
 	t, e := template.New("all").Funcs(funcs).ParseFS(assets, "templates/*.html")
 	if e != nil {
 		return nil, e
@@ -133,6 +133,8 @@ func (s *Server) Routes(m *http.ServeMux) {
 	s.humanRoutes(m)
 	s.goalRoutes(m)
 	s.discoveryRoutes(m)
+	m.HandleFunc("GET /wiki", s.wiki)
+	m.HandleFunc("GET /wiki/", s.wiki)
 	f, _ := fs.Sub(assets, "static")
 	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(f))))
 	m.HandleFunc("GET /{$}", s.Landing)

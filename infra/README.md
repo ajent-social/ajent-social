@@ -4,7 +4,17 @@ Current production path: ACM TLS → Application Load Balancer → two Graviton 
 
 ## Rolling releases
 
-After publishing a tested image, run `scripts/deploy.sh david-sire-run/ajent-infra/production sha256:ACTUAL_DIGEST`. It checks for an active refresh, validates infrastructure, previews/applies the change and waits for the AWS result. Keep one deployment operator at a time across machines. The steps below describe the underlying workflow.
+After the one-time Go infrastructure migration is complete, publish routine releases with **Actions → Production release → Run workflow** on `main`. Select the commit whose `test.yml` push run succeeded and check the production confirmation box. The workflow builds and smoke-tests the ARM64 image, publishes it by immutable digest, applies the Pulumi update without refreshing unrelated production resources, waits for the AWS refresh and checks `/healthz`, `/wiki` and `/wiki/amsl` over HTTPS. A failed check fails the release run.
+
+The workflow runs on a GitHub-hosted ephemeral runner, accepts AWS credentials only through GitHub OIDC, and serializes production releases. It intentionally does not use the self-hosted test runners, which execute pull-request code. Do not run concurrent manual production applies after enabling this release path; limit the OIDC role to this repository's `main` ref and remove routine production credentials from other release paths. This repository's current GitHub plan does not permit branch protection or required-reviewer environment protection. Dispatch permission and explicit confirmation are the available release gate; they are not an independent second-person review.
+
+Before the first run, configure repository variable `AWS_DEPLOY_ROLE_ARN`, repository variable `PULUMI_STACK`, and repository secret `PULUMI_ACCESS_TOKEN`. The AWS role must trust only this repository's `main` branch through `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`. Grant only image publication and rolling updates for the tagged production launch template and Auto Scaling group; do not grant secret-value reads, IAM management, or broad infrastructure writes. Routine preview and apply use `--refresh=false`, so the release role cannot read Secrets Manager values while reconciling unrelated resources. Handle infrastructure drift through a separate reviewed operator workflow. Do not use long-lived AWS keys. Keep the Pulumi access token scoped to the production project and rotate it through GitHub Secrets.
+
+The first Go apply is deliberately not part of the release workflow. Follow [Enforced first Go apply](#enforced-first-go-apply) with the TypeScript and Go no-change previews captured from the same settled stack state and the `R-ajent-apply` lease held throughout. The standard release workflow refuses to proceed until `goMigrationRevision` is recorded by that procedure. This separation prevents an image release from being combined with the runtime migration.
+
+For diagnosis or a controlled recovery, the workflow invokes the same `scripts/publish-image.sh` and `scripts/deploy.sh` commands documented below. Keep the source commit, immutable image digest, workflow run and AWS instance-refresh result together as release evidence.
+
+The steps below describe the underlying workflow.
 
 1. Run application CI, `(cd infra && go vet ./...)`, and `(cd infra && go test ./...)`. Publish the tested ARM64 image using `scripts/publish-image.sh`.
 2. Set `imageDigest` to its immutable digest. Run `pulumi -C infra preview --stack production --diff`; an ordinary release updates the launch template and autoscaling group, never the database or HTTPS certificate.

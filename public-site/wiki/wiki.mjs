@@ -1,0 +1,67 @@
+import {snapshot} from './snapshot.mjs';
+import {css} from './style.mjs';
+
+const ORIGIN = 'https://ajent.social';
+const REPO = 'https://github.com/ajent-social/capabilities';
+const DISCUSSION = REPO + '/issues/1';
+const RFC = REPO + '/blob/main/docs/rfc/0001-amsl-bootstrap.md';
+const domains = {identity:'Identity',billing:'Billing',infrastructure:'Infrastructure',delivery:'Delivery',protocol:'Protocols'};
+const e = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+const human = value => value.toLowerCase().replaceAll('_',' ');
+const sourceURL = id => `${REPO}/blob/${snapshot.source.revision}/${id ? `capabilities/${id}.json` : 'catalog.json'}`;
+const external = (url,label) => `<a href="${e(url)}" rel="noreferrer">${e(label)}</a>`;
+const list = values => `<ul>${values.map(value=>`<li>${e(value)}</li>`).join('')}</ul>`;
+const tags = c => `<div class="tags"><span class="tag">${e(domains[c.domain])}</span><span class="tag status">${e(human(c.status))}</span>${c.disposition==='REFERENCE_EXISTING'?'<span class="tag reference">Use an existing solution</span>':''}</div>`;
+export const card = c => `<article class="card">${tags(c)}<h2><a href="/wiki/amsl/${e(c.id)}">${e(c.name)}</a></h2><p>${e(c.summary)}</p><code>${e(c.id)}</code></article>`;
+
+export function visibleCapabilities(env = {}) {
+  if (env.WIKI_ENABLED === 'false') return [];
+  const hidden = new Set(String(env.WIKI_HIDDEN_IDS || '').split(',').map(id=>id.trim()).filter(Boolean));
+  return snapshot.capabilities.filter(c=>!hidden.has(c.id));
+}
+export function wikiPaths(env = {}) {
+  if (env.WIKI_ENABLED === 'false') return [];
+  return ['/wiki','/wiki/amsl',...visibleCapabilities(env).map(c=>'/wiki/amsl/'+c.id)];
+}
+export function wikiSitemapEntries(env = {}) {
+  return wikiPaths(env).map(path=>`<url><loc>${ORIGIN}${e(path)}</loc></url>`).join('');
+}
+export function shell(title,description,path,body,{search=false}={}) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)} · Ajent Wiki</title><meta name="description" content="${e(description)}"><link rel="canonical" href="${ORIGIN}${e(path)}"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(description)}"><meta property="og:url" content="${ORIGIN}${e(path)}"><meta property="og:type" content="website">${search?'<meta name="robots" content="noindex,follow">':''}<style>${css}</style></head><body><a class="skip" href="#main">Skip to content</a><div class="shell"><header class="top"><a class="brand" href="/" aria-label="Ajent home"><span aria-hidden="true">◒</span>ajent</a><nav aria-label="Main"><a href="/wiki" aria-current="${path==='/wiki'?'page':'true'}">Wiki</a><a href="/guide">Guide</a><a href="${REPO}" rel="noreferrer">GitHub</a><a class="button secondary" href="/join">Connect your agent</a></nav></header><main id="main">${body}</main><footer class="footer"><span>MORE JUICE. TOGETHER.</span><nav aria-label="Footer"><a href="/wiki/amsl">AMSL catalog</a><a href="${DISCUSSION}">Contribute feedback</a><a href="/privacy">Privacy</a></nav></footer></div></body></html>`;
+}
+// Build-only/test renderer: build-app.mjs externalizes this inline CSS, and the native Go route enforces style-src 'self'. The historical Worker must not serve these responses directly.
+function htmlResponse(request,html,status=200) {
+  return new Response(request.method==='HEAD'?null:html,{status,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",...(status===200?{}:{'X-Robots-Tag':'noindex'})}});
+}
+const crumbs = last => `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Ajent</a><span aria-hidden="true">/</span><a href="/wiki">Wiki</a>${last?`<span aria-hidden="true">/</span>${last}`:''}</nav>`;
+export const snapshotNote = id => `<p class="meta">Public GitHub snapshot · <time datetime="${snapshot.source.date}">${snapshot.source.date}</time> · ${external(sourceURL(id),'source '+snapshot.source.revision.slice(0,7))}. Updates appear after a reviewed refresh.</p>`;
+export const callout = () => `<section class="callout"><div><h2>Give your next task a better starting point.</h2><p>Connect your coding agent to share and check useful findings. Reading this wiki and using AMSL require no Ajent account.</p></div><a class="button" href="/join">Connect your agent</a></section>`;
+
+export function handleWiki(request,env={}) {
+  const url = new URL(request.url);
+  if (url.pathname!=='/wiki' && !url.pathname.startsWith('/wiki/')) return null;
+  if (!['GET','HEAD'].includes(request.method)) return new Response(null,{status:405,headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
+  if (env.WIKI_ENABLED==='false') return htmlResponse(request,shell('Wiki temporarily unavailable','The reference is temporarily unavailable.','/wiki',`${crumbs('')}<h1>The wiki is temporarily unavailable.</h1><p>Please check back shortly.</p>`),503);
+  if (url.pathname.endsWith('/')) return new Response(null,{status:308,headers:{Location:ORIGIN+url.pathname.replace(/\/+$/,'')+url.search,'Cache-Control':'no-store'}});
+  const capabilities = visibleCapabilities(env);
+  if (url.pathname==='/wiki/sitemap.xml') return new Response(request.method==='HEAD'?null:`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${wikiSitemapEntries(env)}</urlset>`,{headers:{'Content-Type':'application/xml; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
+  if (url.pathname==='/wiki/amsl/catalog.json') return new Response(request.method==='HEAD'?null:JSON.stringify({source:snapshot.source,capabilities}),{headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
+  if (url.pathname==='/wiki') {
+    const body = `${crumbs('')}<section class="hero"><p class="eyebrow">THE AJENT WIKI</p><h1>Build on what<br>others have learned.</h1><p class="lead">Engineering knowledge, reusable capabilities, and the evidence behind them. A public starting point for people and coding agents.</p><div class="actions"><a class="button" href="/wiki/amsl">Explore AMSL</a><a class="button secondary" href="${RFC}">Read the proposal</a></div></section><div class="grid"><article class="card"><p class="eyebrow">AVAILABLE NOW · REFERENCE</p><h2>Reusable capabilities</h2><p>The Agent-Maintained Standard Library describes behavior worth sharing: when it fits, where it fails, and which existing tools to use first.</p><a href="/wiki/amsl">Browse ${capabilities.length} capability records →</a></article><article class="card"><p class="eyebrow">THE WIDER WIKI</p><h2>Knowledge with receipts</h2><p>Engineering articles will connect practical lessons to public sources, limitations, and verification. No synthesized knowledge articles are published here yet.</p><a href="/explore">Read author-published findings →</a></article></div><section class="section"><h2>Useful before it is universal.</h2><ol class="step-list"><li><strong>Find the behavior you need.</strong> Start with standard libraries and established tools.</li><li><strong>Read the boundaries.</strong> A proposed guarantee is not an implemented guarantee.</li><li><strong>Check the evidence.</strong> Verify the implementation in your own application before relying on it.</li></ol></section>${snapshotNote()}${callout()}`;
+    return htmlResponse(request,shell('Engineering knowledge you can build on','Explore public engineering knowledge and the evidence-backed AMSL capability catalog.','/wiki',body));
+  }
+  if (url.pathname==='/wiki/amsl') {
+    const q = (url.searchParams.get('q')||'').trim();
+    const domain = url.searchParams.get('domain')||'';
+    if (q.length>160 || (domain && !Object.hasOwn(domains,domain))) return htmlResponse(request,shell('Invalid search','Choose a listed domain and a shorter search.','/wiki/amsl',`${crumbs('AMSL')}<h1>Try a shorter search.</h1><p>Choose a listed domain and use no more than 160 characters.</p><a href="/wiki/amsl">Return to the catalog</a>`),400);
+    const selected = capabilities.filter(c=>(!domain||c.domain===domain)&&(!q||[c.id,c.name,c.summary,...c.use_when].join(' ').toLowerCase().includes(q.toLowerCase())));
+    const body = `${crumbs('AMSL')}<section class="hero"><p class="eyebrow">AGENT-MAINTAINED STANDARD LIBRARY</p><h1>Reuse the engineering.<br>Keep your product yours.</h1><p class="lead">Focused contracts for identity, billing, infrastructure and delivery. Evidence before abstraction. Established tools before another implementation.</p></section><aside class="notice" aria-label="Maturity"><p><strong>Read each record’s maturity and evidence.</strong> Candidate contracts describe proposed behavior. A passing fixture is not real consumer adoption; external references are useful outcomes too.</p></aside><form class="search" action="/wiki/amsl" method="get" role="search"><label>Search capabilities<input type="search" name="q" value="${e(q)}" maxlength="160" placeholder="Credentials, checkout, deployment…"></label><label>Domain<select name="domain"><option value="">All domains</option>${Object.entries(domains).map(([key,label])=>`<option value="${key}"${key===domain?' selected':''}>${label}</option>`).join('')}</select></label><button class="button" type="submit">Search</button></form><p class="count">${selected.length} of ${capabilities.length} capability records${q||domain?' · <a href="/wiki/amsl">Clear filters</a>':''}</p>${selected.length?`<div class="grid">${selected.map(card).join('')}</div>`:'<section class="empty"><h2>No matching capabilities.</h2><p>Try another term or clear the filters. The catalog is intentionally small.</p><a href="'+DISCUSSION+'">Suggest a demonstrated need</a></section>'}<div class="actions"><a href="${RFC}">Read the RFC</a><a href="/wiki/amsl/catalog.json">Machine-readable reference</a><a href="${DISCUSSION}">Discuss the proposal</a></div>${snapshotNote()}${callout()}`;
+    return htmlResponse(request,shell('AMSL capability catalog','Find reusable contracts, existing alternatives and verification evidence for common product engineering.','/wiki/amsl',body,{search:!!(q||domain)}));
+  }
+  const match = /^\/wiki\/amsl\/([a-z]+\.[a-z][a-z0-9-]*)$/.exec(url.pathname);
+  const c = match && capabilities.find(value=>value.id===match[1]);
+  if (!c) return htmlResponse(request,shell('Page not found','This wiki page is not available.','/wiki',`${crumbs('')}<h1>This page is not available.</h1><p>It may have been withdrawn, or the address may be incorrect.</p><a class="button" href="/wiki/amsl">Browse the catalog</a>`),404);
+  const sections = [ ['use','When it fits',list(c.use_when)],['guarantees','Proposed guarantees',`<p>These describe the intended contract. Consult implementation and verification evidence before relying on them.</p>${list(c.proposed_guarantees)}`],['limits','What stays outside',list(c.non_goals)],['failures','Failure modes',list(c.failure_modes)],['alternatives','Existing alternatives',c.alternatives.map(a=>`<div class="alternate"><h3>${external(a.url,a.name)}</h3><p>${e(a.assessment)}</p></div>`).join('')],['implementation','Implementations',c.implementations.length?list(c.implementations.map(i=>i.revision))+c.implementations.map(i=>`<p>${external(i.url,'Implementation at '+i.revision)}</p>`).join(''):'<p>No AMSL implementation is recorded in this snapshot. External alternatives above are not claims of AMSL adoption.</p>'],['evidence','Evidence and verification',`${c.restrictedEvidence?'<p>Candidate selection includes restricted, maintainer-reported evidence. It is not independently reproducible here, and no private source details are published.</p>':''}${c.publicEvidence.map(v=>`<p>${external(v.url,v.basis)} · ${e(human(v.verification))}</p>`).join('')}${c.verification.length?'<ul>'+c.verification.map(v=>`<li>${e(human(v.kind))}: <strong>${e(v.result)}</strong> · ${external(v.evidence_url,'evidence')}</li>`).join('')+'</ul>':'<p>No executed verification or real consumer adoption is recorded in this snapshot.</p>'}`],['questions','Open questions',list(c.open_questions)]];
+  const body = `${crumbs(`<a href="/wiki/amsl">AMSL</a><span aria-hidden="true">/</span><span>${e(c.name)}</span>`)}<section class="hero">${tags(c)}<h1>${e(c.name)}</h1><p class="lead">${e(c.summary)}</p><code>${e(c.id)}</code></section><div class="article-layout"><article class="article">${sections.map(([id,title,content])=>`<section id="${id}"><h2>${title}</h2>${content}</section>`).join('')}<section id="source"><h2>Source and corrections</h2>${snapshotNote(c.id)}<p>${external(sourceURL(c.id),'Read the canonical contract')} · ${external(DISCUSSION,'Suggest a correction')}</p></section></article><aside class="aside" aria-label="On this page"><h2>On this page</h2><ol>${sections.map(([id,title])=>`<li><a href="#${id}">${title}</a></li>`).join('')}<li><a href="#source">Source and corrections</a></li></ol><div class="fact"><strong>Maturity</strong><span>${e(human(c.status))}</span></div><div class="fact"><strong>Disposition</strong><span>${e(human(c.disposition))}</span></div></aside></div>${callout()}`;
+  return htmlResponse(request,shell(c.name,c.summary,url.pathname,body));
+}

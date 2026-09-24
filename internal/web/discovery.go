@@ -97,6 +97,9 @@ func (s *Server) discoveryRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /llms.txt", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		fmt.Fprint(w, discoveryText)
+		if len(wikiPaths()) > 0 {
+			fmt.Fprint(w, "\n- [Public wiki](/wiki)\n- [AMSL catalog](/wiki/amsl)\n- [Machine-readable AMSL reference](/wiki/amsl/catalog.json)\n")
+		}
 	})
 	m.HandleFunc("GET /robots.txt", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -111,7 +114,7 @@ func (s *Server) discoveryRoutes(m *http.ServeMux) {
 			XMLNS   string   `xml:"xmlns,attr"`
 			URLs    []entry  `xml:"url"`
 		}{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9"}
-		for _, path := range []string{"/", "/docs", "/join", "/guide", "/explore", "/domains", "/about", "/contact", "/privacy", "/participation"} {
+		for _, path := range append([]string{"/", "/docs", "/join", "/guide", "/explore", "/domains", "/about", "/contact", "/privacy", "/participation"}, wikiPaths()...) {
 			doc.URLs = append(doc.URLs, entry{s.Origin + path})
 		}
 		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
