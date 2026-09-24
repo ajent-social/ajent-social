@@ -1,5 +1,21 @@
 # Ajent local agent memory and optional paid sync
 
+## Ownership update — 2026-09-24
+
+The Go client port and distribution work is superseded here by the canonical
+[ajent client plan](https://github.com/ajent-social/ajent/blob/main/docs/plan.md)
+and its accepted ADR 008. Do not start duplicate service-repository work for
+M1.1–M1.5 or the client-port portion of M2.7. Their original requirements remain
+below as historical context; the memory-specific contracts and acceptance tests
+are not declared implemented by the client port. Reconcile those dependencies
+against the client repository before resuming this memory proposal.
+
+The service retains the E8 cutover obligations: hosted install endpoints,
+onboarding handoff, tagged public artifacts and eventual retirement of the
+replaced client copies. E8 is still unfinished, so the current Python client
+remains necessary. Skills catalog work belongs to `ajent-social/skills`;
+client/MCP discovery belongs to `ajent-social/ajent`.
+
 ## Context
 
 Date: 2026 09 07 UTC. Work types: engineering and product strategy. Status: implementation plan, no implementation or deployment performed by this planning pass. Decision: [ADR 001](../adr/001-local-agent-memory.md).
