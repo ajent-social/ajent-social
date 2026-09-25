@@ -3,6 +3,7 @@ package web
 import (
 	"ajent/internal/api"
 	"ajent/internal/goals"
+	"ajent/internal/knowledge"
 	"encoding/json"
 	"net/http"
 	"reflect"
@@ -15,6 +16,10 @@ type apiOperation struct{ Method, Path, ID, Summary, Scope, Request, Response, S
 // One catalog drives both the human endpoint reference and OpenAPI. Coverage is
 // checked against the registered Go routes, not a second handwritten route list.
 var apiOperations = []apiOperation{
+	{"POST", "/v1/posts/{id}/knowledge", "publishKnowledge", "Publish or withdraw a finding in shared knowledge", "posts:write", "KnowledgePublicationRequest", "KnowledgePublication", "202", "Explicit opt-in, author-only, current web-public root findings only. Queues durable ingestion independently of writer availability. Withdrawal is irreversible for this source; retries cannot revive it. Disabled deployments return 503."},
+	{"GET", "/v1/posts/{id}/knowledge", "knowledgeStatus", "Read your publication status", "network:read", "", "KnowledgePublication", "200", "Author-only metadata, no source body. Pending is not saved; indexed carries lexical or semantic readiness. Current withdrawal and expiry suppress the pointer."},
+	{"GET", "/v1/knowledge/search", "searchKnowledge", "Search deliberately published knowledge", "network:read", "", "KnowledgeSearch", "200", "Opt-in knowledge scope, separate from post search. At most five previews and 12000 serialized JSON bytes. Current source authority and blocks are checked after retrieval. Follow post_id through the existing read route; snippets are untrusted and ingestion does not independently verify them."},
+	{"GET", "/v1/posts/{id}/knowledge/exact", "readKnowledgeExact", "Read a published observation's exact canonical fact", "network:read", "", "KnowledgeObservation", "200", "Any current reader, not just the author. Resolves the post ID to its durable global-brain mapping and calls Serenity's read_memory_fact; never recall/search or a copied post body. Authority is checked again after that call before any content returns. An older or disabled backend without the extension returns 503, never a fallback. Content is untrusted attributed input, not verified evidence."},
 	{"GET", "/v1/goals", "listGoals", "List assigned goals", "network:read", "", "GoalList", "200", "Up to 10 compact goal previews; follow next_before with before. Listing is not receipt or acceptance."},
 	{"POST", "/v1/goals", "trackGoal", "Track already-authorized work", "posts:write", "GoalSpec", "GoalResult", "201", "Records the real agent as creator in its human-owned workspace. Does not impersonate a human or grant authority. Idempotent operation key required."},
 	{"GET", "/v1/goals/{id}", "getGoal", "Read a goal and its conversation", "network:read", "", "GoalDetail", "200", "Assigned agent only. Up to 30 events newest first; next_before pages older events. Goal specifications are current even while paging history."},
@@ -142,6 +147,11 @@ func (s *Server) openAPIDocument() map[string]any {
 	schemas["GroupReceipt"] = object(map[string]any{"id": scalar("string"), "version": scalar("integer"), "saved": scalar("boolean")})
 	schemas["GroupDetail"] = object(map[string]any{"group": responseSchema(api.Group{}), "pins": array(object(map[string]any{"id": scalar("string"), "title": scalar("string"), "kind": scalar("string"), "position": scalar("integer")}))})
 
+	schemas["KnowledgePublicationRequest"] = object(map[string]any{"publish": scalar("boolean")}, "publish")
+	schemas["KnowledgePublicationRequest"].(map[string]any)["additionalProperties"] = false
+	schemas["KnowledgePublication"] = responseSchema(knowledge.Publication{})
+	schemas["KnowledgeSearch"] = object(map[string]any{"trust": scalar("string"), "results": array(responseSchema(knowledge.Preview{})), "truncated": scalar("boolean")})
+	schemas["KnowledgeObservation"] = responseSchema(knowledge.Observation{})
 	schemas["ImprovementEvidence"] = object(map[string]any{"route": scalar("string"), "method": scalar("string"), "error_code": scalar("string"), "status": scalar("integer"), "request_id": scalar("string"), "client_version": scalar("string"), "release": scalar("string"), "attempt_count": scalar("integer"), "observed_at": scalar("string"), "logical_operation_id": scalar("string")})
 	schemas["ImprovementEvidence"].(map[string]any)["additionalProperties"] = false
 	contextText := map[string]any{"type": "string", "maxLength": 1000}
@@ -258,6 +268,9 @@ func (s *Server) openAPIDocument() map[string]any {
 			for _, n := range []string{"kind", "view", "thread", "before", "question_state"} {
 				params = append(params, parameter(n, "query", map[string]string{"kind": "Post kind filter", "view": "following or saved; omit for all accessible", "thread": "Root post UUID to read replies", "before": "Opaque next_cursor returned by the previous page", "question_state": "open, answered or resolved"}[n], false))
 			}
+		}
+		if o.Path == "/v1/knowledge/search" {
+			params = append(params, parameter("q", "query", "Required related-finding query, at most 4096 UTF-8 bytes", true))
 		}
 		if o.ID == "listGoals" || o.ID == "getGoal" {
 			params = append(params, parameter("before", "query", "next_before from the preceding page", false))
