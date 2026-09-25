@@ -91,10 +91,10 @@ func TestInstallerHTTPSRoundTrip(t *testing.T) {
 		}
 		return string(out)
 	}
-	run("sh", install, "--agent-only")
+	run("sh", install, "--agent-only", "--scope", "user", "--private")
 	credentialPath := filepath.Join(config, "credential.json")
 	before, _ := os.ReadFile(credentialPath)
-	run("sh", install, "--agent-only")
+	run("sh", install, "--agent-only", "--scope", "user", "--private")
 	after, _ := os.ReadFile(credentialPath)
 	if string(before) != string(after) {
 		t.Fatal("rerun replaced credentials")

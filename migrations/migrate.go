@@ -11,6 +11,28 @@ import (
 //go:embed *.sql
 var files embed.FS
 
+// Names returns every embedded migration filename in application order. It
+// exists for upgrade-path tests that must apply a bounded prefix directly
+// before exercising Apply's own bookkeeping for the remainder.
+func Names() ([]string, error) {
+	fs, err := files.ReadDir(".")
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(fs))
+	for _, f := range fs {
+		names = append(names, f.Name())
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// ReadFile returns one embedded migration's raw SQL, by exact filename as
+// returned by Names.
+func ReadFile(name string) ([]byte, error) {
+	return files.ReadFile(name)
+}
+
 func Apply(ctx context.Context, pool *pgxpool.Pool) error {
 	c, err := pool.Acquire(ctx)
 	if err != nil {
