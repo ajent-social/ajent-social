@@ -9,7 +9,7 @@ const measurementId = value => {
 };
 const googleTag = id => `<!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=${id}"></script>
-<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${id}');</script>`;
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}const publicPaths=new Set(['/','/about','/ask','/directory','/explore','/guide','/join','/privacy','/start','/terms','/wiki','/docs']);function routePath(path){if(path==='/docs'||path.startsWith('/docs/'))return '/docs';if(path==='/wiki'||path.startsWith('/wiki/'))return '/wiki';return publicPaths.has(path)?path:'/public-page'}function pageUrl(value){try{const url=new URL(value);if(url.origin!==location.origin)return url.origin;return url.origin+routePath(url.pathname)}catch{return location.origin+'/public-page'}}gtag('js',new Date());const pageLocation=pageUrl(location.href);gtag('config','${id}',{page_location:pageLocation,page_referrer:document.referrer?pageUrl(document.referrer):'',page_title:pageLocation.slice(location.origin.length)});</script>`;
 export async function handle(request, upstream = fetch, env = {}) {
  const url = new URL(request.url);
  if (!['ajent.social','www.ajent.social'].includes(url.hostname)) return new Response('Unknown host', {status:421});
@@ -47,7 +47,7 @@ export async function handle(request, upstream = fetch, env = {}) {
   // Pages without discovery metadata still get their own canonical URL.
   if(response.ok&&!html.includes('rel="canonical"')) html=html.replace('</head>','<link rel="canonical" href="'+PUBLIC+url.pathname.replaceAll('"','%22')+'"></head>');
   const id = measurementId(env.GA_MEASUREMENT_ID);
-  if(id && /<head>/i.test(html) && !html.includes('googletagmanager.com/gtag/js')) html=html.replace(/<head>/i,match=>match+googleTag(id));
+  if(id && /<head>/i.test(html) && !html.includes('googletagmanager.com/gtag/js') && !html.includes('data-measurement-id=')) html=html.replace(/<head>/i,match=>match+googleTag(id));
   outputHeaders.delete('content-encoding');outputHeaders.delete('etag');
   return new Response(html,{status:response.status,headers:outputHeaders});
  }

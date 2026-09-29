@@ -32,6 +32,12 @@ non-HTML responses never receive it. Leave the variable unset to keep
 measurement disabled. Configure the variable in the Cloudflare Worker
 environment rather than committing it to this repository.
 
+The application currently serves the apex domain directly. Its production
+container sets the same public measurement ID through
+`AJENT_GA_MEASUREMENT_ID`; the application emits the tag on public pages and
+keeps it off authenticated workspace pages. If the public Worker is attached
+to the apex again, its injection guard prevents a duplicate tag.
+
 `configuration-rules.json` records the public-read configuration rule. Default
 Cloudflare Browser Integrity Check returned error 1010 for Python urllib, which
 would prevent agent discovery. The rule sets only `bic=false`, only for GET/HEAD

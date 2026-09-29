@@ -1,5 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {runInNewContext} from 'node:vm';
 import {handle,APP,PUBLIC} from './worker.mjs';
 test('public reads strip account secrets and preserve query',async()=>{
  let called=false;
@@ -11,12 +13,38 @@ test('GA4 is opt-in and injected into public HTML only',async()=>{
  const enabled=await handle(new Request(PUBLIC+'/guide'),upstream,{GA_MEASUREMENT_ID:'G-TEST123'});
  const html=await enabled.text();
  assert.match(html,/googletagmanager\.com\/gtag\/js\?id=G-TEST123/);
- assert.match(html,/gtag\('config','G-TEST123'\)/);
+  assert.match(html,/page_location:pageLocation,page_referrer:document\.referrer\?pageUrl\(document\.referrer\):''/);
  assert.equal((html.match(/googletagmanager\.com\/gtag\/js/g)||[]).length,1);
  const disabled=await handle(new Request(PUBLIC+'/guide'),upstream,{});
  assert.doesNotMatch(await disabled.text(),/googletagmanager\.com/);
  const invalid=await handle(new Request(PUBLIC+'/guide'),upstream,{GA_MEASUREMENT_ID:'javascript:alert(1)'});
  assert.doesNotMatch(await invalid.text(),/googletagmanager\.com/);
+});
+test('GA4 page location and referrer omit query strings and fragments on both paths',async()=>{
+ const page=PUBLIC+'/posts/secret-post-token?q=private-search#section';
+ const referrer='https://ajent.social/reset/access-token?code=private-code#step';
+ const upstream=async()=>new Response('<html><head></head></html>',{headers:{'Content-Type':'text/html'}});
+ const response=await handle(new Request(page),upstream,{GA_MEASUREMENT_ID:'G-TEST123'});
+ const html=await response.text();
+ const workerScript=html.match(/<script>([\s\S]*?)<\/script>/)[1];
+ const configFor=(source,href,referrer)=>{
+  const context={URL,Date,location:new URL(href),document:{referrer,currentScript:{dataset:{measurementId:'G-TEST123'}},head:{append(){}},createElement(){return {}}},dataLayer:[]};
+  context.window=context;
+  runInNewContext(source,context);
+  return context.dataLayer.find(entry=>entry[0]==='config');
+ };
+ for(const source of [workerScript,await readFile(new URL('../internal/web/static/analytics.js',import.meta.url),'utf8')]){
+  const config=configFor(source,page,referrer);
+  assert.ok(config);
+  assert.equal(config[2].page_location,'https://ajent.social/public-page');
+  assert.equal(config[2].page_referrer,'https://ajent.social/public-page');
+  assert.equal(config[2].page_title,'/public-page');
+  const knownPage=configFor(source,PUBLIC+'/guide?campaign=private#fragment','https://partner.example/reset/secret-token?key=secret');
+  assert.equal(knownPage[2].page_location,'https://ajent.social/guide');
+  assert.equal(knownPage[2].page_referrer,'https://partner.example');
+  const noReferrer=configFor(source,PUBLIC+'/guide','');
+  assert.equal(noReferrer[2].page_referrer,'');
+ }
 });
 test('sign-in and credential routes stay on the app origin',async()=>{
  for(const path of ['/app','/app/verification','/login','/connect-login','/v1/me','/v1/signup','/install.sh','/skill.md']){const r=await handle(new Request(PUBLIC+path),()=>{throw Error('must not proxy')});assert.equal(r.status,307);assert.equal(r.headers.get('Location'),APP+path);}
