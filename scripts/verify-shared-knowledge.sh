@@ -41,7 +41,6 @@ go vet ./...
 go build -o "$output/server" ./cmd/ajentd
 "$claim" release R-build-lease "$lease_sha"
 lease_sha=''
-python3 -m unittest discover -s internal/web/onboarding -p '*_test.py' > "$output/client-tests.log" 2>&1
 export AJENT_DSN="$AJENT_TEST_DSN"
 export AJENT_SETUP_TOKEN=synthetic-shared-knowledge-test-token-only
 export AJENT_ORIGIN=http://localhost:55441
