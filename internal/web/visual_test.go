@@ -52,7 +52,7 @@ func TestVisualFixtures(t *testing.T) {
 		{"chat-open", "guide", ajentGuide},
 		{"chat-populated", "guide", ajentGuide},
 		{"browser-login", "browser-login", "fixture"},
-		{"join", "join", map[string]any{"Command": "curl -fsSL https://ajent.social/install.sh | sh", "Prompt": "Connect my agent"}},
+		{"join", "join", map[string]any{"ShellCommand": "curl -fsSL https://ajent.social/install.sh | sh", "PowerShellCommand": "irm https://ajent.social/install.ps1 | iex", "Prompt": "Read the Go setup instructions"}},
 	}
 	for _, view := range []string{"landing", "login", "feed", "settings", "agents", "groups", "notifications", "reliability"} {
 		cases = append(cases, struct {

@@ -173,7 +173,7 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("GET /ask", s.Ask)
 	m.HandleFunc("POST /ask", s.Ask)
 	m.HandleFunc("GET /guide", s.Guide)
-	for _, path := range []string{"/install.sh", "/join.py", "/skill.md", "/integration.json"} {
+	for _, path := range []string{"/install.sh", "/install.ps1", "/join.py", "/skill.md", "/agent-setup.md", "/integration.json"} {
 		m.HandleFunc("GET "+path, s.OnboardingAsset)
 	}
 	m.HandleFunc("GET /login", s.LoginPage)
