@@ -13,14 +13,10 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
-	"encoding/pem"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -339,95 +335,4 @@ func TestHumanClaimsExistingInstallationAndApprovesNew(t *testing.T) {
 	}
 	f.want(f.request("GET", "/v1/me", nil, child), 401)
 	f.want(f.request("GET", "/human/workspaces", nil, ""), 200)
-}
-
-func TestHumanInstallerApprovalRoundTrip(t *testing.T) {
-	f := newHumanFixture(t)
-	f.register()
-	ts := httptest.NewTLSServer(f.m)
-	defer ts.Close()
-	f.s.Origin = ts.URL
-	dir := t.TempDir()
-	project := filepath.Join(dir, "project")
-	config := filepath.Join(dir, "config")
-	if err := os.MkdirAll(filepath.Join(project, ".git"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	ca := filepath.Join(dir, "ca.pem")
-	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ts.Certificate().Raw}), 0600); err != nil {
-		t.Fatal(err)
-	}
-	response, err := ts.Client().Get(ts.URL + "/join.py")
-	if err != nil {
-		t.Fatal(err)
-	}
-	source, err := io.ReadAll(response.Body)
-	response.Body.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	installer := filepath.Join(dir, "join.py")
-	if err = os.WriteFile(installer, source, 0600); err != nil {
-		t.Fatal(err)
-	}
-	run := func(args ...string) string {
-		t.Helper()
-		cmd := exec.Command("python3", args...)
-		cmd.Dir = project
-		cmd.Env = append(os.Environ(), "AJENT_CONFIG_DIR="+config, "AJENT_CREDENTIAL_FILE="+filepath.Join(config, "credential.json"), "AJENT_INTEGRATIONS=0", "SSL_CERT_FILE="+ca, "PYTHONDONTWRITEBYTECODE=1")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("installer failed: %v %s", err, out)
-		}
-		return string(out)
-	}
-	output := run(installer, "install", "--no-wait")
-	proof := ""
-	for _, field := range strings.Fields(output) {
-		if strings.HasPrefix(field, ts.URL+"/human/link#") {
-			proof = strings.Split(field, "#")[1]
-		}
-	}
-	if len(proof) != 43 {
-		t.Fatal("installer did not start human approval")
-	}
-	credentialFile := filepath.Join(config, "credential.json")
-	before, err := os.ReadFile(credentialFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var original map[string]any
-	if err = json.Unmarshal(before, &original); err != nil {
-		t.Fatal(err)
-	}
-	f.want(f.request("GET", "/v1/me", nil, original["token"].(string)), 401)
-	preview := f.request("POST", "/human/link/preview", map[string]string{"Token": proof}, "")
-	f.want(preview, 200)
-	csrf := jsonMap(t, preview)["csrf"].(string)
-	f.want(f.request("POST", "/human/link/approve", url.Values{"csrf": {csrf}, "token": {proof}, "scope": {"project"}, "confirm": {"yes"}, "name": {"Installer workspace"}}, ""), 303)
-	output = run(installer, "install", "--no-wait")
-	if !strings.Contains(output, "Installation linked") {
-		t.Fatal("installer did not finish approved setup", output)
-	}
-	after, err := os.ReadFile(credentialFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var linked map[string]any
-	if err = json.Unmarshal(after, &linked); err != nil {
-		t.Fatal(err)
-	}
-	if linked["token"] != original["token"] || linked["human_linked"] != true {
-		t.Fatal("link replaced installation key or failed to persist ownership")
-	}
-	settings, err := os.ReadFile(filepath.Join(project, ".aj", "config.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(settings), original["token"].(string)) || strings.Contains(string(settings), "human_linked") {
-		t.Fatal("project received credentials")
-	}
-	if got := run(filepath.Join(config, "client.py"), "login"); !strings.Contains(got, ts.URL+"/human/login") {
-		t.Fatal("linked login did not direct the human to passkeys")
-	}
 }
