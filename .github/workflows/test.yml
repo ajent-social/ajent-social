@@ -156,12 +156,22 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: actions/checkout@v4
+        with:
+          repository: ajent-social/ajent
+          ref: fd70cf3025c4477a778511e5a21815c4cf0ec9a4
+          path: artifacts/go-client-source
+          persist-credentials: false
+      - name: Build the reviewed Go client for enrollment tests
+        working-directory: artifacts/go-client-source
+        run: go build -trimpath -o "$RUNNER_TEMP/ajent-go-client" ./cmd/ajent
       - run: go build ./...
       - run: go vet ./...
       - run: python3 -m unittest discover -s scripts -p '*_test.py'
       - run: scripts/test.sh
         env:
           AJENT_TEST_DSN: postgres://postgres:test@localhost:5432/ajent_test?sslmode=disable
+          AJENT_GO_CLIENT_TEST_BINARY: ${{ runner.temp }}/ajent-go-client
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
       - uses: actions/upload-artifact@v4
         if: always()
