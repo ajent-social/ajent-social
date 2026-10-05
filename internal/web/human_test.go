@@ -17,8 +17,11 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/google/uuid"
@@ -335,4 +338,93 @@ func TestHumanClaimsExistingInstallationAndApprovesNew(t *testing.T) {
 	}
 	f.want(f.request("GET", "/v1/me", nil, child), 401)
 	f.want(f.request("GET", "/human/workspaces", nil, ""), 200)
+}
+
+func TestHumanGoClientApprovalRoundTrip(t *testing.T) {
+	binary := os.Getenv("AJENT_GO_CLIENT_TEST_BINARY")
+	if binary == "" {
+		t.Skip("AJENT_GO_CLIENT_TEST_BINARY required for real Go client coverage")
+	}
+	if !filepath.IsAbs(binary) {
+		t.Fatal("Go client fixture binary must have an absolute path")
+	}
+	f := newHumanFixture(t)
+	f.register()
+	ts := httptest.NewServer(f.m)
+	defer ts.Close()
+	f.s.Origin = ts.URL
+	dir := t.TempDir()
+	project := filepath.Join(dir, "project")
+	config := filepath.Join(dir, "config")
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) string {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, binary, args...)
+		cmd.Dir = project
+		for _, entry := range os.Environ() {
+			if !strings.HasPrefix(entry, "AJENT_") {
+				cmd.Env = append(cmd.Env, entry)
+			}
+		}
+		cmd.Env = append(cmd.Env, "AJENT_URL="+ts.URL, "AJENT_CONFIG_DIR="+config,
+			"AJENT_CREDENTIAL_FILE="+filepath.Join(config, "credential.json"), "AJENT_INTEGRATIONS=0")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("Go client command failed: %v", err)
+		}
+		return string(out)
+	}
+	output := run("setup", "--no-wait")
+	proof := ""
+	for _, field := range strings.Fields(output) {
+		if strings.HasPrefix(field, ts.URL+"/human/link#") {
+			proof = strings.Split(field, "#")[1]
+		}
+	}
+	if len(proof) != 43 {
+		t.Fatal("installer did not start human approval")
+	}
+	credentialFile := filepath.Join(config, "credential.json")
+	before, err := os.ReadFile(credentialFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var original map[string]any
+	if err = json.Unmarshal(before, &original); err != nil {
+		t.Fatal(err)
+	}
+	f.want(f.request("GET", "/v1/me", nil, original["token"].(string)), 401)
+	preview := f.request("POST", "/human/link/preview", map[string]string{"Token": proof}, "")
+	f.want(preview, 200)
+	csrf := jsonMap(t, preview)["csrf"].(string)
+	f.want(f.request("POST", "/human/link/approve", url.Values{"csrf": {csrf}, "token": {proof}, "scope": {"project"}, "confirm": {"yes"}, "name": {"Installer workspace"}}, ""), 303)
+	output = run("setup", "--no-wait", "--scope", "project", "--private")
+	if !strings.Contains(output, "Installation linked") {
+		t.Fatal("Go client did not finish approved setup")
+	}
+	after, err := os.ReadFile(credentialFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var linked map[string]any
+	if err = json.Unmarshal(after, &linked); err != nil {
+		t.Fatal(err)
+	}
+	if linked["token"] != original["token"] || linked["human_linked"] != true {
+		t.Fatal("link replaced installation key or failed to persist ownership")
+	}
+	settings, err := os.ReadFile(filepath.Join(project, ".aj", "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(settings), original["token"].(string)) || strings.Contains(string(settings), "human_linked") {
+		t.Fatal("project received credentials")
+	}
+	if got := run("login"); !strings.Contains(got, ts.URL+"/human/login") {
+		t.Fatal("linked login did not direct the human to passkeys")
+	}
 }
