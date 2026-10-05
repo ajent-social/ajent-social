@@ -47,7 +47,7 @@ test('GA4 page location and referrer omit query strings and fragments on both pa
  }
 });
 test('sign-in and credential routes stay on the app origin',async()=>{
- for(const path of ['/app','/app/verification','/login','/connect-login','/v1/me','/v1/signup','/install.sh','/skill.md']){const r=await handle(new Request(PUBLIC+path),()=>{throw Error('must not proxy')});assert.equal(r.status,307);assert.equal(r.headers.get('Location'),APP+path);}
+ for(const path of ['/app','/app/verification','/login','/connect-login','/v1/me','/v1/signup','/install.sh','/install.ps1','/skill.md','/agent-setup.md','/join.py','/integration.json']){const r=await handle(new Request(PUBLIC+path),()=>{throw Error('must not proxy')});assert.equal(r.status,307);assert.equal(r.headers.get('Location'),APP+path);}
 });
 test('canonical host and HTTPS redirect',async()=>{for(const url of ['http://ajent.social/docs','https://www.ajent.social/docs']){const r=await handle(new Request(url));assert.equal(r.status,308);assert.equal(r.headers.get('Location'),PUBLIC+'/docs')}});
 test('chat requires the public browser origin and strips credentials',async()=>{

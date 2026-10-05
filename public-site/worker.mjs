@@ -2,7 +2,7 @@
 export const APP = 'https://dogfood.ajent.social';
 export const PUBLIC = 'https://ajent.social';
 const accountPath = path => /^\/(app(?:\/|$)|actions(?:\/|$)|v1(?:\/|$)|browser-login(?:\/|$)|login$|logout$|connect-login$)/.test(path);
-const setupAsset = path => ['/install.sh','/join.py','/integration.json','/skill.md'].includes(path);
+const setupAsset = path => ['/install.sh','/install.ps1','/join.py','/integration.json','/skill.md','/agent-setup.md'].includes(path);
 const measurementId = value => {
  const id = typeof value === 'string' ? value.trim() : '';
  return /^G-[A-Z0-9]+$/i.test(id) ? id : '';
