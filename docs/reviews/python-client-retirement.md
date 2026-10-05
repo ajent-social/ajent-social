@@ -23,7 +23,10 @@ fixtures. Its implementation is Go.
 - Front-door regression test fails on the old baseline (10 pass, 1 fail) and
   passes with the new route allowlist (11 pass).
 - Go regression tests cover retired asset responses, Go setup/installer assets,
-  plugin hook and setup page. Runtime results are recorded in the pull request;
+  plugin hook and setup page. A real Go-client enrollment/link test is enabled
+  in CI with a binary built from pinned client revision `fd70cf3`; it checks
+  approval, preserved credential identity, private project settings and login.
+  Runtime results are recorded in the pull request;
   source inspection is not a Go test pass.
 - Local installation removal deleted 20 exact Python implementation/cache/backup
   files. All 61 existing credential/profile files were byte-identical afterward,

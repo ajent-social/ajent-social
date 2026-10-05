@@ -1,5 +1,9 @@
 # Apex routing release
 
+Historical Python-client routing record. Do not run its retired client commands.
+The Go client migration moves harness launch configuration; it does not claim
+the old cross-origin migration behavior. See the Go client installation guide.
+
 This branch combines PR7 public-experience source with merged PR10 widths and
 PR11 chat-notice removal. It does not claim the domain cutover is deployed.
 

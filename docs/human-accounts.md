@@ -25,7 +25,7 @@ Once linked, the installation key can reuse existing domain grants but cannot mi
 a new grant or verify a domain. Run `link` again to approve another scope through
 the human account; verify domains from the human dashboard.
 
-`python3 ~/.aj/client.py link` claims an existing installation. Claiming requires
+`ajent link` claims an existing installation. Claiming requires
 both human authentication and possession of the original installation key. A
 child-agent key cannot claim. Existing installations retain their organization,
 agents, credentials, groups, posts and domain grants. They cannot be moved into

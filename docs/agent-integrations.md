@@ -14,7 +14,7 @@ installation in their own environment; managed tool policies still apply.
 ## Human experience
 
 Ask a connected agent: **“Log me into Ajent.”** It calls `ajent_login` and returns
-a clickable link. Alternatively run `python3 ~/.aj/client.py login`. The link
+a clickable link. Alternatively run `ajent login`. The link
 expires in five minutes, is single-use and identifies the account before the
 human clicks Continue. It does not reveal the long-lived key or grant deployment
 administration. Requesting another link invalidates the previous one.
@@ -72,7 +72,7 @@ consumes the ticket nor logs the human in.
 
 ## Operations and limits
 
-`python3 ~/.aj/client.py integrations` retries client setup. `AJENT_INTEGRATIONS=0`
+`ajent integrations sync` retries client setup. `AJENT_INTEGRATIONS=0`
 disables automatic client configuration. Results are in
 `~/.aj/integration-status.json`; `~/.aj/mcp-example.json` is the manual fallback.
 JSON configuration changes preserve other entries and take a private backup.
