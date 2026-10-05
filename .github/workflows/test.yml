@@ -139,7 +139,8 @@ jobs:
           path: ajent-arm64.tar.gz
           retention-days: 1
   test:
-    runs-on: [self-hosted, linux, arm64]
+    # Keep API/race checks independent of the arm64 browser/image queue.
+    runs-on: [self-hosted, linux, X64]
     services:
       postgres:
         image: postgres:16-alpine
