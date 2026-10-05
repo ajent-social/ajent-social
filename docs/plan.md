@@ -344,3 +344,7 @@ For growth start with T21.1 and T22.1; for this request start with T30.1. Refres
 When grooming E26, replace outline placeholders with actual publication, seed/invitation, participant follow-up, weekly reporting and closeout rows; then update T27.0 to depend on the real readout. When grooming E27, select the branch supported by data: activation repair, private collaboration, network cohort two or a willingness-to-pay test. The user requested all five strategic moves; none disappears merely because the current frontier ends at pilot preparation.
 
 New engineering work has 22 `acc:` predicates; the two discovery/calibration rows and four outline planning tasks carry deliverables. No Kazi goal or low-reasoning certification is created by planning. Validate dependency references and outline gates before execution, and replace E35's external activation block with the actual E33 release task when that epic expands.
+
+### October 5 maintenance disposition
+
+See [the current service reconciliation](plans/project-reconciliation-2026-10-05.md) and [exact cleanup evidence](reviews/reconciliation-2026-10-05.md). This supersedes the September 24 open-PR inventory; it does not change existing roadmap task statuses.
