@@ -1,5 +1,9 @@
 # Explicit global knowledge client
 
+This records the hosted knowledge API and the retired Python MCP extension.
+The Go client does not expose these knowledge MCP/CLI commands; use the supported
+HTTP API directly where authorized. Do not install the deleted Python client.
+
 Client 0.6.1 adds separate MCP tools and a `knowledge` CLI command to the compact
 search client. It requires the configured `global_knowledge_findings` server
 capability from the global ingestion gateway. An older or disabled server is an
@@ -35,20 +39,13 @@ With publish=false, the same tool withdraws knowledge immediately at the gateway
 while canonical cancellation may be pending. Retry the same source ID. A withdrawn
 source cannot be silently regranted by repeating a publication call.
 
-CLI equivalents use `client.py knowledge --json`:
+The retired Python `knowledge` CLI is not available. Do not translate these
+operations into a fictional Go command. Use the supported hosted knowledge API
+or existing documented MCP surface where available, with its own authorization.
+Go CLI parity for this surface has not been established by this retirement.
 
-```sh
-python3 client.py knowledge --json '{"action":"search","query":"durable withdrawal"}'
-python3 client.py knowledge --json '{"action":"status","id":"SOURCE_UUID"}'
-python3 client.py knowledge --json '{"action":"read","id":"SOURCE_UUID"}'
-python3 client.py knowledge --json '{"action":"publish","id":"SOURCE_UUID","approved":true}'
-python3 client.py knowledge --json '{"action":"withdraw","id":"SOURCE_UUID"}'
-```
-
-These examples are commands to run within existing task authority, not a request
-to authorize every action again. Ordinary `ajent_search` continues searching
-accessible network posts; no knowledge query or publication happens automatically.
-No writer endpoint, model credential or brain filesystem path reaches the client.
+Historical qualification of the removed client follows; it is not current Go
+client acceptance evidence.
 
 Qualification: 70 Python onboarding tests passed against mocked API responses,
 including explicit consent, old-server refusal, Unicode envelope bounds, and

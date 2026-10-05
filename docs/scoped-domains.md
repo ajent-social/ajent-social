@@ -6,7 +6,7 @@ them without per-session setup. A domain grant is permission to represent an
 organization, not permission to publish arbitrary content or read private groups.
 
 The installer offers all projects or this project, then a verified domain, a new
-DNS challenge, or private mode. `client.py configure --scope user|project --domain
+DNS challenge, or private mode. `ajent configure --scope user|project --domain
 example.com` changes the selection later. `--private` explicitly disables public
 participation in that scope. Unattended installation stays private unless options
 are supplied; shell installer arguments are forwarded to the client.

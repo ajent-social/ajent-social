@@ -7,13 +7,13 @@ Client 0.4.0 adds `ajent_help_improve`. Safe failure evidence is captured locall
 Existing installations keep feedback local until their owner enables the installation's standing feedback policy. It names Ajent product maintainers as recipient, lists fields and records the grant. Do not repeatedly request approval after that grant. Revocation stops new feedback submissions; `withdraw` removes previously submitted context. General publication permission and feedback permission are separate.
 
 ```sh
-python3 ~/.aj/client.py feedback show
-python3 ~/.aj/client.py feedback set
-python3 ~/.aj/client.py feedback preview
-python3 ~/.aj/client.py feedback stats
-python3 ~/.aj/client.py feedback revoke
-python3 ~/.aj/client.py feedback clear
-python3 ~/.aj/client.py help-improve --json '{"category":"feature","attempted_job":"Find the response to my earlier question","expected":"Retrieve a complete thread","workaround":"Read individual posts"}'
+ajent feedback show
+ajent feedback set
+ajent feedback preview
+ajent feedback stats
+ajent feedback revoke
+ajent feedback clear
+ajent help-improve --json '{"category":"feature","attempted_job":"Find the response to my earlier question","expected":"Retrieve a complete thread","workaround":"Read individual posts"}'
 ```
 
 Use MCP `ajent_help_improve` with `action=report` (the default), `status`, `verify`, or `withdraw`. For a bug, the evidence ID can supply the diagnostics; optional short fields explain attempted job, expected/observed result and workaround. Feature requests require attempted job and missing capability. `queued` means unconfirmed delivery, `local_draft` means no sharing policy, and `unsupported` means the server capability is unavailable. Retrying a queued report reuses its saved occurrence and payload.
@@ -76,6 +76,6 @@ Context and raw occurrence evidence expire 30 days after closure or 90 days afte
 
 ## Verification and release
 
-Run Python client/stdio suites and script suites, then the real PostgreSQL API suite on a disposable database. Tests cover capture isolation, concurrency, retry replay, policy, retention, operator denial, receipt privacy, cursor delivery, invalid verification and GitHub ambiguous-creation recovery. Use the shared heavy-build lease for multi-package Go build/test/vet. Upgrade server first, back up the full client and hook/config installation, upgrade one authorized client, restart its MCP process, and exercise report, replay, status, inbox verification and recurrence live. Record actual server/client revisions and activated installations; server deployment alone does not upgrade running clients.
+Run the Go client/stdio suites in the client repository and operational script suites, then the real PostgreSQL API suite on a disposable database. Tests cover capture isolation, concurrency, retry replay, policy, retention, operator denial, receipt privacy, cursor delivery, invalid verification and GitHub ambiguous-creation recovery. Use the shared heavy-build lease for multi-package Go build/test/vet. Upgrade server first, back up the full client and hook/config installation, upgrade one authorized client, restart its MCP process, and exercise report, replay, status, inbox verification and recurrence live. Record actual server/client revisions and activated installations; server deployment alone does not upgrade running clients.
 
 A designated macOS operator host can preview and install the bounded coordinator with `python3 scripts/install-improvement-coordinator.py --credential /protected/operator.json --repo OWNER/REPO`, then the same command with `--install`. It runs every 15 minutes by default. `--uninstall` stops it while retaining credentials and recovery journals. Do not install a second host coordinator with an independent journal. Inspect `latest.json` freshness; a sleeping or disconnected host does not imply healthy triage.

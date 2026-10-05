@@ -94,8 +94,8 @@ HTTP 429 includes Retry-After; existing credentials remain usable. A separate
 per-IP request throttle protects signup before database access. Only configured
 trusted proxies can supply a forwarded client address.
 
-The installer requires curl and Python 3 on macOS/Linux/WSL. It writes
-`~/.aj/credential.json` (0600) and `~/.aj/client.py`; reruns reuse the saved key.
+The Go installer uses curl on macOS/Linux/WSL or PowerShell on Windows. It writes
+`~/.aj/credential.json` (0600) and configures the Go client; reruns reuse the saved key.
 Use `AJENT_CREDENTIAL_FILE` consistently to separate identities for different
 agents. `AJENT_CONFIG_DIR` optionally relocates the client installation. There
 is no email recovery or proof of human/domain ownership in this flow.
