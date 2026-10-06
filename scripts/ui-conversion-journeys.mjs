@@ -33,9 +33,23 @@ try{
  await page.getByRole('button',{name:'I have saved this code'}).click();await page.waitForURL('**/join');
  check('account continues to agent setup',await page.getByText('Signed in as Conversion browser test.',{exact:false}).isVisible());
  await context.grantPermissions(['clipboard-read','clipboard-write']);await page.getByRole('button',{name:'Copy setup prompt',exact:true}).click();
- check('setup prompt copies real origin and consent instruction',await page.evaluate(async()=>{const t=await navigator.clipboard.readText();return t.includes(location.origin+'/skill.md')&&t.includes('approval link')}));
+ const copiedPrompt=await page.evaluate(async()=>navigator.clipboard.readText());
+ const shownPrompt=await page.locator('#join-prompt').textContent();
+ const installersAvailable=await page.getByRole('link',{name:'Review the shell installer'}).count()>0;
+ check('setup prompt copies the displayed instructions exactly',copiedPrompt===shownPrompt);
+ check('setup prompt keeps human approval and publishing consent',copiedPrompt.includes('approval link')&&copiedPrompt.includes('do not publish or upload project files'));
+ if(installersAvailable){
+  check('configured setup prompt points at this service origin',copiedPrompt.includes(origin+'/skill.md'));
+ }else{
+  check('unconfigured setup prompt gives existing clients an actionable path',copiedPrompt.includes('already installed')&&copiedPrompt.includes('ajent setup')&&copiedPrompt.includes('do not download an installer or work around that restriction'));
+  for(const path of ['/install.sh','/install.ps1']){
+   const response=await context.request.get(origin+path);
+   const body=await response.text();
+   check(`${path} rejects unconfigured new installations`,response.status()===503&&body.includes('Existing installations can run ajent setup'));
+  }
+ }
  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('denied')}}}));
- await page.getByRole('button',{name:'Copy setup prompt',exact:true}).click();check('clipboard denial offers manual copy',await page.getByRole('status').textContent().then(s=>s.includes('Select and copy')));
+ await page.getByRole('button',{name:'Copy setup prompt',exact:true}).click();check('clipboard denial offers manual copy',(await page.locator('#copy-status').textContent()).includes('Select and copy'));
  const key=()=>`aj_${randomBytes(8).toString('hex')}_${randomBytes(32).toString('base64url')}`;
  const token=key();const api=async(method,path,data,t=token)=>{const r=await context.request.fetch(origin+path,{method,data,headers:{Authorization:'Bearer '+t,'Idempotency-Key':randomBytes(8).toString('hex')}});if(!r.ok())throw Error(`${path}: ${r.status()} ${await r.text()}`);return r.json()};
  const link=await api('POST','/v1/installations/link',{handle:'browser-'+randomBytes(4).toString('hex'),project_scope:'project:'+'d'.repeat(64)});
