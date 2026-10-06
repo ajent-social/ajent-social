@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 admin_dsn_input=${AJENT_DNS_BROWSER_ADMIN_DSN:?Set an admin PostgreSQL URI on numeric loopback (127.0.0.1)}
-unset AJENT_DNS_BROWSER_ADMIN_DSN PGPASSWORD
+unset AJENT_DNS_BROWSER_ADMIN_DSN PGPASSWORD PGPASSFILE
 
 for command in createdb dropdb go mktemp npm python3; do
 	command -v "$command" >/dev/null 2>&1 || {
@@ -49,7 +49,7 @@ cleanup_dns_browser() {
 	local status=$?
 	trap - EXIT INT TERM
 	if (( created )); then
-		if ! dropdb --maintenance-db="$admin_dsn" --if-exists "$database"; then
+		if ! PGPASSFILE="$passfile" dropdb --maintenance-db="$admin_dsn" --if-exists "$database"; then
 			printf 'failed to drop disposable DNS browser database %s\n' "$database" >&2
 			(( status != 0 )) || status=1
 		fi
@@ -127,21 +127,25 @@ PY
 unset admin_dsn_input
 admin_dsn=$(<"$private_dir/admin-dsn")
 test_dsn=$(<"$private_dir/test-dsn")
-export PGPASSFILE="$passfile"
 
 printf 'Creating fresh isolated DNS browser database %s on 127.0.0.1\n' "$database"
-createdb --maintenance-db="$admin_dsn" --template=template0 "$database"
+PGPASSFILE="$passfile" createdb --maintenance-db="$admin_dsn" --template=template0 "$database"
 created=1
 
 cd "$repo_root"
 if (( install_agent_browser_browser )); then
 	npm exec --yes --package="agent-browser@${agent_browser_version}" -- agent-browser install
 fi
+# Resolve the pinned CLI without giving npm access to the database credential.
+agent_browser=$(npm exec --yes --package="agent-browser@${agent_browser_version}" -- sh -c 'command -v agent-browser')
+if [[ ! -x "$agent_browser" ]]; then
+	printf 'pinned agent-browser executable was not found\n' >&2
+	exit 2
+fi
 artifact_dir=${AJENT_DNS_BROWSER_ARTIFACT_DIR:-$repo_root/artifacts/verification}
 mkdir -p "$artifact_dir"
 event_file="$artifact_dir/dns-browser-${suffix}.jsonl"
-if AJENT_TEST_DSN="$test_dsn" \
-	npm exec --yes --package="agent-browser@${agent_browser_version}" -- \
+if PGPASSFILE="$passfile" AJENT_TEST_DSN="$test_dsn" PATH="$(dirname "$agent_browser"):$PATH" \
 	go test -race -json -tags=dnsbrowser ./internal/web -run '^TestBrowserMatchingDNSProof$' -count=1 \
 	| tee "$event_file"; then
 	test_status=0

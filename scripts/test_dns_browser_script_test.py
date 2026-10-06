@@ -41,8 +41,9 @@ Path(sys.argv[2]).write_text(f"{path}\n{mode:o}\n{dir_mode:o}\n{int(expected <= 
 PY
 ''')
         self._command("dropdb", 'printf "dropdb %s\\n" "$*" >> "$MOCK_LOG"\n')
-        self._command("agent-browser", 'printf "agent-browser %s\\n" "$*" >> "$MOCK_LOG"\n')
+        self._command("agent-browser", '[[ -z "${PGPASSFILE+x}" ]] || exit 99\n' + 'printf "agent-browser %s\\n" "$*" >> "$MOCK_LOG"\n')
         self._command("go", '''
+[[ -n "${PGPASSFILE:-}" && -f "$PGPASSFILE" ]] || exit 98
 printf "go %s\\nDSN %s\\n" "$*" "$AJENT_TEST_DSN" >> "$MOCK_LOG"
 if [[ -z "${AJENT_DNS_BROWSER_ADMIN_DSN+x}" && -z "${PGPASSWORD+x}" ]]; then
   printf 'secret-environment=clean\\n' >> "$MOCK_LOG"
@@ -83,6 +84,7 @@ case "${MOCK_GO_MODE:-pass}" in
 esac
 ''')
         self._command("npm", '''
+[[ -z "${PGPASSFILE+x}" && -z "${PGPASSWORD+x}" && -z "${AJENT_DNS_BROWSER_ADMIN_DSN+x}" ]] || exit 97
 while (($#)); do
   if [[ "$1" == -- ]]; then shift; break; fi
   if [[ "$1" == --package=agent-browser@* ]]; then
