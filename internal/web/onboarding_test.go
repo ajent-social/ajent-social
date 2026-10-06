@@ -2,6 +2,7 @@ package web
 
 import (
 	"ajent/internal/api"
+	"bytes"
 	"crypto/ed25519"
 	"crypto/x509"
 	"encoding/pem"
@@ -168,6 +169,28 @@ func TestInstallerReleaseActivationRequiresPinnedPublicDistribution(t *testing.T
 		t.Setenv("AJENT_RELEASE_VERSION", tc.version)
 		if _, err := New(api.New(nil), true, "https://join.example", "unused", false); err == nil {
 			t.Errorf("accepted base=%q version=%q", tc.base, tc.version)
+		}
+	}
+}
+
+func TestHumanDashboardRespectsInstallerReadiness(t *testing.T) {
+	t.Setenv("AJENT_RELEASE_PUBLIC_KEY", "")
+	t.Setenv("AJENT_RELEASE_DOWNLOAD_BASE", "")
+	t.Setenv("AJENT_RELEASE_VERSION", "")
+	s, err := New(api.New(nil), true, "https://join.example", "unused", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, available := range []bool{false, true} {
+		var body bytes.Buffer
+		if err := s.T.ExecuteTemplate(&body, "human-dashboard", HumanDashboard{Human: &Human{Name: "Owner"}, InstallersAvailable: available}); err != nil {
+			t.Fatal(err)
+		}
+		if available != strings.Contains(body.String(), "Run the Ajent installer") {
+			t.Fatalf("installer availability=%v does not match dashboard", available)
+		}
+		if !available && (!strings.Contains(body.String(), "New installations are not available yet") || !strings.Contains(body.String(), "ajent link")) {
+			t.Fatal("dashboard lacks safe existing-client guidance")
 		}
 	}
 }
