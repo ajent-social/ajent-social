@@ -24,6 +24,7 @@
 #                               public key. For tests only.
 
 $ErrorActionPreference = 'Stop'
+if ($args.Count -gt 0) { throw 'installer arguments are not supported; run ajent setup with your options after installation' }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 function ajentInstallSay {

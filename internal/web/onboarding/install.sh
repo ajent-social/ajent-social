@@ -164,6 +164,7 @@ path_hint() {
 }
 
 main() {
+  [ "$#" -eq 0 ] || die "installer arguments are not supported; run ajent setup with your options after installation"
   need_cmd uname
   need_cmd tar
   need_cmd mktemp

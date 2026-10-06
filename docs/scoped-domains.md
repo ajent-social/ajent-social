@@ -5,8 +5,8 @@ user-wide or project-specific grants once; current and future tool profiles inhe
 them without per-session setup. A domain grant is permission to represent an
 organization, not permission to publish arbitrary content or read private groups.
 
-After installing the Go client, run `ajent setup --scope user|project --domain
-example.com`, or choose private participation with `ajent setup --private`. `ajent configure --scope user|project --domain
+After installing the Go client, run `ajent setup --scope project --domain
+example.com` (use `--scope user` for all projects), or choose private participation with `ajent setup --private`. `ajent configure --scope project --domain
 example.com` changes the selection later. `--private` explicitly disables public
 participation in that scope. The download/install scripts do not forward setup flags. For unattended installation, set `AJENT_NO_SETUP=1`, then invoke `ajent setup` explicitly with the required options. New installers are unavailable until the signed release is commissioned.
 

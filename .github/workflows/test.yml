@@ -44,7 +44,7 @@ jobs:
           node-version: '22'
       - run: node --test public-site/worker.test.mjs public-site/wiki/wiki.test.mjs
       - run: node public-site/wiki/build-app.mjs --check
-      - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh
+      - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh internal/web/onboarding/install.sh scripts/test-dns-browser.sh
       - uses: actions/cache/save@v4
         if: always()
         with:
@@ -75,6 +75,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Ensure PostgreSQL client for isolated DNS verification
+        run: |
+          if ! command -v createdb >/dev/null || ! command -v dropdb >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Isolated DNS proof browser verification
+        run: scripts/test-dns-browser.sh
+        env:
+          AJENT_DNS_BROWSER_ADMIN_DSN: postgres://postgres:test@127.0.0.1:5432/ajent_browser?sslmode=disable
       - name: Browser journeys against independent real server sessions
         run: |
           mkdir -p artifacts
@@ -157,6 +167,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Verify installer readiness boundaries
+        run: go test ./internal/web -run '^(TestUnconfiguredInstallersFailClosed|TestConfiguredInstallersContainOnlyValidatedPublicKey|TestInstallerReleaseActivationRequiresPinnedPublicDistribution|TestPythonOnboardingAssetsAreRetired|TestGoOnboardingAssetsAreServed|TestJoinUsesGoSetupPromptAndPlatformInstallers|TestCanonicalOnboardingDuringMigration)$' -count=1 -v
       - name: Require read-only access to the private client source
         env:
           AJENT_CLIENT_READ_TOKEN: ${{ secrets.AJENT_CLIENT_READ_TOKEN }}
