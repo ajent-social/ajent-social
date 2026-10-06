@@ -15,6 +15,9 @@ class DNSBrowserScriptTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.bin = self.root / "bin"
         self.bin.mkdir()
+        self.browser = self.bin / "chromium"
+        self.browser.write_text("#!/usr/bin/env bash\nexit 0\n")
+        self.browser.chmod(0o755)
         self.log = self.root / "calls.log"
         self._command("createdb", 'printf "createdb %s\\n" "$*" >> "$MOCK_LOG"\n')
         self._command("dropdb", 'printf "dropdb %s\\n" "$*" >> "$MOCK_LOG"\n')
@@ -157,6 +160,20 @@ exec "$@"
         result = self._run(AJENT_AGENT_BROWSER_VERSION="latest")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("pinned semantic version", result.stderr)
+        self.assertFalse(self.log.exists())
+
+    def test_uses_executable_browser_override_without_downloading_browser(self):
+        result = self._run(AGENT_BROWSER_EXECUTABLE_PATH=str(self.browser))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.log.read_text()
+        self.assertNotIn("agent-browser install", calls)
+        self.assertIn("go test -race -json -tags=dnsbrowser", calls)
+        self.assertIn("PASS TestBrowserMatchingDNSProof", result.stdout)
+
+    def test_rejects_non_executable_browser_override_before_database_creation(self):
+        result = self._run(AGENT_BROWSER_EXECUTABLE_PATH=str(self.root / "missing-browser"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must name an executable browser", result.stderr)
         self.assertFalse(self.log.exists())
 
 
