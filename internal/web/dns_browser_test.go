@@ -116,7 +116,7 @@ func TestBrowserMatchingDNSProof(t *testing.T) {
 	server.Listener = listener
 	server.Start()
 	t.Cleanup(server.Close)
-	for _, tc := range []struct{ role, org, key, path string }{{"owner", ownerOrg, setup, "/app/verification"}, {"original", org, key, "/app/verification"}, {"human", humanOrg, "", "/human/workspaces?workspace=" + humanOrg}} {
+	for _, tc := range []struct{ role, org, key, path string }{{"owner", ownerOrg, setup, "/app/verification"}, {"original", org, key, "/app/verification"}, {"human", humanOrg, "", "/human/workspaces?workspace=" + humanOrg + "&view=domains"}} {
 		t.Run(tc.role, func(t *testing.T) {
 			session := "ajent-dns-" + tc.role + "-" + uuid.NewString()[:8]
 			run := func(args ...string) string {
