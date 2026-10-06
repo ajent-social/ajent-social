@@ -8,21 +8,31 @@ receives the exact displayed proof (303, verified UI after reload, matching
 workspace/proof token, more than 29 days validity and a scheduled next check).
 The test also asserts the exact TXT question and configured response.
 
-Run only this test in its own process. It replaces process-global resolver and
-setup-key state. It requires `agent-browser` on PATH, its browser dependencies,
-and a disposable PostgreSQL server on numeric loopback. It is deliberately not
-part of the default browser CI run. The database must be empty and its name must
-start with `ajent_dns_browser_`; the guard rejects other databases.
+The file uses the `dnsbrowser` Go build tag, so the test is absent from ordinary
+test runs and cannot add an intentional skip to the default zero-skips gate.
+Run it by itself because it replaces process-global resolver and setup-key
+state. The wrapper creates a unique empty database whose name starts with
+`ajent_dns_browser_`, installs the pinned `agent-browser` CLI and browser,
+executes this test alone, then drops the database on success or failure.
+
+It requires `createdb`, `dropdb`, `go`, `npm`, and `python3` on `PATH`, plus a
+PostgreSQL URI with create/drop permission and numeric loopback host `127.0.0.1`.
+The wrapper rejects DNS names, IPv6, and remote database hosts before creating
+anything. The UI CI job should add this step after its existing Node and browser
+setup:
 
 ```sh
-createdb -h 127.0.0.1 -p 55439 ajent_dns_browser_review
-AJENT_DNS_BROWSER_TEST=1 \
-AJENT_TEST_DSN='postgresql://127.0.0.1:55439/ajent_dns_browser_review?sslmode=disable' \
-go test -race ./internal/web -run '^TestBrowserMatchingDNSProof$' -count=1 -v
-dropdb -h 127.0.0.1 -p 55439 ajent_dns_browser_review
+AJENT_DNS_BROWSER_ADMIN_DSN='postgresql://postgres:test@127.0.0.1:5432/ajent_browser?sslmode=disable' \
+scripts/test-dns-browser.sh
 ```
 
-Evidence on 2026-09-08, base `40de0f9`: the command above with fresh database
+The wrapper pins `agent-browser` 0.38.2. Override the version only with an
+explicit semantic version through `AJENT_AGENT_BROWSER_VERSION`. It chooses a
+per-run database name; a collision fails safely instead of reusing or dropping
+an existing database. Its command and cleanup behavior have offline tests in
+`scripts/test_dns_browser_script_test.py`.
+
+Historical evidence on 2026-09-08, base `40de0f9`: the prior manual command with fresh database
 `ajent_dns_browser_race2` executed one named suite and all three role subtests;
 six wrong/matching outcome checks passed, with nine actual domain form submits.
 Race detector reported no races. Retained session evidence:

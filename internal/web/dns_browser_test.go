@@ -1,3 +1,5 @@
+//go:build dnsbrowser
+
 package web
 
 import (
@@ -24,13 +26,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestBrowserMatchingDNSProof is deliberately opt-in and must run alone: it
-// replaces the process-local resolver. It never changes host DNS or forwards
-// queries upstream. Human authentication is a seeded session, not passkey proof.
+// TestBrowserMatchingDNSProof runs only with the dnsbrowser build tag and must
+// run alone: it replaces the process-local resolver. It never changes host DNS
+// or forwards queries upstream. Human authentication is a seeded session, not
+// passkey proof.
 func TestBrowserMatchingDNSProof(t *testing.T) {
-	if os.Getenv("AJENT_DNS_BROWSER_TEST") != "1" {
-		t.Skip("set AJENT_DNS_BROWSER_TEST=1 and run this test alone")
-	}
 	dsn := os.Getenv("AJENT_TEST_DSN")
 	if dsn == "" {
 		t.Fatal("AJENT_TEST_DSN must select a fresh disposable loopback database")
