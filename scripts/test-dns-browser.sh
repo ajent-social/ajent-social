@@ -66,6 +66,8 @@ PY
 printf 'Creating fresh isolated DNS browser database %s on 127.0.0.1\n' "$database"
 createdb --maintenance-db="$AJENT_DNS_BROWSER_ADMIN_DSN" --template=template0 "$database"
 created=1
+# Invoked by the EXIT trap; exercised by success and failure cleanup tests.
+# shellcheck disable=SC2329
 cleanup() {
 	status=$?
 	trap - EXIT
@@ -77,7 +79,7 @@ cleanup() {
 	fi
 	exit "$status"
 }
-trap cleanup EXIT
+trap 'cleanup' EXIT
 
 cd "$repo_root"
 if (( install_agent_browser_browser )); then

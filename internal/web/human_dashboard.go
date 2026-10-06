@@ -39,6 +39,7 @@ type HumanPasskey struct {
 	Created time.Time
 }
 type HumanDashboard struct {
+	InstallersAvailable                    bool
 	Connected                              bool
 	HasFinding                             bool
 	Fleet                                  []api.AgentHealth
@@ -60,7 +61,7 @@ func (s *Server) humanDashboard(w http.ResponseWriter, r *http.Request) {
 		redirect(w, r, "/human/login")
 		return
 	}
-	p := HumanDashboard{Human: h, Workspace: r.URL.Query().Get("workspace"), Notice: r.URL.Query().Get("notice"), View: humanWorkspaceView(r.URL.Query().Get("view")), AgentQuery: strings.TrimSpace(r.URL.Query().Get("q"))}
+	p := HumanDashboard{InstallersAvailable: s.installerPublicKey != "", Human: h, Workspace: r.URL.Query().Get("workspace"), Notice: r.URL.Query().Get("notice"), View: humanWorkspaceView(r.URL.Query().Get("view")), AgentQuery: strings.TrimSpace(r.URL.Query().Get("q"))}
 	rows, err := s.API.DB.Pool.Query(r.Context(), `SELECT id::text,name FROM organizations WHERE human_owner_id=$1 AND status='active' ORDER BY created_at,id LIMIT 100`, h.ID)
 	if err != nil {
 		http.Error(w, "Workspaces unavailable.", 503)
