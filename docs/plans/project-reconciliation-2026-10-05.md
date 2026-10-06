@@ -2,7 +2,7 @@
 
 Scope: reconcile in-progress service work, retire superseded candidates, preserve pending planned work and active ownership. Production deployment, new roadmap implementation, account settings and destructive changes to the original checkout are excluded.
 
-## Evidence and disposition
+## Initial audit evidence and disposition
 
 Base: `1853cf7f975e728865ff25115d88c34f0a89842b` on origin/main. The original checkout at `da23d51` is 253 commits behind and three ahead; it is not the current product. September 24 reconciliation already preserved 439 working files and recorded why replaying the old source would regress current work.
 
@@ -12,6 +12,31 @@ Base: `1853cf7f975e728865ff25115d88c34f0a89842b` on origin/main. The original ch
 - Discovery work has existing P02D/S03 claim refs. Preserve those worktrees and pending branch content; this maintenance task does not take ownership of another agent's work.
 - E21–E27 growth/activation/cohort work, E30–E35 operations/fleet work, and E37 membership contain pending plan rows. Preserve them. Unchecked rows are not proof that source is absent or authority to initiate deployment/outreach. Future execution needs task-level reconciliation with current code and evidence.
 - Original dirty checkout, local reports, infrastructure configuration, and unresolved unique branch patches are retained. Age, divergence and archive existence alone do not justify deleting authored work.
+
+## Authorized delivery follow-up — 2026-10-06
+
+The owner subsequently granted access and instructed "Fix and merge." PR #80
+integration now runs in a separate worktree under the coordinator's own claim;
+the previous retirement worktree and claim remain untouched. Candidate
+`e28b61c394d1e9a2c80082dc547ea9f89871c535` has independent source approval.
+It carries patched OpenTelemetry dependencies, dedicated DNS browser execution
+with no skipped selected tests, fail-closed signed-installer readiness and
+verification on Unix and PowerShell, and corrected onboarding/browser checks.
+
+[Run 37426828612](https://github.com/ajent-social/ajent-social/actions/runs/37426828612)
+has passed service build/vet, both vulnerability scans, infrastructure tests,
+installer tests and actual DNS/full browser journeys. The private-client
+checkout gate fails because `AJENT_CLIENT_READ_TOKEN` is absent; the ordinary
+client-dependent enrollment/race suite has not run. GitHub policy disallows
+deploy keys. Supply a read-only token scoped to the client repository through
+service Actions secrets; do not transfer a broad personal token or alter policy.
+
+PR #80 must finish verification and land before PR #81 is refreshed on landed
+main, independently reviewed at its new exact head, and merged. The maintenance
+candidate is prepared locally on the retirement candidate, preserving PR #81's
+published head until that dependency lands. Neither merge nor landed verification
+is claimed. Public release commissioning and production deployment remain
+outside this work.
 
 ## Delivery tasks
 
