@@ -161,7 +161,7 @@ func TestConfiguredInstallersContainOnlyValidatedPublicKey(t *testing.T) {
 func TestInstallerReleaseActivationRequiresPinnedPublicDistribution(t *testing.T) {
 	key := onboardingTestKey(t)
 	for _, tc := range []struct{ base, version string }{
-		{"", "1.2.3"}, {"https://releases.example", ""}, {"http://releases.example", "1.2.3"}, {"https://user:secret@releases.example", "1.2.3"}, {"https://releases.example/x';evil", "1.2.3"}, {"https://releases.example", "latest"},
+		{"", "1.2.3"}, {"https://releases.example", ""}, {"http://releases.example", "1.2.3"}, {"https://127.0.0.1/releases", "1.2.3"}, {"https://localhost/releases", "1.2.3"}, {"https://10.0.0.1/releases", "1.2.3"}, {"https://user:secret@releases.example", "1.2.3"}, {"https://releases.example/x';evil", "1.2.3"}, {"https://releases.example", "latest"},
 	} {
 		t.Setenv("AJENT_RELEASE_PUBLIC_KEY", key)
 		t.Setenv("AJENT_RELEASE_DOWNLOAD_BASE", tc.base)

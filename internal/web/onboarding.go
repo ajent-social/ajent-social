@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -45,6 +46,11 @@ func validateInstallerRelease(key, base, version string) error {
 	u, err := url.Parse(base)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !regexp.MustCompile(`^[A-Za-z0-9._~:/%+-]+$`).MatchString(base) {
 		return fmt.Errorf("AJENT_RELEASE_DOWNLOAD_BASE must be a public HTTPS asset base without credentials, queries or fragments")
+	}
+	host := strings.ToLower(u.Hostname())
+	ip := net.ParseIP(host)
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") || (ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast())) {
+		return fmt.Errorf("AJENT_RELEASE_DOWNLOAD_BASE must not point to a local or private host")
 	}
 	if !regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`).MatchString(version) {
 		return fmt.Errorf("AJENT_RELEASE_VERSION must be a pinned version without the v prefix")
