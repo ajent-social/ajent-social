@@ -19,11 +19,36 @@ class DNSBrowserScriptTests(unittest.TestCase):
         self.browser.write_text("#!/usr/bin/env bash\nexit 0\n")
         self.browser.chmod(0o755)
         self.log = self.root / "calls.log"
-        self._command("createdb", 'printf "createdb %s\\n" "$*" >> "$MOCK_LOG"\n')
+        self._command("createdb", r'''
+printf "createdb %s\\n" "$*" >> "$MOCK_LOG"
+python3 - "$PGPASSFILE" "$MOCK_PGPASS_OBSERVED" "$MOCK_EXPECT_PASSWORD" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+password = sys.argv[3].replace("\\", "\\\\").replace(":", "\\:")
+expected = {
+    f"127.0.0.1:55439:ajent_browser:postgres:{password}",
+    f"127.0.0.1:55439:ajent_dns_browser_ci_42_1:postgres:{password}",
+}
+content = set(path.read_text().splitlines())
+mode = stat.S_IMODE(path.stat().st_mode)
+dir_mode = stat.S_IMODE(path.parent.stat().st_mode)
+clean_env = not os.getenv("AJENT_DNS_BROWSER_ADMIN_DSN") and not os.getenv("PGPASSWORD")
+Path(sys.argv[2]).write_text(f"{path}\n{mode:o}\n{dir_mode:o}\n{int(expected <= content)}\n{int(clean_env)}\n")
+PY
+''')
         self._command("dropdb", 'printf "dropdb %s\\n" "$*" >> "$MOCK_LOG"\n')
         self._command("agent-browser", 'printf "agent-browser %s\\n" "$*" >> "$MOCK_LOG"\n')
         self._command("go", '''
 printf "go %s\\nDSN %s\\n" "$*" "$AJENT_TEST_DSN" >> "$MOCK_LOG"
+if [[ -z "${AJENT_DNS_BROWSER_ADMIN_DSN+x}" && -z "${PGPASSWORD+x}" ]]; then
+  printf 'secret-environment=clean\\n' >> "$MOCK_LOG"
+else
+  printf 'secret-environment=leaked\\n' >> "$MOCK_LOG"
+fi
 case "${MOCK_GO_MODE:-pass}" in
   pass)
     printf '%s\\n' \
@@ -71,9 +96,12 @@ exec "$@"
         self.env.update({
             "PATH": f"{self.bin}:{os.environ['PATH']}",
             "MOCK_LOG": str(self.log),
-            "AJENT_DNS_BROWSER_ADMIN_DSN": "postgresql://postgres:test@127.0.0.1:55439/ajent_browser?sslmode=disable&dbname=ignored",
+            "MOCK_PGPASS_OBSERVED": str(self.root / "pgpass-observed"),
+            "MOCK_EXPECT_PASSWORD": "p@ss:word",
+            "AJENT_DNS_BROWSER_ADMIN_DSN": "postgresql://postgres:p%40ss%3Aword@127.0.0.1:55439/ajent_browser?sslmode=disable&dbname=ignored",
             "AJENT_DNS_BROWSER_RUN_ID": "CI-42.1",
             "AJENT_DNS_BROWSER_ARTIFACT_DIR": str(self.root / "artifacts"),
+            "PGPASSWORD": "ambient-password-must-not-leak",
         })
 
     def _command(self, name, body):
@@ -84,7 +112,14 @@ exec "$@"
     def _run(self, **overrides):
         env = self.env.copy()
         env.update(overrides)
-        return subprocess.run([str(SCRIPT)], text=True, capture_output=True, env=env)
+        result = subprocess.run([str(SCRIPT)], text=True, capture_output=True, env=env)
+        self.assertEqual(list(SCRIPT.parent.parent.glob(".dns-browser-private.*")), [])
+        observed = self.root / "pgpass-observed"
+        if observed.exists():
+            pgpass_path = Path(observed.read_text().splitlines()[0])
+            self.assertFalse(pgpass_path.exists())
+            self.assertFalse(pgpass_path.parent.exists())
+        return result
 
     def test_uses_fresh_loopback_database_installs_browser_and_drops_database(self):
         result = self._run()
@@ -92,8 +127,7 @@ exec "$@"
         calls = self.log.read_text()
         database = "ajent_dns_browser_ci_42_1"
         admin_dsn = (
-            "postgresql://postgres:test@127.0.0.1:55439/ajent_browser"
-            "?sslmode=disable&dbname=ignored"
+            "postgresql://postgres@127.0.0.1:55439/ajent_browser?sslmode=disable"
         )
         self.assertIn(f"createdb --maintenance-db={admin_dsn} --template=template0 {database}", calls)
         self.assertIn("agent-browser install", calls)
@@ -105,10 +139,21 @@ exec "$@"
             "^TestBrowserMatchingDNSProof$ -count=1",
             calls,
         )
-        self.assertIn(f"DSN postgresql://postgres:test@127.0.0.1:55439/{database}?sslmode=disable", calls)
+        self.assertIn(f"DSN postgresql://postgres@127.0.0.1:55439/{database}?sslmode=disable", calls)
         self.assertEqual(calls.count("package --package=agent-browser@0.38.2"), 2)
         self.assertIn("go test -race -json -tags=dnsbrowser", calls)
+        self.assertIn("secret-environment=clean", calls)
+        self.assertNotIn("p@ss:word", calls)
+        self.assertNotIn("p%40ss%3Aword", calls)
         self.assertTrue((self.root / "artifacts" / f"dns-browser-{database.removeprefix('ajent_dns_browser_')}.jsonl").is_file())
+        pgpass_path, mode, dir_mode, valid, clean_env = (
+            self.root / "pgpass-observed"
+        ).read_text().splitlines()
+        self.assertEqual(mode, "600")
+        self.assertEqual(dir_mode, "700")
+        self.assertEqual(valid, "1")
+        self.assertEqual(clean_env, "1")
+        self.assertFalse(Path(pgpass_path).exists())
 
     def test_rejects_non_loopback_before_creating_database(self):
         result = self._run(
