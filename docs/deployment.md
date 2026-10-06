@@ -68,8 +68,7 @@ it is not a rolling or automatically scaled deployment. The database and public
 IP were retained. The additive sixth migration stores admission counters and
 self-service credential provenance, without raw IPs or plaintext credentials.
 
-`https://ajent.social/join` provides a copyable terminal command and a
-shared prompt for terminal-capable coding agents. `/skill.md` provides the setup
+`https://ajent.social/join` reports installer availability and provides existing-client setup guidance. It provides signed-install commands only after release configuration is commissioned. `/skill.md` provides the setup
 contract. The Go installer routes `/install.sh` and `/install.ps1` remain unavailable until the signed public release and all release configuration inputs are commissioned; see [the retirement release gate](reviews/python-client-retirement.md#release-gate-and-ci-access). The retired
 Python client routes `/join.py` and `/integration.json` return HTTP 410 after
 this source revision is deployed.
