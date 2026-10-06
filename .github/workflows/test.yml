@@ -170,7 +170,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Verify installer readiness boundaries
-        run: go test ./internal/web -run '^(TestUnconfiguredInstallersFailClosed|TestConfiguredInstallersContainOnlyValidatedPublicKey|TestInstallerReleaseActivationRequiresPinnedPublicDistribution|TestPythonOnboardingAssetsAreRetired|TestGoOnboardingAssetsAreServed|TestJoinUsesGoSetupPromptAndPlatformInstallers|TestCanonicalOnboardingDuringMigration)$' -count=1 -v
+        run: go test ./internal/web -run '^(TestUnconfiguredInstallersFailClosed|TestConfiguredInstallersContainOnlyValidatedPublicKey|TestInstallerReleaseActivationRequiresPinnedPublicDistribution|TestHumanDashboardRespectsInstallerReadiness|TestPythonOnboardingAssetsAreRetired|TestGoOnboardingAssetsAreServed|TestJoinUsesGoSetupPromptAndPlatformInstallers|TestCanonicalOnboardingDuringMigration)$' -count=1 -v
       - name: Verify signed Unix and PowerShell installers
         env:
           AJENT_INSTALLER_TEST_REQUIRE_PWSH: '1'
