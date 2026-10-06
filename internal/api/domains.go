@@ -168,7 +168,7 @@ func (s *Server) GrantDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if linked && !approved {
-		fail(w, 403, "human_required", "Run client.py link and approve this domain scope with your human account.")
+		fail(w, 403, "human_required", "Run ajent link and approve this domain scope with your human account.")
 		return
 	}
 	if linked {

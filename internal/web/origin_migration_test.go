@@ -27,6 +27,9 @@ func TestMigrationOriginBoundary(t *testing.T) {
 }
 
 func TestCanonicalOnboardingDuringMigration(t *testing.T) {
+	t.Setenv("AJENT_RELEASE_PUBLIC_KEY", onboardingTestKey(t))
+	t.Setenv("AJENT_RELEASE_DOWNLOAD_BASE", "https://releases.example/ajent")
+	t.Setenv("AJENT_RELEASE_VERSION", "1.2.3")
 	s, err := New(api.New(nil), true, "https://ajent.social", "unused", false)
 	if err != nil {
 		t.Fatal(err)

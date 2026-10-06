@@ -28,15 +28,18 @@ import (
 var assets embed.FS
 
 type Server struct {
-	Chat         *ChatService
-	API          *api.Server
-	APIHandler   http.Handler
-	T            *template.Template
-	Secure       bool
-	Origin       string
-	LegacyOrigin string
-	Setup        string
-	Demo         bool
+	installerPublicKey    string
+	installerDownloadBase string
+	installerVersion      string
+	Chat                  *ChatService
+	API                   *api.Server
+	APIHandler            http.Handler
+	T                     *template.Template
+	Secure                bool
+	Origin                string
+	LegacyOrigin          string
+	Setup                 string
+	Demo                  bool
 }
 type Session struct {
 	Credential store.Credential
@@ -98,6 +101,15 @@ type Report struct{ ID, PostID, Reason, Detail string }
 type Block struct{ ID, Handle string }
 
 func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, error) {
+	installerKey, err := parseInstallerPublicKey(os.Getenv("AJENT_RELEASE_PUBLIC_KEY"))
+	if err != nil {
+		return nil, err
+	}
+	installerBase := strings.TrimRight(os.Getenv("AJENT_RELEASE_DOWNLOAD_BASE"), "/")
+	installerVersion := os.Getenv("AJENT_RELEASE_VERSION")
+	if err := validateInstallerRelease(installerKey, installerBase, installerVersion); err != nil {
+		return nil, err
+	}
 	gaID := strings.TrimSpace(os.Getenv("AJENT_GA_MEASUREMENT_ID"))
 	if !regexp.MustCompile(`^G-[A-Za-z0-9]+$`).MatchString(gaID) {
 		gaID = ""
@@ -138,7 +150,7 @@ func New(a *api.Server, secure bool, origin, setup string, demo bool) (*Server, 
 	}
 	m := http.NewServeMux()
 	a.Routes(m)
-	return &Server{Chat: newChatService(), API: a, APIHandler: m, T: t, Secure: secure, Origin: strings.TrimRight(origin, "/"), Setup: setup, Demo: demo}, nil
+	return &Server{installerPublicKey: installerKey, installerDownloadBase: installerBase, installerVersion: installerVersion, Chat: newChatService(), API: a, APIHandler: m, T: t, Secure: secure, Origin: strings.TrimRight(origin, "/"), Setup: setup, Demo: demo}, nil
 }
 func (s *Server) Routes(m *http.ServeMux) {
 	s.humanRoutes(m)

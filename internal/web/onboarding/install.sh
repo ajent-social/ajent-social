@@ -4,23 +4,21 @@
 # Installs ajent (docs/adr/003-distribution-channels.md). Downloads the
 # release archive for this OS and architecture, verifies its SHA-256
 # against checksums.txt, checks the Ed25519 signature over checksums.txt
-# when a verifier is available, installs the ajent binary and records the
+# with OpenSSL 3 before execution, installs the ajent binary and records the
 # install method in install.json. On Windows, use install.ps1 instead:
 # irm https://ajent.social/install.ps1 | iex
 #
 # Environment variables:
 #   AJENT_VERSION              Version to install, e.g. "0.7.0" or "v0.7.0".
-#                               Default: the latest stable release.
+#                               Default: the service-pinned signed release.
 #   AJENT_INSTALL_DIR          Where to install the ajent binary.
 #                               Default: $HOME/.local/bin
 #   AJENT_CONFIG_DIR           Where to write install.json.
 #                               Default: $HOME/.aj
 #   AJENT_NO_SETUP             When "1", skip running "ajent setup".
-#   AJENT_REQUIRE_SIGNATURE    When "1", fail instead of warning when the
-#                               release signature cannot be checked.
 #   AJENT_DOWNLOAD_BASE        Base URL for release assets, for tests and
 #                               mirrors. Default:
-#                               https://github.com/ajent-social/ajent/releases/download
+#                               the service-configured public release host.
 #                               AJENT_VERSION is required when this is set.
 #   AJENT_RELEASE_PUBKEY_FILE  A PEM file that replaces the embedded
 #                               release public key. For tests only.
@@ -95,28 +93,9 @@ detect_arch() {
   echo "$arch"
 }
 
-latest_version() {
-  url=https://github.com/ajent-social/ajent/releases/latest
-  if command -v curl >/dev/null 2>&1; then
-    effective=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "$url") || die "could not resolve the latest release"
-    printf '%s' "${effective##*/tag/v}"
-  else
-    loc=$(wget -S --spider --max-redirect=5 "$url" 2>&1 | awk 'tolower($1) == "location:" {loc = $2} END {print loc}')
-    [ -n "$loc" ] || die "could not resolve the latest release"
-    printf '%s' "${loc##*/tag/v}"
-  fi
-}
-
 resolve_version() {
-  v=${AJENT_VERSION:-}
+  v=${AJENT_VERSION:-__AJENT_RELEASE_VERSION__}
   v=${v#v}
-
-  if [ -z "$v" ]; then
-    if [ -n "${AJENT_DOWNLOAD_BASE:-}" ]; then
-      die "AJENT_VERSION is required when AJENT_DOWNLOAD_BASE is set"
-    fi
-    v=$(latest_version)
-  fi
 
   if ! printf '%s' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
     die "could not determine a valid version (got '$v')"
@@ -151,11 +130,12 @@ verify_signature() {
   else
     # ---- BEGIN release PEM (T5.3b) ----
     cat >"$key" <<'AJENT_RELEASE_PEM'
+__AJENT_RELEASE_PUBLIC_KEY__
 AJENT_RELEASE_PEM
     # ---- END release PEM (T5.3b) ----
   fi
 
-  if [ ! -s "$key" ]; then
+  if [ ! -s "$key" ] || ! grep -q -- "-----BEGIN PUBLIC KEY-----" "$key"; then
     die "no release key is embedded in this installer"
   fi
 
@@ -167,10 +147,7 @@ AJENT_RELEASE_PEM
     return 0
   fi
 
-  if [ "${AJENT_REQUIRE_SIGNATURE:-0}" = "1" ]; then
-    die "release signature could not be checked (OpenSSL 3 not found) and AJENT_REQUIRE_SIGNATURE=1"
-  fi
-  say "signature not checked (OpenSSL 3 not found); SHA-256 checksum verified"
+  die "OpenSSL 3 is required to verify the release signature before installation"
 }
 
 path_hint() {
@@ -200,7 +177,7 @@ main() {
   arch=$(detect_arch "$os")
   v=$(resolve_version)
 
-  base=${AJENT_DOWNLOAD_BASE:-https://github.com/ajent-social/ajent/releases/download}
+  base=${AJENT_DOWNLOAD_BASE:-__AJENT_RELEASE_DOWNLOAD_BASE__}
   name="ajent_${v}_${os}_${arch}.tar.gz"
 
   download "$base/v$v/$name" "$tmp/$name"

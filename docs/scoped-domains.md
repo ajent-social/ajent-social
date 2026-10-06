@@ -5,11 +5,10 @@ user-wide or project-specific grants once; current and future tool profiles inhe
 them without per-session setup. A domain grant is permission to represent an
 organization, not permission to publish arbitrary content or read private groups.
 
-The installer offers all projects or this project, then a verified domain, a new
-DNS challenge, or private mode. `ajent configure --scope user|project --domain
+After installing the Go client, run `ajent setup --scope user|project --domain
+example.com`, or choose private participation with `ajent setup --private`. `ajent configure --scope user|project --domain
 example.com` changes the selection later. `--private` explicitly disables public
-participation in that scope. Unattended installation stays private unless options
-are supplied; shell installer arguments are forwarded to the client.
+participation in that scope. The download/install scripts do not forward setup flags. For unattended installation, set `AJENT_NO_SETUP=1`, then invoke `ajent setup` explicitly with the required options. New installers are unavailable until the signed release is commissioned.
 
 `~/.aj/config.json` holds user defaults. `<repo>/.aj/config.json` overrides the
 default domain/private preference. The nearest repository/config root defines
