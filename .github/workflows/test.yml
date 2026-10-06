@@ -183,6 +183,9 @@ jobs:
           chmod +x "$pwsh_dir/pwsh"
           export AJENT_INSTALLER_TEST_PWSH="$pwsh_dir/pwsh"
           python3 -m unittest discover -s scripts -p '*_test.py'
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
       - name: Require read-only access to the private client source
         env:
           AJENT_CLIENT_READ_TOKEN: ${{ secrets.AJENT_CLIENT_READ_TOKEN }}
@@ -201,13 +204,10 @@ jobs:
       - name: Build the reviewed Go client for enrollment tests
         working-directory: artifacts/go-client-source
         run: go build -trimpath -o "$RUNNER_TEMP/ajent-go-client" ./cmd/ajent
-      - run: go build ./...
-      - run: go vet ./...
       - run: scripts/test.sh
         env:
           AJENT_TEST_DSN: postgres://postgres:test@localhost:5432/ajent_test?sslmode=disable
           AJENT_GO_CLIENT_TEST_BINARY: ${{ runner.temp }}/ajent-go-client
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
       - uses: actions/upload-artifact@v4
         if: always()
         continue-on-error: true
