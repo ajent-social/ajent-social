@@ -2,9 +2,10 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-: "${AJENT_DNS_BROWSER_ADMIN_DSN:?Set an admin PostgreSQL URI on numeric loopback (127.0.0.1)}"
+admin_dsn_input=${AJENT_DNS_BROWSER_ADMIN_DSN:?Set an admin PostgreSQL URI on numeric loopback (127.0.0.1)}
+unset AJENT_DNS_BROWSER_ADMIN_DSN PGPASSWORD
 
-for command in createdb dropdb go npm python3; do
+for command in createdb dropdb go mktemp npm python3; do
 	command -v "$command" >/dev/null 2>&1 || {
 		printf 'required command is missing: %s\n' "$command" >&2
 		exit 2
@@ -37,17 +38,52 @@ if (( ${#database} > 63 )); then
 	exit 2
 fi
 
-test_dsn=$(python3 - "$AJENT_DNS_BROWSER_ADMIN_DSN" "$database" <<'PY'
-import sys
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+umask 077
+private_dir=$(mktemp -d "$repo_root/.dns-browser-private.XXXXXX")
+created=0
+admin_dsn=
+test_dsn=
+passfile="$private_dir/pgpass"
+# shellcheck disable=SC2317,SC2329
+cleanup_dns_browser() {
+	local status=$?
+	trap - EXIT INT TERM
+	if (( created )); then
+		if ! dropdb --maintenance-db="$admin_dsn" --if-exists "$database"; then
+			printf 'failed to drop disposable DNS browser database %s\n' "$database" >&2
+			(( status != 0 )) || status=1
+		fi
+	fi
+	if [[ -d "$private_dir" ]] && ! python3 -c 'import shutil,sys; shutil.rmtree(sys.argv[1])' "$private_dir"; then
+		printf 'failed to remove private DNS browser credentials\n' >&2
+		(( status != 0 )) || status=1
+	fi
+	exit "$status"
+}
+trap cleanup_dns_browser EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+chmod 700 "$private_dir"
 
-dsn, database = sys.argv[1:]
+AJENT_DNS_BROWSER_ADMIN_DSN="$admin_dsn_input" \
+AJENT_DNS_BROWSER_PRIVATE_DIR="$private_dir" \
+python3 - "$database" <<'PY'
+import os
+import sys
+from pathlib import Path
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
+
+dsn = os.environ["AJENT_DNS_BROWSER_ADMIN_DSN"]
+private_dir = Path(os.environ["AJENT_DNS_BROWSER_PRIVATE_DIR"])
+test_database = sys.argv[1]
 try:
     parsed = urlsplit(dsn)
     if parsed.scheme not in {"postgres", "postgresql"} or parsed.hostname != "127.0.0.1":
         raise ValueError("numeric loopback PostgreSQL URI required")
     if parsed.port is not None and not 1 <= parsed.port <= 65535:
         raise ValueError("invalid PostgreSQL port")
+    if parsed.fragment:
+        raise ValueError("URI fragments are not supported")
     allowed = {"sslmode", "connect_timeout", "application_name", "dbname", "database"}
     query = parse_qsl(parsed.query, keep_blank_values=True)
     unknown = sorted({key for key, _ in query if key.lower() not in allowed})
@@ -55,31 +91,47 @@ try:
         raise ValueError("unsupported connection parameter(s): " + ", ".join(unknown))
     query = [(key, value) for key, value in query
              if key.lower() not in {"dbname", "database"}]
-    print(urlunsplit((parsed.scheme, parsed.netloc, "/" + database,
-                      urlencode(query), parsed.fragment)))
+    username = unquote(parsed.username or "")
+    password = unquote(parsed.password or "")
+    admin_database = unquote(parsed.path.lstrip("/"))
+    if not username or not admin_database:
+        raise ValueError("URI username and maintenance database are required")
+    port = parsed.port or 5432
+    if any(char in username + password + admin_database for char in "\r\n\0"):
+        raise ValueError("URI credentials and database may not contain control characters")
+
+    authority = quote(username, safe="-._~") + "@127.0.0.1"
+    if parsed.port is not None:
+        authority += f":{port}"
+    safe_query = urlencode(query)
+    admin_uri = urlunsplit((parsed.scheme, authority, "/" + quote(admin_database, safe=""), safe_query, ""))
+    test_uri = urlunsplit((parsed.scheme, authority, "/" + test_database, safe_query, ""))
+
+    def pgpass_escape(value):
+        return value.replace("\\", "\\\\").replace(":", "\\:")
+
+    entries = []
+    for database_name in (admin_database, test_database):
+        entries.append(":".join(map(pgpass_escape, (
+            "127.0.0.1", str(port), database_name, username, password
+        ))))
+    for name, value in (("admin-dsn", admin_uri), ("test-dsn", test_uri),
+                        ("pgpass", "\n".join(entries) + "\n")):
+        path = private_dir / name
+        path.write_text(value)
+        path.chmod(0o600)
 except ValueError as exc:
     print(f"invalid AJENT_DNS_BROWSER_ADMIN_DSN: {exc}", file=sys.stderr)
     raise SystemExit(2)
 PY
-)
+unset admin_dsn_input
+admin_dsn=$(<"$private_dir/admin-dsn")
+test_dsn=$(<"$private_dir/test-dsn")
+export PGPASSFILE="$passfile"
 
 printf 'Creating fresh isolated DNS browser database %s on 127.0.0.1\n' "$database"
-createdb --maintenance-db="$AJENT_DNS_BROWSER_ADMIN_DSN" --template=template0 "$database"
+createdb --maintenance-db="$admin_dsn" --template=template0 "$database"
 created=1
-# Invoked by the EXIT trap; exercised by success and failure cleanup tests.
-# shellcheck disable=SC2329
-cleanup() {
-	status=$?
-	trap - EXIT
-	if [[ "${created:-0}" == 1 ]]; then
-		if ! dropdb --maintenance-db="$AJENT_DNS_BROWSER_ADMIN_DSN" --if-exists "$database"; then
-			printf 'failed to drop disposable DNS browser database %s\n' "$database" >&2
-			(( status != 0 )) || status=1
-		fi
-	fi
-	exit "$status"
-}
-trap 'cleanup' EXIT
 
 cd "$repo_root"
 if (( install_agent_browser_browser )); then

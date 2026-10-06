@@ -26,9 +26,15 @@ after its existing Node and browser setup:
 
 ```sh
 AGENT_BROWSER_EXECUTABLE_PATH="$(node -p 'require("playwright").chromium.executablePath()')" \
-AJENT_DNS_BROWSER_ADMIN_DSN='postgresql://postgres:test@127.0.0.1:5432/ajent_browser?sslmode=disable' \
+AJENT_DNS_BROWSER_ADMIN_DSN="${AJENT_DNS_BROWSER_ADMIN_DSN:?set a loopback admin URI}" \
 scripts/test-dns-browser.sh
 ```
+
+The wrapper reads the source URI from its environment, then removes it before
+starting child commands. It passes only passwordless URIs to PostgreSQL tools
+and Go, places the decoded credential in a mode-0600 `pgpass` file inside a
+mode-0700 task-private directory on the worktree volume, and removes that
+directory on success, failure, or handled termination.
 
 The UI job should use Node 24 or newer for `agent-browser` 0.38.2. The wrapper
 pins that CLI version and downloads its browser only when
