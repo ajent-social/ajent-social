@@ -116,6 +116,15 @@ func TestBrowserMatchingDNSProof(t *testing.T) {
 	server.Listener = listener
 	server.Start()
 	t.Cleanup(server.Close)
+	// Browser processes use HTTP only; database credentials stay in the Go fixture.
+	browserEnv := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if name == "PGPASSFILE" || name == "PGPASSWORD" || name == "AJENT_TEST_DSN" || name == "AJENT_DNS_BROWSER_ADMIN_DSN" {
+			continue
+		}
+		browserEnv = append(browserEnv, entry)
+	}
 	for _, tc := range []struct{ role, org, key, path string }{{"owner", ownerOrg, setup, "/app/verification"}, {"original", org, key, "/app/verification"}, {"human", humanOrg, "", "/human/workspaces?workspace=" + humanOrg + "&view=domains"}} {
 		t.Run(tc.role, func(t *testing.T) {
 			session := "ajent-dns-" + tc.role + "-" + uuid.NewString()[:8]
@@ -124,6 +133,7 @@ func TestBrowserMatchingDNSProof(t *testing.T) {
 				cctx, cancel := context.WithTimeout(ctx, 40*time.Second)
 				defer cancel()
 				cmd := exec.CommandContext(cctx, "agent-browser", append([]string{"--session", session}, args...)...)
+				cmd.Env = browserEnv
 				out, e := cmd.CombinedOutput()
 				if e != nil {
 					t.Fatalf("browser %s failed: %v: %s", args[0], e, out)
@@ -133,7 +143,9 @@ func TestBrowserMatchingDNSProof(t *testing.T) {
 			t.Cleanup(func() {
 				cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 				defer cancel()
-				if out, e := exec.CommandContext(cctx, "agent-browser", "--session", session, "close").CombinedOutput(); e != nil {
+				cmd := exec.CommandContext(cctx, "agent-browser", "--session", session, "close")
+				cmd.Env = browserEnv
+				if out, e := cmd.CombinedOutput(); e != nil {
 					t.Errorf("browser cleanup: %v %s", e, out)
 				}
 			})
