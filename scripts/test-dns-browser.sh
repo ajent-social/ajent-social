@@ -40,8 +40,13 @@ try:
         raise ValueError("numeric loopback PostgreSQL URI required")
     if parsed.port is not None and not 1 <= parsed.port <= 65535:
         raise ValueError("invalid PostgreSQL port")
-    query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True)
-             if key not in {"dbname", "database"}]
+    allowed = {"sslmode", "connect_timeout", "application_name", "dbname", "database"}
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    unknown = sorted({key for key, _ in query if key.lower() not in allowed})
+    if unknown:
+        raise ValueError("unsupported connection parameter(s): " + ", ".join(unknown))
+    query = [(key, value) for key, value in query
+             if key.lower() not in {"dbname", "database"}]
     print(urlunsplit((parsed.scheme, parsed.netloc, "/" + database,
                       urlencode(query), parsed.fragment)))
 except ValueError as exc:
@@ -68,6 +73,50 @@ trap cleanup EXIT
 
 cd "$repo_root"
 npm exec --yes --package="agent-browser@${agent_browser_version}" -- agent-browser install
-AJENT_TEST_DSN="$test_dsn" \
+artifact_dir=${AJENT_DNS_BROWSER_ARTIFACT_DIR:-$repo_root/artifacts/verification}
+mkdir -p "$artifact_dir"
+event_file="$artifact_dir/dns-browser-${suffix}.jsonl"
+if AJENT_TEST_DSN="$test_dsn" \
 	npm exec --yes --package="agent-browser@${agent_browser_version}" -- \
-	go test -tags=dnsbrowser ./internal/web -run '^TestBrowserMatchingDNSProof$' -count=1 -v
+	go test -race -json -tags=dnsbrowser ./internal/web -run '^TestBrowserMatchingDNSProof$' -count=1 \
+	| tee "$event_file"; then
+	test_status=0
+else
+	test_status=$?
+fi
+
+validation_status=0
+python3 - "$event_file" <<'PY' || validation_status=$?
+import json
+import sys
+from pathlib import Path
+
+test_name = "TestBrowserMatchingDNSProof"
+roles = {f"{test_name}/{role}" for role in ("owner", "original", "human")}
+try:
+    events = [json.loads(line) for line in Path(sys.argv[1]).read_text().splitlines() if line]
+except (OSError, json.JSONDecodeError) as exc:
+    print(f"invalid Go JSON test artifact: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+
+test_events = [event for event in events if event.get("Test")]
+skipped = [event for event in events if event.get("Action") == "skip"]
+failed = [event for event in events if event.get("Action") == "fail"]
+runs = {event.get("Test") for event in test_events if event.get("Action") == "run"}
+passed = {event.get("Test") for event in test_events if event.get("Action") == "pass"}
+missing = sorted((roles | {test_name}) - runs)
+unpassed = sorted((roles | {test_name}) - passed)
+if not test_events or missing or unpassed or skipped or failed:
+    print(
+        "DNS browser verification requires the named suite and all three role "
+        f"subtests to run and pass; tests={len(test_events)} missing_run={missing} "
+        f"missing_pass={unpassed} skips={len(skipped)} failures={len(failed)}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+print(f"PASS {test_name} and {len(roles)} role subtests; zero skips and failures")
+PY
+if (( test_status != 0 )); then
+	exit "$test_status"
+fi
+exit "$validation_status"
