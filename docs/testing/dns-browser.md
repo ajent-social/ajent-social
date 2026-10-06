@@ -36,7 +36,8 @@ and Go, places the decoded credential in a mode-0600 `pgpass` file inside a
 mode-0700 task-private directory on the worktree volume, and removes that
 directory on success, failure, or handled termination. `PGPASSFILE` is scoped to
 PostgreSQL tools and the direct Go test process. npm resolves the pinned browser
-CLI without inheriting that credential path.
+CLI without inheriting that credential path. The Go fixture also removes database
+credential variables from browser processes, which communicate only over HTTP.
 
 The UI job should use Node 24 or newer for `agent-browser` 0.38.2. The wrapper
 pins that CLI version and downloads its browser only when
