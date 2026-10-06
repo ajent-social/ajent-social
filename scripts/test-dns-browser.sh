@@ -16,6 +16,14 @@ if [[ ! "$agent_browser_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 	printf 'AJENT_AGENT_BROWSER_VERSION must be a pinned semantic version\n' >&2
 	exit 2
 fi
+install_agent_browser_browser=1
+if [[ -n "${AGENT_BROWSER_EXECUTABLE_PATH:-}" ]]; then
+	if [[ ! -x "$AGENT_BROWSER_EXECUTABLE_PATH" ]]; then
+		printf 'AGENT_BROWSER_EXECUTABLE_PATH must name an executable browser\n' >&2
+		exit 2
+	fi
+	install_agent_browser_browser=0
+fi
 
 run_id=${AJENT_DNS_BROWSER_RUN_ID:-${GITHUB_RUN_ID:-local}_${GITHUB_RUN_ATTEMPT:-1}_$$}
 suffix=$(printf '%s' "$run_id" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_]+/_/g; s/^_+//; s/_+$//')
@@ -72,7 +80,9 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$repo_root"
-npm exec --yes --package="agent-browser@${agent_browser_version}" -- agent-browser install
+if (( install_agent_browser_browser )); then
+	npm exec --yes --package="agent-browser@${agent_browser_version}" -- agent-browser install
+fi
 artifact_dir=${AJENT_DNS_BROWSER_ARTIFACT_DIR:-$repo_root/artifacts/verification}
 mkdir -p "$artifact_dir"
 event_file="$artifact_dir/dns-browser-${suffix}.jsonl"
