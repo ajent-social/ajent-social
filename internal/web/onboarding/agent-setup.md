@@ -13,6 +13,10 @@ Ask the person before you install `ajent` or run `ajent setup`. Never paste, pri
 
 ## Install
 
+__INSTALLER_STATUS__
+
+Continue below only when signed installers are available. Both platforms require OpenSSL 3; installers stop if independent signature verification is unavailable.
+
 ### macOS and Linux
 
 ```sh
@@ -27,7 +31,7 @@ Run this command in PowerShell:
 irm https://ajent.social/install.ps1 | iex
 ```
 
-Or use Homebrew, apt, dnf, Scoop or winget. See the [install guide](https://github.com/ajent-social/ajent/blob/main/docs/install.md) for the exact command for each one.
+Do not assume package-manager channels are published; use only the channels listed as available in the current [install guide](https://github.com/ajent-social/ajent/blob/main/docs/install.md).
 
 ## Connect
 

@@ -3,29 +3,25 @@
 # Installs ajent on Windows (docs/adr/003-distribution-channels.md).
 # Downloads the release zip for this architecture, verifies its SHA-256
 # against checksums.txt, checks the Ed25519 signature through the
-# downloaded ajent binary's own "verify-release" command, installs it and
+# trusted public key with OpenSSL 3 before extraction or execution, installs it and
 # records the install method in install.json. Runs on Windows PowerShell
 # 5.1 and PowerShell 7. On macOS and Linux, use install.sh instead:
 # curl -fsSL https://ajent.social/install.sh | sh
 #
 # Environment variables (same names as install.sh):
 #   AJENT_VERSION              Version to install, e.g. "0.7.0" or "v0.7.0".
-#                               Default: the latest stable release.
+#                               Default: the service-pinned signed release.
 #   AJENT_INSTALL_DIR          Where to install ajent.exe.
 #                               Default: $env:LOCALAPPDATA\Programs\ajent
 #   AJENT_CONFIG_DIR           Where to write install.json.
 #                               Default: $HOME\.aj
 #   AJENT_NO_SETUP             When "1", skip running "ajent setup".
-#   AJENT_REQUIRE_SIGNATURE    When "1" and openssl.exe 3.x is on PATH,
-#                               also verify with OpenSSL against
-#                               AJENT_RELEASE_PUBKEY_FILE, in addition to
-#                               the always-run verify-release check below.
 #   AJENT_DOWNLOAD_BASE        Base URL for release assets, for tests and
 #                               mirrors. Default:
-#                               https://github.com/ajent-social/ajent/releases/download
+#                               the service-configured public release host.
 #                               AJENT_VERSION is required when this is set.
-#   AJENT_RELEASE_PUBKEY_FILE  A PEM file used only for the additional
-#                               OpenSSL check above. For tests only.
+#   AJENT_RELEASE_PUBKEY_FILE  A PEM file replacing the embedded release
+#                               public key. For tests only.
 
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -61,13 +57,7 @@ function ajentInstallResolveVersion {
         $v = ajentInstallStripLeadingV $v
     }
 
-    if (-not $v) {
-        if ($env:AJENT_DOWNLOAD_BASE) {
-            throw "AJENT_VERSION is required when AJENT_DOWNLOAD_BASE is set"
-        }
-        $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/ajent-social/ajent/releases/latest' -Headers @{ 'User-Agent' = 'ajent-install' }
-        $v = ajentInstallStripLeadingV $release.tag_name
-    }
+    if (-not $v) { $v = '__AJENT_RELEASE_VERSION__' }
 
     if ($v -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$') {
         throw "could not determine a valid version (got '$v')"
@@ -102,28 +92,26 @@ function ajentInstallVerifyChecksum {
 }
 
 function ajentInstallVerifySignature {
-    param([string]$ExePath, [string]$ChecksumsPath, [string]$SigPath, [string]$ZipPath)
+    param([string]$ChecksumsPath, [string]$SigPath)
 
-    & $ExePath verify-release --checksums $ChecksumsPath --sig $SigPath --file $ZipPath | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "release signature does not verify"
-    }
-    ajentInstallSay "signature checked with the downloaded ajent binary; for independent verification see docs/verifying-releases.md"
-
-    if ($env:AJENT_REQUIRE_SIGNATURE -eq '1' -and $env:AJENT_RELEASE_PUBKEY_FILE) {
-        $openssl = Get-Command -Name 'openssl.exe' -ErrorAction SilentlyContinue
-        if ($openssl) {
-            $help = & $openssl.Path pkeyutl -help 2>&1 | Out-String
-            if ($help -match 'rawin') {
-                $sigBin = Join-Path (Split-Path -Path $SigPath -Parent) 'sig.bin'
-                & $openssl.Path base64 -d -A -in $SigPath -out $sigBin
-                & $openssl.Path pkeyutl -verify -pubin -inkey $env:AJENT_RELEASE_PUBKEY_FILE -rawin -in $ChecksumsPath -sigfile $sigBin | Out-Null
-                if ($LASTEXITCODE -ne 0) {
-                    throw "release signature does not verify"
-                }
-            }
+    $keyPath = Join-Path (Split-Path -Path $SigPath -Parent) 'release-key.pem'
+    if ($env:AJENT_RELEASE_PUBKEY_FILE) {
+        Copy-Item -LiteralPath $env:AJENT_RELEASE_PUBKEY_FILE -Destination $keyPath
+    } else {
+        $releaseKey = @'
+__AJENT_RELEASE_PUBLIC_KEY__
+'@
+        if ($releaseKey -notmatch '^-----BEGIN PUBLIC KEY-----') {
+            throw "no release key is embedded in this installer"
         }
+        $releaseKey | Set-Content -LiteralPath $keyPath -Encoding ascii
     }
+    $openssl = Get-Command -Name 'openssl.exe', 'openssl' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $openssl) { throw "OpenSSL 3 is required to verify the release before installation" }
+    $sigBin = Join-Path (Split-Path -Path $SigPath -Parent) 'sig.bin'
+    [IO.File]::WriteAllBytes($sigBin, [Convert]::FromBase64String((Get-Content -LiteralPath $SigPath -Raw).Trim()))
+    & $openssl.Source pkeyutl -verify -pubin -inkey $keyPath -rawin -in $ChecksumsPath -sigfile $sigBin | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "release signature does not verify (OpenSSL 3 required)" }
 }
 
 function ajentInstallPathContains {
@@ -147,7 +135,7 @@ function Install-Ajent {
 
     $base = $env:AJENT_DOWNLOAD_BASE
     if (-not $base) {
-        $base = 'https://github.com/ajent-social/ajent/releases/download'
+        $base = '__AJENT_RELEASE_DOWNLOAD_BASE__'
     }
     $name = "ajent_${v}_windows_${arch}.zip"
 
@@ -161,6 +149,7 @@ function Install-Ajent {
         Invoke-WebRequest -UseBasicParsing -Uri "$base/v$v/checksums.txt" -OutFile $checksums
         Invoke-WebRequest -UseBasicParsing -Uri "$base/v$v/checksums.txt.sig" -OutFile $sig
 
+        ajentInstallVerifySignature -ChecksumsPath $checksums -SigPath $sig
         ajentInstallVerifyChecksum -FilePath $zip -Name $name -ChecksumsPath $checksums
 
         $extractDir = Join-Path $tmp.FullName 'extracted'
@@ -170,7 +159,6 @@ function Install-Ajent {
             throw "ajent.exe was not found in the downloaded archive"
         }
 
-        ajentInstallVerifySignature -ExePath $newExe -ChecksumsPath $checksums -SigPath $sig -ZipPath $zip
 
         $dir = $env:AJENT_INSTALL_DIR
         if (-not $dir) {
