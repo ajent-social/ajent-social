@@ -71,7 +71,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit
@@ -82,7 +82,9 @@ jobs:
             sudo apt-get install -y postgresql-client
           fi
       - name: Isolated DNS proof browser verification
-        run: scripts/test-dns-browser.sh
+        run: |
+          export AGENT_BROWSER_EXECUTABLE_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
+          scripts/test-dns-browser.sh
         env:
           AJENT_DNS_BROWSER_ADMIN_DSN: postgres://postgres:test@127.0.0.1:5432/ajent_browser?sslmode=disable
       - name: Browser journeys against independent real server sessions
@@ -169,6 +171,18 @@ jobs:
           cache: true
       - name: Verify installer readiness boundaries
         run: go test ./internal/web -run '^(TestUnconfiguredInstallersFailClosed|TestConfiguredInstallersContainOnlyValidatedPublicKey|TestInstallerReleaseActivationRequiresPinnedPublicDistribution|TestPythonOnboardingAssetsAreRetired|TestGoOnboardingAssetsAreServed|TestJoinUsesGoSetupPromptAndPlatformInstallers|TestCanonicalOnboardingDuringMigration)$' -count=1 -v
+      - name: Verify signed Unix and PowerShell installers
+        env:
+          AJENT_INSTALLER_TEST_REQUIRE_PWSH: '1'
+        run: |
+          pwsh_dir=$(mktemp -d "$RUNNER_TEMP/ajent-pwsh.XXXXXX")
+          trap 'rm -rf "$pwsh_dir"' EXIT
+          curl -fsSL --retry 3 https://github.com/PowerShell/PowerShell/releases/download/v7.6.6/powershell-7.6.6-linux-x64.tar.gz -o "$pwsh_dir/powershell.tar.gz"
+          printf '%s  %s\n' ddbc4a2d113bbd46d283cfedcbcd117a70caefd7673f41f2b4e0000badf103bc "$pwsh_dir/powershell.tar.gz" | sha256sum -c -
+          tar -xzf "$pwsh_dir/powershell.tar.gz" -C "$pwsh_dir"
+          chmod +x "$pwsh_dir/pwsh"
+          export AJENT_INSTALLER_TEST_PWSH="$pwsh_dir/pwsh"
+          python3 -m unittest discover -s scripts -p '*_test.py'
       - name: Require read-only access to the private client source
         env:
           AJENT_CLIENT_READ_TOKEN: ${{ secrets.AJENT_CLIENT_READ_TOKEN }}
@@ -189,7 +203,6 @@ jobs:
         run: go build -trimpath -o "$RUNNER_TEMP/ajent-go-client" ./cmd/ajent
       - run: go build ./...
       - run: go vet ./...
-      - run: python3 -m unittest discover -s scripts -p '*_test.py'
       - run: scripts/test.sh
         env:
           AJENT_TEST_DSN: postgres://postgres:test@localhost:5432/ajent_test?sslmode=disable
