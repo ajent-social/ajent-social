@@ -13,7 +13,7 @@ Base: `1853cf7f975e728865ff25115d88c34f0a89842b` on origin/main. The original ch
 - E21–E27 growth/activation/cohort work, E30–E35 operations/fleet work, and E37 membership contain pending plan rows. Preserve them. Unchecked rows are not proof that source is absent or authority to initiate deployment/outreach. Future execution needs task-level reconciliation with current code and evidence.
 - Original dirty checkout, local reports, infrastructure configuration, and unresolved unique branch patches are retained. Age, divergence and archive existence alone do not justify deleting authored work.
 
-## Authorized delivery follow-up — 2026-10-06
+## Historical delivery checkpoint — 2026-10-06
 
 The owner subsequently granted access and instructed "Fix and merge." PR #80
 integration now runs in a separate worktree under the coordinator's own claim;
@@ -31,12 +31,33 @@ client-dependent enrollment/race suite has not run. GitHub policy disallows
 deploy keys. Supply a read-only token scoped to the client repository through
 service Actions secrets; do not transfer a broad personal token or alter policy.
 
-PR #80 must finish verification and land before PR #81 is refreshed on landed
-main, independently reviewed at its new exact head, and merged. The maintenance
-candidate is prepared locally on the retirement candidate, preserving PR #81's
-published head until that dependency lands. Neither merge nor landed verification
-is claimed. Public release commissioning and production deployment remain
-outside this work.
+At that checkpoint, PR #80 and the maintenance follow-up remained unmerged.
+The following receipt supersedes the access blocker and pending retirement state.
+
+## Retirement delivery receipt — 2026-10-07
+
+The owner supplied the read-only repository secret. The newly executable client
+approval test exposed a fixture initialization race, which was reproduced and
+fixed on DGX; its real-client race test then passed ten consecutive runs.
+Independent review approved final head
+`e3e66d2f11152650be6953109108e29e054de398` against the original main base
+`1853cf7f975e728865ff25115d88c34f0a89842b` through the recorded full and affected
+reviews. [Run 37575654148](https://github.com/ajent-social/ajent-social/actions/runs/37575654148)
+passed all four CI jobs, including 564 Go cases with race detection, zero failed
+or skipped cases, actual pinned-client approval, infrastructure/security checks,
+DNS and browser journeys, the three-engine visual sweep, and container checks.
+
+[PR #80](https://github.com/ajent-social/ajent-social/pull/80) was rebase-merged to
+`b6c5e52b539a795ffff8c08681c56f4edb825839`. Landed verification confirmed target
+reachability and identical Git trees between the reviewed candidate and landed
+revision (`356d6b8d95c9d9c5810c0464dfa19e1575b836e4`), preserving the applicability
+of candidate CI evidence. No production deployment or release activation occurred.
+
+PR #81 is refreshed on that landed main and contains maintenance records only.
+Its own exact-head review, checks, merge and landed receipts are recorded on the
+PR after this commit is created; R4-R6 below do not pre-claim those future steps.
+DGX owns active work; original Mac checkouts, dirty work, other agents' claims,
+and pending roadmap scope remain preserved.
 
 ## Delivery tasks
 

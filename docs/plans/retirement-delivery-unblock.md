@@ -5,9 +5,9 @@ Owner instruction: access granted; fix and merge PR80 and PR81. Source base is m
 - [x] U1 Configure least-privilege cross-repository CI checkout and preserve pinned client revision. Owner: coordinator. kind: implementation; stage: implement.
 - [x] U2 Separate isolated DNS browser verification from the ordinary race suite without weakening zero-skips. Owner: inventory_review. kind: implementation; stage: implement.
 - [x] U3 Reconcile vulnerable infrastructure dependencies to compatible patched versions. Owner: dependency_fix. kind: implementation; stage: implement.
-- [ ] U4 Verify integration on existing CI runners and appropriate local static checks. Owner: coordinator. kind: verification; stage: verify; blocked-by: [U1,U2,U3,U8,U9].
-- [ ] U5 Independently review full PR80 at exact final head; fix accepted findings and refresh verification. Owner: maintenance_review. kind: review; stage: review; blocked-by: [U4].
-- [ ] U6 Guarded rebase merge PR80 and verify landed source/checks. Owner: coordinator. kind: merge; stage: merge; blocked-by: [U5].
+- [x] U4 Verify integration on existing CI runners and appropriate local static checks. Owner: coordinator. kind: verification; stage: verify; blocked-by: [U1,U2,U3,U8,U9].
+- [x] U5 Independently review full PR80 at exact final head; fix accepted findings and refresh verification. Owner: maintenance_review. kind: review; stage: review; blocked-by: [U4].
+- [x] U6 Guarded rebase merge PR80 and verify landed source/checks. Owner: coordinator. kind: merge; stage: merge; blocked-by: [U5].
 - [ ] U7 Refresh PR81 on landed main, verify, review and rebase merge its maintenance record. Owner: coordinator. kind: verification; stage: verify-landed; blocked-by: [U6].
 
 Acceptance: pinned private client checkout succeeds with read-only repository access; actual Go enrollment/link test executes; ordinary suite and dedicated isolated DNS browser test execute with no failed/skipped selected tests; infrastructure vulnerability scan passes; full independent exact-head review has no unresolved blocking findings; both PRs read back merged and their landed revisions verified. Delivery receipts belong in the PRs; checkboxes do not pre-claim future merges.
@@ -29,11 +29,26 @@ it sets Server.Origin after httptest starts serving. Earlier access failures had
 prevented this test from executing. Preserve the race and zero-skips gates.
 
 - [x] U10 Initialize approval-fixture origin before serving. Owner: DGX Luna worker; kind: implementation; stage: implement; blocked-by: [U1].
-- [ ] U11 Verify U10 with the actual pinned client under race detection, then refresh full CI. Owner: coordinator; kind: verification; stage: verify; blocked-by: [U10].
-- [ ] U12 Independent exact-head review of the race fix and integration records. Owner: independent DGX Luna reviewer; kind: review; stage: review; blocked-by: [U11].
+- [x] U11 Verify U10 with the actual pinned client under race detection, then refresh full CI. Owner: coordinator; kind: verification; stage: verify; blocked-by: [U10].
+- [x] U12 Independent exact-head review of the race fix and integration records. Owner: independent DGX Luna reviewer; kind: review; stage: review; blocked-by: [U11].
 
 U6 now additionally depends on U12. Active coding/review work has moved to an
 isolated DGX task workspace, with separate worktrees and caches; clean task heads,
 plans and receipts were transferred and bundle hashes matched. Mac copies and the
 legacy dirty checkout remain preserved. Existing Linux CI runners supply full
 verification. No Mac builds, tests, containers or coding workers are started.
+
+
+## Retirement landed — 2026-10-07
+
+U4/U5/U11/U12 completed at independently reviewed head `e3e66d2` with all four
+jobs green in [run37575654148](https://github.com/ajent-social/ajent-social/actions/runs/37575654148).
+The real-client ordinary race suite executed 564 passing test cases, zero failures
+and zero skips. U6 completed when PR #80 rebase-landed at
+`b6c5e52b539a795ffff8c08681c56f4edb825839`; target reachability and exact tree
+identity with the reviewed candidate were verified. U8/U9 installer safeguards
+and adversarial tests are implemented and verified. Production is not deployed.
+
+U7 is the current maintenance PR #81. Its own review, checks, merge and landed
+receipts are maintained on that PR after its exact commit exists. The remaining
+unchecked row does not pre-claim this document's own merge or landing.
