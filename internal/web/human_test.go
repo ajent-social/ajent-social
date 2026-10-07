@@ -350,9 +350,10 @@ func TestHumanGoClientApprovalRoundTrip(t *testing.T) {
 	}
 	f := newHumanFixture(t)
 	f.register()
-	ts := httptest.NewServer(f.m)
+	ts := httptest.NewUnstartedServer(f.m)
+	f.s.Origin = "http://" + ts.Listener.Addr().String()
+	ts.Start()
 	defer ts.Close()
-	f.s.Origin = ts.URL
 	dir := t.TempDir()
 	project := filepath.Join(dir, "project")
 	config := filepath.Join(dir, "config")
