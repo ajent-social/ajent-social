@@ -28,7 +28,7 @@ built the exact pinned client, then exposed a race in the real approval fixture:
 it sets Server.Origin after httptest starts serving. Earlier access failures had
 prevented this test from executing. Preserve the race and zero-skips gates.
 
-- [ ] U10 Initialize approval-fixture origin before serving. Owner: DGX Luna worker; kind: implementation; stage: implement; blocked-by: [U1].
+- [x] U10 Initialize approval-fixture origin before serving. Owner: DGX Luna worker; kind: implementation; stage: implement; blocked-by: [U1].
 - [ ] U11 Verify U10 with the actual pinned client under race detection, then refresh full CI. Owner: coordinator; kind: verification; stage: verify; blocked-by: [U10].
 - [ ] U12 Independent exact-head review of the race fix and integration records. Owner: independent DGX Luna reviewer; kind: review; stage: review; blocked-by: [U11].
 
