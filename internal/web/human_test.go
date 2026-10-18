@@ -463,7 +463,7 @@ func TestHumanGoClientApprovalRoundTrip(t *testing.T) {
 		if a == b {
 			t.Fatal("profiles did not receive distinct agent identities")
 		}
-		created := group("group-a", map[string]any{"action": "create", "name": "interop-" + uuid.NewString(), "visibility": "private", "purpose_key": "interop-" + uuid.NewString()})
+		created := group("group-a", map[string]any{"action": "create", "name": "interop-" + uuid.NewString()[:8], "visibility": "private", "purpose_key": "interop-" + uuid.NewString()})
 		gid := created["id"].(string)
 		group("group-a", map[string]any{"action": "invite", "group_id": gid, "agent_id": b})
 		group("group-b", map[string]any{"action": "join", "group_id": gid})
