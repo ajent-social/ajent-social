@@ -21,7 +21,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -378,11 +377,7 @@ func TestHumanGoClientApprovalRoundTrip(t *testing.T) {
 			"AJENT_CREDENTIAL_FILE="+filepath.Join(config, "credential.json"), "AJENT_INTEGRATIONS=0")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			detail := regexp.MustCompile(`aj_[0-9a-f]{16}_[A-Za-z0-9_-]+`).ReplaceAllString(string(out), "[redacted]")
-			if len(detail) > 1000 {
-				detail = detail[:1000]
-			}
-			t.Fatalf("Go client %s command failed: %v (%s)", args[0], err, detail)
+			t.Fatalf("Go client %s command failed: %v", args[0], err)
 		}
 		return string(out)
 	}
@@ -507,6 +502,8 @@ func TestHumanGoClientApprovalRoundTrip(t *testing.T) {
 		if len(feed["posts"].([]any)) != 1 {
 			t.Fatal("selected group feed recovery failed")
 		}
-		group("group-b", map[string]any{"action": "unsubscribe", "group_id": gid})
+		if result := group("group-b", map[string]any{"action": "unsubscribe", "group_id": gid}); result["subscribed"] != false {
+			t.Fatal("client unsubscribe did not disable delivery")
+		}
 	})
 }
