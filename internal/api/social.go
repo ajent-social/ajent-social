@@ -2,11 +2,14 @@ package api
 
 import (
 	"ajent/internal/auth"
+	"encoding/json"
+	"errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -247,11 +250,12 @@ func (s *Server) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 		Visibility  string `json:"visibility"`
+		PurposeKey  string `json:"purpose_key,omitempty"`
 	}
 	if !decode(w, r, &p) {
 		return
 	}
-	if !handlePattern.MatchString(p.Name) || len(p.Description) > 500 || (p.Visibility != "public" && p.Visibility != "private") {
+	if len(p.PurposeKey) > 128 || (p.PurposeKey != "" && strings.TrimSpace(p.PurposeKey) == "") || !handlePattern.MatchString(p.Name) || len(p.Description) > 500 || (p.Visibility != "public" && p.Visibility != "private") {
 		fail(w, 400, "bad_request", "Choose a group handle and visibility.")
 		return
 	}
@@ -272,13 +276,62 @@ func (s *Server) CreateGroup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	replay, ok := mutationReplay(w, r, tx, c, p, p.PurposeKey != "")
+	if !ok {
+		return
+	}
 	var id string
-	e = tx.QueryRow(r.Context(), `INSERT INTO groups(org_id,name,description,visibility) VALUES($1,$2,$3,$4) RETURNING id::text`, c.OrgID, p.Name, p.Description, p.Visibility).Scan(&id)
+	if p.PurposeKey != "" {
+		if _, e = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, c.OrgID+":purpose:"+p.PurposeKey); e != nil {
+			fail(w, 503, "unavailable", "Group unavailable.")
+			return
+		}
+		var matches bool
+		e = tx.QueryRow(r.Context(), `SELECT id::text,name=$3 AND description=$4 AND visibility=$5 AND archived_at IS NULL AND EXISTS(SELECT 1 FROM group_members WHERE group_id=g.id AND agent_id=$6 AND state='accepted') FROM groups g WHERE org_id=$1 AND purpose_key=$2 FOR UPDATE`, c.OrgID, p.PurposeKey, p.Name, p.Description, p.Visibility, c.AgentID).Scan(&id, &matches)
+		if e == nil {
+			if !matches || lockGroupMember(r, tx, c.AgentID, id) != nil {
+				fail(w, 409, "group_conflict", "Purpose unavailable or parameters differ.")
+				return
+			}
+			result := map[string]string{"id": id}
+			if e = mutationSave(r, tx, c, p, result); e == nil {
+				e = tx.Commit(r.Context())
+			}
+			if e != nil {
+				fail(w, 503, "unavailable", "Receipt unavailable.")
+				return
+			}
+			writeJSON(w, 201, result)
+			return
+		}
+		if !errors.Is(e, pgx.ErrNoRows) {
+			fail(w, 503, "unavailable", "Group unavailable.")
+			return
+		}
+	}
+	if len(replay) > 0 {
+		var old struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(replay, &old)
+		var allowed bool
+		e = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM groups g JOIN group_members m ON m.group_id=g.id WHERE g.id=$1 AND m.agent_id=$2 AND m.state='accepted' AND g.archived_at IS NULL)`, old.ID, c.AgentID).Scan(&allowed)
+		if e != nil || !allowed {
+			fail(w, 409, "group_conflict", "Group unavailable.")
+			return
+		}
+		writeJSON(w, 201, json.RawMessage(replay))
+		return
+	}
+	e = tx.QueryRow(r.Context(), `INSERT INTO groups(org_id,name,description,visibility,purpose_key) VALUES($1,$2,$3,$4,nullif($5,'')) RETURNING id::text`, c.OrgID, p.Name, p.Description, p.Visibility, p.PurposeKey).Scan(&id)
 	if e != nil {
 		fail(w, 409, "conflict", "Group name already in use.")
 		return
 	}
 	_, e = tx.Exec(r.Context(), `INSERT INTO group_members(group_id,agent_id,role) VALUES($1,$2,'owner')`, id, c.AgentID)
+	if e == nil {
+		e = mutationSave(r, tx, c, p, map[string]string{"id": id})
+	}
 	if e != nil || tx.Commit(r.Context()) != nil {
 		fail(w, 500, "internal", "Could not create group.")
 		return
@@ -311,8 +364,24 @@ func (s *Server) JoinGroup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "not_found", "Group unavailable.")
 		return
 	}
+	replay, ok := mutationReplay(w, r, tx, c, struct{}{}, false)
+	if !ok {
+		return
+	}
+	if len(replay) > 0 && state == "accepted" {
+		writeJSON(w, 200, json.RawMessage(replay))
+		return
+	}
 	if state == "accepted" {
-		writeJSON(w, 200, map[string]bool{"joined": true})
+		result := map[string]bool{"joined": true}
+		if err = mutationSave(r, tx, c, struct{}{}, result); err == nil {
+			err = tx.Commit(r.Context())
+		}
+		if err != nil {
+			fail(w, 503, "unavailable", "Receipt unavailable.")
+			return
+		}
+		writeJSON(w, 200, result)
 		return
 	}
 	if visibility != "public" {
@@ -334,7 +403,10 @@ func (s *Server) JoinGroup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable", "Could not join group.")
 		return
 	}
-	if err = tx.Commit(r.Context()); err != nil {
+	if err = mutationSave(r, tx, c, struct{}{}, map[string]bool{"joined": true}); err == nil {
+		err = tx.Commit(r.Context())
+	}
+	if err != nil {
 		fail(w, 409, "group_conflict", "Group changed; retry joining.")
 		return
 	}
@@ -376,10 +448,28 @@ func (s *Server) GroupMember(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, "group_archived", "Unarchive before managing members.")
 		return
 	}
+	replay, ok := mutationReplay(w, r, tx, c, p, false)
+	if !ok {
+		return
+	}
+	if len(replay) > 0 {
+		writeJSON(w, 200, json.RawMessage(replay))
+		return
+	}
 	if p.Action == "remove" && aid != c.AgentID {
 		_, e = tx.Exec(r.Context(), `DELETE FROM group_members WHERE group_id=$1 AND agent_id=$2 AND role<>'owner'`, gid, aid)
 	} else if p.Action == "add" {
-		_, e = tx.Exec(r.Context(), `INSERT INTO group_members(group_id,agent_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, gid, aid)
+		var eligible bool
+		e = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM agents a JOIN organizations o ON o.id=a.org_id JOIN groups g ON g.org_id=a.org_id WHERE g.id=$3 AND a.id=$2 AND a.status='active' AND o.status='active' AND NOT EXISTS(SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1)))`, c.AgentID, aid, gid).Scan(&eligible)
+		if e != nil {
+			fail(w, 503, "unavailable", "Agent unavailable.")
+			return
+		}
+		if !eligible {
+			fail(w, 404, "not_found", "Agent unavailable.")
+			return
+		}
+		_, e = tx.Exec(r.Context(), `INSERT INTO group_members(group_id,agent_id) VALUES($1,$2) ON CONFLICT(group_id,agent_id) DO UPDATE SET state='accepted'`, gid, aid)
 	} else {
 		fail(w, 400, "bad_request", "Choose add or remove; owner cannot remove self.")
 		return
@@ -396,7 +486,10 @@ func (s *Server) GroupMember(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable", "Group audit failed.")
 		return
 	}
-	if e = tx.Commit(r.Context()); e != nil {
+	if e = mutationSave(r, tx, c, p, map[string]bool{"saved": true}); e == nil {
+		e = tx.Commit(r.Context())
+	}
+	if e != nil {
 		fail(w, 409, "group_conflict", "Membership change did not commit.")
 		return
 	}
