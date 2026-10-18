@@ -3,6 +3,7 @@ package web
 import (
 	"ajent/internal/api"
 	"ajent/internal/auth"
+	"ajent/internal/events"
 	"ajent/migrations"
 	"bytes"
 	"context"
@@ -13,6 +14,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -428,4 +430,76 @@ func TestHumanGoClientApprovalRoundTrip(t *testing.T) {
 	if got := run("login"); !strings.Contains(got, ts.URL+"/human/login") {
 		t.Fatal("linked login did not direct the human to passkeys")
 	}
+	t.Run("working_group_delivery", func(t *testing.T) {
+		command := func(profile string, args ...string) map[string]any {
+			t.Helper()
+			args = append(args, "--profile", profile)
+			// Flags precede the positional acknowledgement cursor.
+			output := run(args...)
+			var value map[string]any
+			if err := json.Unmarshal([]byte(output), &value); err != nil {
+				t.Fatal("client did not return JSON")
+			}
+			return value
+		}
+		group := func(profile string, args map[string]any) map[string]any {
+			t.Helper()
+			args["key"] = uuid.NewString()
+			body, err := json.Marshal(args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return command(profile, "group", "--json", string(body))
+		}
+		a := command("group-a", "me")["id"].(string)
+		b := command("group-b", "me")["id"].(string)
+		if a == b {
+			t.Fatal("profiles did not receive distinct agent identities")
+		}
+		created := group("group-a", map[string]any{"action": "create", "name": "interop-" + uuid.NewString(), "visibility": "private", "purpose_key": "interop-" + uuid.NewString()})
+		gid := created["id"].(string)
+		group("group-a", map[string]any{"action": "invite", "group_id": gid, "agent_id": b})
+		group("group-b", map[string]any{"action": "join", "group_id": gid})
+		if items := command("group-b", "group", "--json", `{"action":"subscriptions"}`)["items"].([]any); len(items) != 0 {
+			t.Fatal("invitation subscribed the recipient automatically")
+		}
+		direct := group("group-a", map[string]any{"action": "direct", "agent_id": b, "purpose_key": "interop-direct"})["id"]
+		reverse := group("group-b", map[string]any{"action": "direct", "agent_id": a, "purpose_key": "interop-direct"})["id"]
+		if direct != reverse {
+			t.Fatal("direct convenience created duplicate pair groups")
+		}
+		for _, profile := range []string{"group-a", "group-b"} {
+			group(profile, map[string]any{"action": "subscribe", "group_id": gid})
+		}
+		post := command("group-a", "post", "--group", gid, "--kind", "finding", "--title", "Integration finding", "--body", "Verified local group delivery.", "--key", uuid.NewString())
+		if _, err := events.PublishOnce(context.Background(), f.s.API.DB.Pool); err != nil {
+			t.Fatal(err)
+		}
+		inbox := command("group-b", "inbox", "--group", gid)
+		items := inbox["items"].([]any)
+		if len(items) != 1 || items[0].(map[string]any)["id"] != post["id"] {
+			t.Fatal("scoped client inbox missed the group post")
+		}
+		cursor := fmt.Sprint(int64(inbox["acknowledge_through"].(float64)))
+		// Standard flag parsing requires every flag before CURSOR.
+		ackOutput := run("ack", "--group", gid, "--profile", "group-b", "--key", uuid.NewString(), cursor)
+		var ack map[string]any
+		if err := json.Unmarshal([]byte(ackOutput), &ack); err != nil {
+			t.Fatal("client acknowledgement was not JSON")
+		}
+		if ack["acknowledged_through"] != inbox["acknowledge_through"] {
+			t.Fatal("client acknowledgement did not persist")
+		}
+		if len(command("group-b", "inbox", "--group", gid)["items"].([]any)) != 0 {
+			t.Fatal("acknowledged client post repeated")
+		}
+		if len(command("group-a", "inbox", "--group", gid)["items"].([]any)) != 1 {
+			t.Fatal("recipient acknowledgement consumed another agent's inbox")
+		}
+		feed := command("group-b", "feed", "--group", gid)
+		if len(feed["posts"].([]any)) != 1 {
+			t.Fatal("selected group feed recovery failed")
+		}
+		group("group-b", map[string]any{"action": "unsubscribe", "group_id": gid})
+	})
 }
