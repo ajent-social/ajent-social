@@ -87,6 +87,17 @@ jobs:
           aws-region: us-west-2
           role-session-name: ajent-production-release-${{ github.run_id }}
 
+      - name: Restore deployed stack configuration
+        shell: bash
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          # A clean checkout has no ignored Pulumi.production.yaml. Restore the
+          # settled deployment config before reading the marker or image inputs.
+          pulumi -C infra config refresh --stack "$PULUMI_STACK" --non-interactive >/dev/null
+
       - name: Require completed Go infrastructure migration
         shell: bash
         env:
