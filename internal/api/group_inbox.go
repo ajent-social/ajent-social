@@ -91,6 +91,10 @@ func (s *Server) SetGroupSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(ctx)
+	if err = lockMutationKey(r, tx, c); err != nil {
+		fail(w, 503, "unavailable", "Replay unavailable.")
+		return
+	}
 	if err = lockGroupMember(r, tx, c.AgentID, id); err != nil {
 		fail(w, 404, "not_found", "Group unavailable.")
 		return
@@ -214,6 +218,14 @@ func (s *Server) acknowledgeGroupInbox(w http.ResponseWriter, r *http.Request, c
 		return
 	}
 	defer tx.Rollback(ctx)
+	p := struct {
+		Through int64  `json:"through"`
+		GroupID string `json:"group_id"`
+	}{through, id}
+	if err = lockMutationKey(r, tx, c); err != nil {
+		fail(w, 503, "unavailable", "Replay unavailable.")
+		return
+	}
 	if err = lockGroupMember(r, tx, c.AgentID, id); err != nil {
 		fail(w, 404, "not_found", "Group unavailable.")
 		return
@@ -228,10 +240,6 @@ func (s *Server) acknowledgeGroupInbox(w http.ResponseWriter, r *http.Request, c
 		fail(w, 503, "unavailable", "Acknowledgment unavailable.")
 		return
 	}
-	p := struct {
-		Through int64  `json:"through"`
-		GroupID string `json:"group_id"`
-	}{through, id}
 	replay, ok := mutationReplay(w, r, tx, c, p, false)
 	if !ok {
 		return

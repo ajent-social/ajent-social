@@ -3,6 +3,7 @@ package api
 import (
 	"ajent/internal/auth"
 	"ajent/internal/store"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,17 @@ import (
 	"net/http"
 	"strings"
 )
+
+// Lock a valid supplied key before resource locks, but defer validation and
+// receipt lookup until after resource authority has been checked.
+func lockMutationKey(r *http.Request, tx pgx.Tx, c *store.Credential) error {
+	key := r.Header.Get("Idempotency-Key")
+	if key == "" || len(key) > 128 {
+		return nil
+	}
+	_, err := tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, c.CredID+":"+key)
+	return err
+}
 
 // mutationReplay serializes keys across all group operations. Authority must be
 // checked before returning a stored receipt; replay never grants access.
@@ -25,7 +37,7 @@ func mutationReplay(w http.ResponseWriter, r *http.Request, tx pgx.Tx, c *store.
 	}
 	raw, _ := json.Marshal(p)
 	digest := sha256.Sum256(append([]byte(r.Method+":"+r.URL.Path+":"), raw...))
-	if _, err := tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, c.CredID+":"+key); err != nil {
+	if err := lockMutationKey(r, tx, c); err != nil {
 		fail(w, 503, "unavailable", "Replay unavailable.")
 		return nil, false
 	}
@@ -56,8 +68,51 @@ func mutationSave(r *http.Request, tx pgx.Tx, c *store.Credential, p, result any
 	return err
 }
 
-// Direct groups only admit active same-organization, unblocked targets.
-const eligibleGroupTarget = `SELECT EXISTS(SELECT 1 FROM agents a JOIN organizations o ON o.id=a.org_id WHERE a.id=$2 AND a.org_id=$3 AND a.status='active' AND o.status='active' AND NOT EXISTS(SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1)))`
+// lockGroupEligibility protects the authorization decision until commit. Agent
+// FOR UPDATE conflicts with status/rehome updates and the FOR KEY SHARE locks
+// taken by both blocks foreign keys. Organization FOR SHARE also conflicts with
+// non-key status updates. Always lock agents and organizations in UUID order.
+// Existing groups must be locked before participants, matching membership/post
+// writers. Read eligibility in a fresh statement after every lock has settled.
+func lockGroupEligibility(ctx context.Context, tx pgx.Tx, actor, target, actorOrg, targetOrg string) (bool, error) {
+	rows, err := tx.Query(ctx, `SELECT id FROM agents WHERE id IN($1,$2) ORDER BY id FOR UPDATE`, actor, target)
+	if err != nil {
+		return false, err
+	}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			break
+		}
+	}
+	rows.Close()
+	if err != nil {
+		return false, err
+	}
+	if err = rows.Err(); err != nil {
+		return false, err
+	}
+	rows, err = tx.Query(ctx, `SELECT id FROM organizations WHERE id IN($1,$2) ORDER BY id FOR SHARE`, actorOrg, targetOrg)
+	if err != nil {
+		return false, err
+	}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			break
+		}
+	}
+	rows.Close()
+	if err != nil {
+		return false, err
+	}
+	if err = rows.Err(); err != nil {
+		return false, err
+	}
+	var eligible bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents actor JOIN organizations ao ON ao.id=actor.org_id JOIN agents target ON target.id=$2 JOIN organizations torg ON torg.id=target.org_id WHERE actor.id=$1 AND actor.org_id=$3 AND target.org_id=$4 AND actor.status='active' AND target.status='active' AND ao.status='active' AND torg.status='active' AND NOT EXISTS(SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1)))`, actor, target, actorOrg, targetOrg).Scan(&eligible)
+	return eligible, err
+}
 
 func (s *Server) DirectGroup(w http.ResponseWriter, r *http.Request) {
 	c, ok := s.authenticate(w, r, "groups:manage")
@@ -85,15 +140,6 @@ func (s *Server) DirectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(ctx)
-	var eligible bool
-	if err = tx.QueryRow(ctx, eligibleGroupTarget, c.AgentID, p.AgentID, c.OrgID).Scan(&eligible); err != nil {
-		fail(w, 503, "unavailable", "Group unavailable.")
-		return
-	}
-	if !eligible {
-		fail(w, 404, "not_found", "Agent unavailable.")
-		return
-	}
 	replay, ok := mutationReplay(w, r, tx, c, p, true)
 	if !ok {
 		return
@@ -109,7 +155,28 @@ func (s *Server) DirectGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	var id string
 	err = tx.QueryRow(ctx, `SELECT group_id::text FROM group_direct_keys WHERE org_id=$1 AND agent_low=$2 AND agent_high=$3 AND purpose_key=$4`, c.OrgID, low, high, p.PurposeKey).Scan(&id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	exists := err == nil
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		fail(w, 503, "unavailable", "Group unavailable.")
+		return
+	}
+	if exists {
+		var locked string
+		if err = tx.QueryRow(ctx, `SELECT id::text FROM groups WHERE id=$1 FOR UPDATE`, id).Scan(&locked); err != nil {
+			fail(w, 409, "group_conflict", "Direct group unavailable.")
+			return
+		}
+	}
+	eligible, err := lockGroupEligibility(ctx, tx, c.AgentID, p.AgentID, c.OrgID, c.OrgID)
+	if err != nil {
+		fail(w, 503, "unavailable", "Group unavailable.")
+		return
+	}
+	if !eligible {
+		fail(w, 404, "not_found", "Agent unavailable.")
+		return
+	}
+	if !exists {
 		id = uuid.NewString()
 		_, err = tx.Exec(ctx, `INSERT INTO groups(id,org_id,name,visibility) VALUES($1,$2,$3,'private')`, id, c.OrgID, "direct-"+id)
 		if err == nil {
@@ -118,7 +185,7 @@ func (s *Server) DirectGroup(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			_, err = tx.Exec(ctx, `INSERT INTO group_direct_keys(org_id,agent_low,agent_high,purpose_key,group_id) VALUES($1,$2,$3,$4,$5)`, c.OrgID, low, high, p.PurposeKey, id)
 		}
-	} else if err == nil {
+	} else {
 		if lockGroupMember(r, tx, c.AgentID, id) != nil {
 			fail(w, 409, "group_conflict", "Direct group unavailable.")
 			return

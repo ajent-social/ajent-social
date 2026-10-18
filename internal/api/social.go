@@ -354,6 +354,10 @@ func (s *Server) JoinGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(r.Context())
+	if err = lockMutationKey(r, tx, c); err != nil {
+		fail(w, 503, "unavailable", "Replay unavailable.")
+		return
+	}
 	var visibility, state string
 	var archived *time.Time
 	err = tx.QueryRow(r.Context(), `SELECT visibility,archived_at FROM groups WHERE id=$1 FOR UPDATE`, id).Scan(&visibility, &archived)
@@ -434,6 +438,10 @@ func (s *Server) GroupMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(r.Context())
+	if e = lockMutationKey(r, tx, c); e != nil {
+		fail(w, 503, "unavailable", "Replay unavailable.")
+		return
+	}
 	var own bool
 	var archived *time.Time
 	e = tx.QueryRow(r.Context(), `SELECT archived_at FROM groups WHERE id=$1 FOR UPDATE`, gid).Scan(&archived)
@@ -452,16 +460,15 @@ func (s *Server) GroupMember(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if len(replay) > 0 {
-		writeJSON(w, 200, json.RawMessage(replay))
-		return
-	}
-	if p.Action == "remove" && aid != c.AgentID {
-		_, e = tx.Exec(r.Context(), `DELETE FROM group_members WHERE group_id=$1 AND agent_id=$2 AND role<>'owner'`, gid, aid)
-	} else if p.Action == "add" {
-		var eligible bool
-		e = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM agents a JOIN organizations o ON o.id=a.org_id JOIN groups g ON g.org_id=a.org_id WHERE g.id=$3 AND a.id=$2 AND a.status='active' AND o.status='active' AND NOT EXISTS(SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1)))`, c.AgentID, aid, gid).Scan(&eligible)
+	if p.Action == "add" {
+		var groupOrg string
+		e = tx.QueryRow(r.Context(), `SELECT org_id::text FROM groups WHERE id=$1`, gid).Scan(&groupOrg)
 		if e != nil {
+			fail(w, 503, "unavailable", "Group unavailable.")
+			return
+		}
+		eligible, err := lockGroupEligibility(r.Context(), tx, c.AgentID, aid, c.OrgID, groupOrg)
+		if err != nil {
 			fail(w, 503, "unavailable", "Agent unavailable.")
 			return
 		}
@@ -469,6 +476,14 @@ func (s *Server) GroupMember(w http.ResponseWriter, r *http.Request) {
 			fail(w, 404, "not_found", "Agent unavailable.")
 			return
 		}
+	}
+	if len(replay) > 0 {
+		writeJSON(w, 200, json.RawMessage(replay))
+		return
+	}
+	if p.Action == "remove" && aid != c.AgentID {
+		_, e = tx.Exec(r.Context(), `DELETE FROM group_members WHERE group_id=$1 AND agent_id=$2 AND role<>'owner'`, gid, aid)
+	} else if p.Action == "add" {
 		_, e = tx.Exec(r.Context(), `INSERT INTO group_members(group_id,agent_id) VALUES($1,$2) ON CONFLICT(group_id,agent_id) DO UPDATE SET state='accepted'`, gid, aid)
 	} else {
 		fail(w, 400, "bad_request", "Choose add or remove; owner cannot remove self.")
