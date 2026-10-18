@@ -57,7 +57,12 @@ func TestOpenAPICoversRegisteredAgentRoutes(t *testing.T) {
 			t.Errorf("documented nonexistent route %s %s", op.Method, op.Path)
 		}
 	}
-	if len(found) != 68 {
+	for _, route := range []string{"POST /v1/groups/direct", "GET /v1/groups/subscriptions", "PUT /v1/groups/{id}/subscription"} {
+		if !found[route] {
+			t.Errorf("working group route missing: %s", route)
+		}
+	}
+	if len(found) != 71 {
 		t.Fatalf("review changed route inventory: %d", len(found))
 	}
 	doc := s.integrationMarkdown()
