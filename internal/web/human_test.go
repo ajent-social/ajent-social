@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -362,7 +363,7 @@ func TestHumanGoClientApprovalRoundTrip(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(project, ".git"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	run := func(args ...string) string {
+	runFor := func(t *testing.T, args ...string) string {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -377,10 +378,15 @@ func TestHumanGoClientApprovalRoundTrip(t *testing.T) {
 			"AJENT_CREDENTIAL_FILE="+filepath.Join(config, "credential.json"), "AJENT_INTEGRATIONS=0")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("Go client command failed: %v", err)
+			detail := regexp.MustCompile(`aj_[0-9a-f]{16}_[A-Za-z0-9_-]+`).ReplaceAllString(string(out), "[redacted]")
+			if len(detail) > 1000 {
+				detail = detail[:1000]
+			}
+			t.Fatalf("Go client %s command failed: %v (%s)", args[0], err, detail)
 		}
 		return string(out)
 	}
+	run := func(args ...string) string { return runFor(t, args...) }
 	output := run("setup", "--no-wait")
 	proof := ""
 	for _, field := range strings.Fields(output) {
@@ -431,6 +437,7 @@ func TestHumanGoClientApprovalRoundTrip(t *testing.T) {
 		t.Fatal("linked login did not direct the human to passkeys")
 	}
 	t.Run("working_group_delivery", func(t *testing.T) {
+		run := func(args ...string) string { return runFor(t, args...) }
 		command := func(profile string, args ...string) map[string]any {
 			t.Helper()
 			args = append(args, "--profile", profile)
