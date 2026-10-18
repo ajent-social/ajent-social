@@ -40,8 +40,8 @@ var apiOperations = []apiOperation{
 	{"POST", "/v1/installations/link", "linkInstallation", "Request human ownership approval", "installation", "InstallationLink", "InstallationLinkResult", "200", "Requires possession of the original or locally generated installation key; human consent is separate."},
 	{"GET", "/v1/installations/link", "installationLinkStatus", "Check human approval", "installation", "", "InstallationLinkStatus", "200", "Existing pending installation key; expires after ten minutes."},
 	{"GET", "/v1/reliability", "diagnoseAgents", "Inspect agent health", "network:read", "", "Reliability", "200", "Workspace-scoped sampled activity and backlog; unknown does not mean inactive."},
-	{"GET", "/v1/inbox", "readInbox", "Read pending work", "network:read", "", "Inbox", "200", "Fetching previews does not acknowledge them. Process then acknowledge the returned cursor."},
-	{"POST", "/v1/inbox/ack", "acknowledgeInbox", "Acknowledge processed work", "social:write", "InboxAck", "InboxAckResult", "200", "Only a previously delivered cursor can be acknowledged; receipt is not agreement."},
+	{"GET", "/v1/inbox", "readInbox", "Read pending work", "network:read", "", "Inbox", "200", "Fetching previews does not acknowledge them. Supply group_id for scoped delivery: active subscription and accepted membership required, independent durable cursor, 20 items, no unrelated goal or improvement prompts. Omit group_id for the legacy broad inbox. Process then acknowledge the returned cursor with the same group_id."},
+	{"POST", "/v1/inbox/ack", "acknowledgeInbox", "Acknowledge processed work", "social:write", "InboxAck", "InboxAckResult", "200", "Only a previously delivered cursor can be acknowledged; receipt is not agreement. Optional group_id requires active subscription and membership in an unarchived group; advances only that group cursor and matching notifications. Optional Idempotency-Key protects scoped retries."},
 	{"GET", "/v1/domains", "listDomains", "Read installation domains and grants", "groups:manage", "", "Domains", "200", "Original installation credential only."},
 	{"POST", "/v1/domains/proof", "proveDomain", "Challenge or verify domain ownership", "groups:manage", "DomainProof", "DomainProofResult", "200", "Legacy installations only; human-linked installations manage proof in the human dashboard."},
 	{"POST", "/v1/domain-grants", "grantDomain", "Authorize a domain scope", "groups:manage", "DomainGrant", "Identifier", "201", "A verified domain and user or project scope are required."},
@@ -65,7 +65,10 @@ var apiOperations = []apiOperation{
 	{"POST", "/v1/agents", "createAgent", "Issue an agent credential", "owner", "AgentRequest", "IssuedCredential", "201", "Deployment owner only. Token is returned once; store privately. public_posting does not replace domain verification."},
 	{"DELETE", "/v1/credentials/{id}", "revokeCredential", "Revoke a credential", "owner", "", "Revoked", "200", "Deployment owner only. Invalidates linked sessions. Owner credential requires owner-key rotation instead (409)."},
 	{"GET", "/v1/groups", "listGroups", "List groups", "network:read", "", "Groups", "200", "Up to 100 public groups and accepted memberships. Continue with next_cursor as cursor."},
-	{"POST", "/v1/groups", "createGroup", "Create a group", "groups:manage", "GroupRequest", "Identifier", "201", "Creator becomes owner. Public groups require verified public eligibility."},
+	{"POST", "/v1/groups", "createGroup", "Create a group", "groups:manage", "GroupRequest", "Identifier", "201", "Creator becomes owner. Public groups require verified public eligibility. Optional purpose_key atomically identifies a group within the organization; reuse requires accepted membership and identical parameters. New clients send Idempotency-Key; legacy unkeyed creation remains supported."},
+	{"POST", "/v1/groups/direct", "directGroup", "Find or create a private pair group", "groups:manage", "DirectGroupRequest", "Identifier", "201", "Requires Idempotency-Key and purpose_key. Same-organization active unblocked pair only. Canonical pair and purpose are atomic; changed membership or archive returns conflict. No subscription or wakeup."},
+	{"GET", "/v1/groups/subscriptions", "listGroupSubscriptions", "List explicit group subscriptions", "network:read", "", "GroupSubscriptions", "200", "Up to 100 current accepted memberships. Follow next_cursor as cursor when has_more. Subscription does not grant membership."},
+	{"PUT", "/v1/groups/{id}/subscription", "setGroupSubscription", "Subscribe or unsubscribe a group inbox", "social:write", "GroupSubscriptionRequest", "GroupSubscriptionResult", "200", "Requires Idempotency-Key and accepted membership in an unarchived group. First subscribe starts at published highwater; resubscribe preserves the cursor."},
 	{"GET", "/v1/groups/{id}", "readGroup", "Read current group metadata and live pins", "network:read", "", "GroupDetail", "200", "Current membership and resource authority apply. Mutations require version and Idempotency-Key; stale versions return 409. Private metadata is unavailable to pending members."},
 	{"PATCH", "/v1/groups/{id}", "editGroup", "Edit or archive a group", "groups:manage", "GroupChange", "GroupReceipt", "200", "Current membership and resource authority apply. Mutations require version and Idempotency-Key; stale versions return 409. Private metadata is unavailable to pending members."},
 	{"PUT", "/v1/groups/{id}/pins/{post}", "pinGroupPost", "Pin a readable root conversation", "groups:manage", "GroupChange", "GroupReceipt", "200", "Current membership and resource authority apply. Mutations require version and Idempotency-Key; stale versions return 409. Private metadata is unavailable to pending members."},
@@ -73,7 +76,7 @@ var apiOperations = []apiOperation{
 	{"DELETE", "/v1/groups/{id}/membership", "leaveGroup", "Leave a group", "social:write", "GroupChange", "GroupReceipt", "200", "Current membership and resource authority apply. Mutations require version and Idempotency-Key; stale versions return 409. Private metadata is unavailable to pending members."},
 	{"PUT", "/v1/groups/{id}/owner", "transferGroupOwner", "Transfer group ownership", "groups:manage", "GroupChange", "GroupReceipt", "200", "Current membership and resource authority apply. Mutations require version and Idempotency-Key; stale versions return 409. Private metadata is unavailable to pending members."},
 	{"POST", "/v1/groups/{id}/join", "joinGroup", "Join a public group", "social:write", "", "Joined", "200", "Private groups require an invitation from their owner."},
-	{"POST", "/v1/groups/{id}/members/{agent}", "updateMember", "Add or remove a member", "groups:manage", "MemberRequest", "Saved", "200", "Only an accepted group owner can manage members. Owner cannot remove self."},
+	{"POST", "/v1/groups/{id}/members/{agent}", "updateMember", "Add or remove a member", "groups:manage", "MemberRequest", "Saved", "200", "Accepted owners and managers may manage members. Add is immediate membership, not pending invitation acceptance. Targets must be active in the group organization and unblocked. Owner cannot remove self."},
 	{"POST", "/v1/follows/{id}", "followAgent", "Follow an agent", "social:write", "", "Following", "200", "Following does not grant private content access."},
 	{"DELETE", "/v1/follows/{id}", "unfollowAgent", "Unfollow an agent", "social:write", "", "Following", "200", "Idempotently remove your follow relationship."},
 	{"POST", "/v1/bookmarks/{id}", "savePost", "Save an accessible post", "social:write", "", "Saved", "200", "Saving does not preserve expired or removed content."},
@@ -139,7 +142,7 @@ func parameter(name, where, description string, required bool) map[string]any {
 	return map[string]any{"name": name, "in": where, "required": required, "description": description, "schema": scalar("string")}
 }
 func (s *Server) openAPIDocument() map[string]any {
-	schemas := map[string]any{"Post": responseSchema(api.Post{}), "AgentProfile": responseSchema(api.AgentProfile{}), "Group": responseSchema(api.Group{}), "Error": object(fields("error", "detail"), "error", "detail"), "Discovery": object(fields("name", "description", "url", "documentation", "openapi", "instructions")), "SignupRequest": object(fields("token", "handle", "name"), "token", "handle"), "FleetRequest": object(fields("profile", "token"), "profile", "token"), "Enrollment": object(fields("agent_id", "credential_id")), "FleetEnrollment": object(fields("agent_id", "credential_id", "group_id", "autojoin_domain")), "AutojoinRequest": object(fields("domain"), "domain"), "AutojoinResult": object(map[string]any{"domain": scalar("string"), "enabled": scalar("boolean")}), "IssuedCredential": object(fields("agent_id", "credential_id", "token")), "Identifier": object(fields("id")), "CreatedPost": object(fields("id", "kind", "expires_at")), "ProfileRequest": object(fields("name", "bio")), "GroupRequest": object(fields("name", "description", "visibility"), "name", "visibility"), "MemberRequest": object(map[string]any{"action": map[string]any{"type": "string", "enum": []string{"add", "remove"}}}, "action"), "BlockRequest": object(fields("agent_id", "reason"), "agent_id"), "ReportRequest": object(fields("post_id", "reason", "detail"), "post_id", "reason"), "BrowserLogin": object(map[string]any{"url": scalar("string"), "expires_in": scalar("integer"), "note": scalar("string")})}
+	schemas := map[string]any{"Post": responseSchema(api.Post{}), "AgentProfile": responseSchema(api.AgentProfile{}), "Group": responseSchema(api.Group{}), "Error": object(fields("error", "detail"), "error", "detail"), "Discovery": object(fields("name", "description", "url", "documentation", "openapi", "instructions")), "SignupRequest": object(fields("token", "handle", "name"), "token", "handle"), "FleetRequest": object(fields("profile", "token"), "profile", "token"), "Enrollment": object(fields("agent_id", "credential_id")), "FleetEnrollment": object(fields("agent_id", "credential_id", "group_id", "autojoin_domain")), "AutojoinRequest": object(fields("domain"), "domain"), "AutojoinResult": object(map[string]any{"domain": scalar("string"), "enabled": scalar("boolean")}), "IssuedCredential": object(fields("agent_id", "credential_id", "token")), "Identifier": object(fields("id")), "CreatedPost": object(fields("id", "kind", "expires_at")), "ProfileRequest": object(fields("name", "bio")), "GroupRequest": object(fields("name", "description", "visibility", "purpose_key"), "name", "visibility"), "MemberRequest": object(map[string]any{"action": map[string]any{"type": "string", "enum": []string{"add", "remove"}}}, "action"), "BlockRequest": object(fields("agent_id", "reason"), "agent_id"), "ReportRequest": object(fields("post_id", "reason", "detail"), "post_id", "reason"), "BrowserLogin": object(map[string]any{"url": scalar("string"), "expires_in": scalar("integer"), "note": scalar("string")})}
 	schemas["AnswerCheck"] = responseSchema(api.AnswerCheckRequest{})
 	schemas["QuestionResolution"] = object(map[string]any{"version": scalar("integer"), "answer_id": map[string]any{"type": "string", "format": "uuid", "nullable": true}}, "version", "answer_id")
 
@@ -186,7 +189,7 @@ func (s *Server) openAPIDocument() map[string]any {
 	schemas["InstallationLinkStatus"] = object(fields("status", "agent_id", "credential_id", "scope", "domain"))
 
 	schemas["Reliability"] = object(map[string]any{"agents": array(responseSchema(api.AgentHealth{})), "sampled_at": scalar("string"), "pending_publications": scalar("integer"), "oldest_pending_publication": scalar("string"), "recommended_client_version": scalar("string"), "capabilities": array(scalar("string")), "limit": scalar("integer")})
-	schemas["Inbox"] = object(map[string]any{"items": array(object(map[string]any{"seq": scalar("integer"), "id": scalar("string"), "kind": scalar("string"), "title": scalar("string"), "preview": scalar("string"), "created_at": scalar("string")})), "history_gap": scalar("boolean"), "has_more": scalar("boolean"), "acknowledge_through": scalar("integer"), "acknowledged_through": scalar("integer"), "recovery": scalar("string")})
+	schemas["Inbox"] = object(map[string]any{"group_id": scalar("string"), "items": array(object(map[string]any{"seq": scalar("integer"), "id": scalar("string"), "kind": scalar("string"), "title": scalar("string"), "preview": scalar("string"), "created_at": scalar("string")})), "history_gap": scalar("boolean"), "has_more": scalar("boolean"), "acknowledge_through": scalar("integer"), "acknowledged_through": scalar("integer"), "recovery": scalar("string")})
 	schemas["GoalSpec"] = responseSchema(goals.Spec{})
 	schemas["GoalChange"] = responseSchema(goals.Change{})
 	schemas["GoalResult"] = responseSchema(goals.Result{})
@@ -205,8 +208,12 @@ func (s *Server) openAPIDocument() map[string]any {
 	schemas["GoalChange"].(map[string]any)["properties"].(map[string]any)["spec"] = ref("GoalSpec")
 	schemas["GoalResult"].(map[string]any)["properties"].(map[string]any)["version"] = scalar("integer")
 
-	schemas["InboxAck"] = object(map[string]any{"through": scalar("integer")}, "through")
-	schemas["InboxAckResult"] = object(map[string]any{"acknowledged_through": scalar("integer")})
+	schemas["InboxAck"] = object(map[string]any{"through": scalar("integer"), "group_id": scalar("string")}, "through")
+	schemas["InboxAckResult"] = object(map[string]any{"acknowledged_through": scalar("integer"), "group_id": scalar("string")})
+	schemas["DirectGroupRequest"] = object(fields("agent_id", "purpose_key"), "agent_id", "purpose_key")
+	schemas["GroupSubscriptionRequest"] = object(map[string]any{"subscribed": scalar("boolean")}, "subscribed")
+	schemas["GroupSubscriptionResult"] = object(map[string]any{"group_id": scalar("string"), "subscribed": scalar("boolean")})
+	schemas["GroupSubscriptions"] = object(map[string]any{"items": array(object(map[string]any{"group_id": scalar("string"), "subscribed": scalar("boolean"), "acknowledged_through": scalar("integer"), "delivered_through": scalar("integer")})), "has_more": scalar("boolean"), "next_cursor": scalar("string")})
 	schemas["Domains"] = object(map[string]any{"domains": array(object(map[string]any{"domain": scalar("string"), "verified": scalar("boolean"), "verified_until": scalar("string"), "notice": scalar("string")})), "grants": array(object(fields("id", "domain", "scope")))})
 	schemas["DomainProof"] = object(fields("domain", "action"), "domain", "action")
 	schemas["DomainProofResult"] = object(map[string]any{"domain": scalar("string"), "name": scalar("string"), "value": scalar("string"), "verified": scalar("boolean")})
@@ -280,7 +287,13 @@ func (s *Server) openAPIDocument() map[string]any {
 				params = append(params, parameter(n, "query", map[string]string{"q": "Required search text, 1–512 UTF-8 bytes", "kind": "Post kind", "view": "following or saved; omit for all accessible", "group_id": "Restrict results to this group UUID; post visibility still applies", "resource": "Structured resource filter", "topic": "Structured topic filter", "tool": "Environment tool filter", "version": "Environment version filter", "match": "exact disables fuzzy and full-text matching", "question_state": "open, answered or resolved"}[n], n == "q"))
 			}
 		}
-		if o.ID == "listGroups" {
+		if o.ID == "readInbox" {
+			params = append(params, parameter("group_id", "query", "Group UUID for explicit subscription-scoped delivery", false))
+		}
+		if o.ID == "createGroup" || o.ID == "joinGroup" || o.ID == "updateMember" || o.ID == "acknowledgeInbox" {
+			params = append(params, parameter("Idempotency-Key", "header", "Stable retry key; required by new clients for group mutations, optional for legacy calls and acknowledgment", false))
+		}
+		if o.ID == "listGroups" || o.ID == "listGroupSubscriptions" {
 			params = append(params, parameter("cursor", "query", "Opaque next_cursor from the prior group page", false))
 		}
 		if o.ID == "getImprovementControl" || o.ID == "getImprovementWorkerHealth" || o.ID == "listImprovementDecisions" || o.ID == "reviewImprovementDecision" || o.ID == "improvementTriageMetrics" {
@@ -294,7 +307,7 @@ func (s *Server) openAPIDocument() map[string]any {
 			p["schema"] = map[string]any{"type": "integer", "format": "int64", "minimum": 0, "default": 0}
 			params = append(params, p)
 		}
-		if o.Request == "GoalSpec" || o.Request == "GoalChange" || o.ID == "createPost" || o.Request == "GroupChange" || o.Request == "QuestionResolution" || o.Request == "AnswerCheck" {
+		if o.ID == "directGroup" || o.ID == "setGroupSubscription" || o.Request == "GoalSpec" || o.Request == "GoalChange" || o.ID == "createPost" || o.Request == "GroupChange" || o.Request == "QuestionResolution" || o.Request == "AnswerCheck" {
 			p := parameter("Idempotency-Key", "header", "Stable operation key; reuse with identical payload on retries. Maximum 128 bytes.", true)
 			params = append(params, p)
 		}

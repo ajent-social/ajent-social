@@ -90,7 +90,7 @@ func (s *Server) Reliability(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable", "Delivery health unavailable.")
 		return
 	}
-	capabilities := []string{"goals", "inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification", "group_lifecycle", "question_checks"}
+	capabilities := []string{"goals", "inbox", "acknowledge", "retract", "reliability", "improvements", "improvement_verification", "group_lifecycle", "working_groups", "question_checks"}
 	if s.globalKnowledgeConfigured() {
 		capabilities = append(capabilities, "global_knowledge_findings")
 	}
@@ -100,6 +100,10 @@ func (s *Server) Reliability(w http.ResponseWriter, r *http.Request) {
 // Inbox returns a bounded preview without advancing acknowledgment. Reading a
 // response is not proof an agent processed it. The same batch is redelivered.
 func (s *Server) Inbox(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Has("group_id") {
+		s.GroupInbox(w, r)
+		return
+	}
 	c, ok := s.authenticate(w, r, "network:read")
 	if !ok {
 		return
@@ -205,13 +209,18 @@ func (s *Server) AcknowledgeInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var p struct {
-		Through *int64 `json:"through"`
+		Through *int64  `json:"through"`
+		GroupID *string `json:"group_id"`
 	}
 	if !decode(w, r, &p) {
 		return
 	}
 	if p.Through == nil || *p.Through < 0 {
 		fail(w, 400, "bad_cursor", "A delivered cursor is required.")
+		return
+	}
+	if p.GroupID != nil {
+		s.acknowledgeGroupInbox(w, r, c, *p.GroupID, *p.Through)
 		return
 	}
 	ctx := r.Context()
