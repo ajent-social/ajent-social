@@ -190,7 +190,8 @@ func TestWorkingGroupsScopedInboxIsolation(t *testing.T) {
 		t.Fatal(w.Body)
 	}
 	second := wgID(t, w.Body.Bytes())
-	// First subscription excludes already-published history.
+	// First subscription excludes already-published history, even after an initial unsubscribe.
+	wgSubscribe(t, f, f.g, false)
 	f.post(f.ta, f.g, "")
 	if _, err := events.PublishOnce(context.Background(), f.s.DB.Pool); err != nil {
 		t.Fatal(err)
@@ -227,6 +228,20 @@ func TestWorkingGroupsScopedInboxIsolation(t *testing.T) {
 	var global int
 	if err := f.s.DB.Pool.QueryRow(context.Background(), `SELECT count(*) FROM agent_inbox WHERE agent_id=$1 AND acknowledged_seq>0`, f.a).Scan(&global); err != nil || global != 0 {
 		t.Fatalf("global cursor changed: %d %v", global, err)
+	}
+	globalResponse := f.request("GET", "/v1/inbox", f.ta, "", "")
+	if globalResponse.Code != 200 {
+		t.Fatal(globalResponse.Body)
+	}
+	var globalBox inboxResponse
+	if err := json.Unmarshal(globalResponse.Body.Bytes(), &globalBox); err != nil {
+		t.Fatal(err)
+	}
+	if w := f.request("POST", "/v1/inbox/ack", f.ta, fmt.Sprintf(`{"through":%d}`, globalBox.Through), ""); w.Code != 200 {
+		t.Fatal(w.Body)
+	}
+	if got := wgInbox(t, f, second); got.Acknowledged != bb.Acknowledged || len(got.Items) != 1 {
+		t.Fatal("global ack consumed group delivery")
 	}
 	wgSubscribe(t, f, second, false)
 	if got := f.request("GET", "/v1/inbox?group_id="+second, f.ta, "", ""); got.Code != 404 {
@@ -459,8 +474,9 @@ func TestWorkingGroupsCapabilityAndInvalidInputs(t *testing.T) {
 	if w.Code != 400 {
 		t.Fatal("subscription accepted without key")
 	}
+	wgSQL(t, f, `UPDATE agents SET org_id=$1 WHERE id=$2`, f.org, f.b)
 	w = f.request("POST", "/v1/groups/direct", f.ta, fmt.Sprintf(`{"agent_id":%q,"purpose_key":"review"}`, f.b), "")
-	if w.Code == 201 {
-		t.Fatal("direct accepted without key")
+	if w.Code != 400 {
+		t.Fatalf("direct without key: %d %s", w.Code, w.Body)
 	}
 }
