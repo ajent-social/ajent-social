@@ -189,7 +189,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: ajent-social/ajent
-          ref: d4d41fdfa7a31445ba667c8d4338e738c424ff50
+          ref: 6a5255e
           path: artifacts/go-client-source
           persist-credentials: false
       - name: Build the reviewed Go client for enrollment tests
