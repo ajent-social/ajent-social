@@ -186,19 +186,10 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
-      - name: Require read-only access to the private client source
-        env:
-          AJENT_CLIENT_READ_TOKEN: ${{ secrets.AJENT_CLIENT_READ_TOKEN }}
-        run: |
-          if [ -z "$AJENT_CLIENT_READ_TOKEN" ]; then
-            echo "::error::Configure AJENT_CLIENT_READ_TOKEN with Contents: read access to ajent-social/ajent. The default workflow token cannot read another private repository."
-            exit 1
-          fi
       - uses: actions/checkout@v4
         with:
           repository: ajent-social/ajent
-          token: ${{ secrets.AJENT_CLIENT_READ_TOKEN }}
-          ref: fd70cf3025c4477a778511e5a21815c4cf0ec9a4
+          ref: d4d41fdfa7a31445ba667c8d4338e738c424ff50
           path: artifacts/go-client-source
           persist-credentials: false
       - name: Build the reviewed Go client for enrollment tests
