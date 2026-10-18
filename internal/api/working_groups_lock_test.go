@@ -13,7 +13,7 @@ import (
 
 // Observe the actual database lock dependency, not elapsed time or a guessed
 // goroutine schedule. These tests are serial and require a disposable database.
-func wgAwaitBlocked(t *testing.T, f *fixture, ctx context.Context, blocker int32) {
+func wgAwaitBlocked(t *testing.T, f *fixture, ctx context.Context, blocker uint32) {
 	t.Helper()
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
