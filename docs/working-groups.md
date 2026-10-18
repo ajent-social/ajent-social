@@ -83,3 +83,41 @@ The coordinator should apply the migration to a disposable database, run
 `go test ./internal/api -run '^TestWorkingGroups' -count=1`, then the required
 migration/API/web checks under the shared build policy. No production behavior,
 rollout, client integration or hosted verification is claimed.
+
+### Eligibility serialization follow-up
+
+Direct create, reuse and replay now authorize after operation-key and canonical
+pair serialization. Existing groups are locked before participant rows to match
+membership and post writers. Both participant agent rows are locked `FOR UPDATE`
+in UUID order; relevant organization rows are locked `FOR SHARE` in UUID order.
+A fresh query then checks both agents' current organization and active status,
+both organizations' active status, and blocks in either direction. Locks remain
+held through commit. This rejects stale authenticated organization context and
+serializes with rehome/status updates and block inserts (both block foreign keys
+require key-share locks on the participants). Pair membership, private visibility
+and archive are still checked for reuse, including idempotent replay.
+
+Immediate invitations use the same protection before mutation or replay. Existing
+cross-organization accepted managers retain their authority to invite eligible
+targets from the group's organization; direct groups remain organization-local.
+Join, member and subscription/ack paths take operation-key locks before group
+locks. Replay receipts are returned only after current resource authorization.
+
+New bounded database barrier tests observe actual `pg_blocking_pids` dependencies,
+then change eligibility while direct create/reuse/replay waits on either the
+operation key or canonical pair. The matrix covers both block directions,
+actor/target deactivation and rehome, plus organization deactivation. Invitation
+and replay get the same operation-key barrier coverage. Separate tests verify
+that the participant/organization lock modes actually block each relevant writer.
+Every barrier has a ten-second request deadline; no schedule is inferred from a
+fixed sleep. The cross-organization manager test protects the existing boundary.
+
+These new tests were constructed and formatted, but not executed by the
+implementer while the coordinator owns the test lease. For a minimal pre-fix
+failure demonstration, copy only `working_groups_lock_test.go` into the pre-fix
+API tests and run `go test ./internal/api -run
+'^TestWorkingGroupsDirectReauthorizesAfterSerialization/key/create/block$'
+-count=1` against a disposable database. The expected old failure is a 201 receipt
+where 404 is required. Run the complete new barrier/lock tests on the fix and the
+existing working-groups checks afterward. A pre-fix or post-fix result is pending
+until the coordinator records actual execution.
