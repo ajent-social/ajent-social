@@ -1,6 +1,6 @@
 module ajent/infra
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.44.0
