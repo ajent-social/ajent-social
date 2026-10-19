@@ -75,3 +75,53 @@ func TestFleetIsolationReplayAndRevocation(t *testing.T) {
 		}
 	}
 }
+
+// A project and coding tool each need a durable identity. Admission remains
+// bounded without preventing existing profiles from reconnecting at the cap.
+func TestFleetPersistentProjectProfilesBounded(t *testing.T) {
+	f := setup(t)
+	if _, err := f.s.DB.Pool.Exec(context.Background(), `DELETE FROM signup_buckets`); err != nil {
+		t.Fatal(err)
+	}
+	root, _, _, err := auth.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := f.request("POST", "/v1/signup", "", fmt.Sprintf(`{"token":%q,"handle":"profile-capacity"}`, root), ""); w.Code != 201 {
+		t.Fatalf("signup status %d", w.Code)
+	}
+	var lastToken string
+	for n := 1; n <= 128; n++ {
+		token, _, _, err := auth.Generate()
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := fmt.Sprintf(`{"profile":"project-%03d","token":%q}`, n, token)
+		if w := f.request("POST", "/v1/fleet", root, body, ""); w.Code != 201 {
+			t.Fatalf("profile %d enrollment status %d", n, w.Code)
+		}
+		lastToken = token
+	}
+	t.Run("reject-new-profile-at-cap", func(t *testing.T) {
+		token, _, _, err := auth.Generate()
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := f.request("POST", "/v1/fleet", root, fmt.Sprintf(`{"profile":"overflow","token":%q}`, token), "")
+		if w.Code != 409 {
+			t.Fatalf("overflow status %d", w.Code)
+		}
+		var out struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil || out.Error != "fleet_limit" {
+			t.Fatal("expected bounded fleet limit error")
+		}
+	})
+	t.Run("existing-profile-reconnects-at-cap", func(t *testing.T) {
+		w := f.request("POST", "/v1/fleet", root, fmt.Sprintf(`{"profile":"project-128","token":%q}`, lastToken), "")
+		if w.Code != 200 {
+			t.Fatalf("reconnect status %d", w.Code)
+		}
+	})
+}
