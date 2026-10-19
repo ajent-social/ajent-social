@@ -31,6 +31,8 @@ type infraMocks struct {
 	dnsAlias            bool
 	ignoredCapacity     bool
 	rollingDependencies int
+	rejectParameter     bool
+	parameterCalls      int
 }
 
 func (m *infraMocks) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
@@ -38,6 +40,12 @@ func (m *infraMocks) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 	case strings.Contains(a.Token, "getAvailabilityZones"):
 		return resource.NewPropertyMapFromMap(map[string]any{"names": []string{"us-west-2a", "us-west-2b"}}), nil
 	case strings.Contains(a.Token, "getParameter"):
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.parameterCalls++
+		if m.rejectParameter {
+			return nil, fmt.Errorf("unexpected SSM lookup")
+		}
 		return resource.NewPropertyMapFromMap(map[string]any{"value": "ami-test"}), nil
 	default:
 		return a.Args, nil
@@ -391,6 +399,8 @@ func TestLoadSettings(t *testing.T) {
 		wantErr bool
 	}{
 		{"defaults", nil, false},
+		{"pinned host AMI", map[string]string{"hostAmi": "ami-0123456789abcdef0"}, false},
+		{"invalid host AMI", map[string]string{"hostAmi": "ami-latest"}, true},
 		{"rolling flags", map[string]string{"rollingService": "true", "retireLegacyHost": "true"}, false},
 		{"empty hostname", map[string]string{"hostname": ""}, true},
 		{"invalid boolean", map[string]string{"rollingService": "1"}, true},
@@ -413,6 +423,9 @@ func TestLoadSettings(t *testing.T) {
 				if err != nil {
 					return err
 				}
+				if s.HostAMI != tc.extra["hostAmi"] {
+					t.Errorf("hostAmi not loaded: %q", s.HostAMI)
+				}
 				if s.Hostname != "ajent.social" || s.Region != "us-west-2" || s.Stack != "test" {
 					t.Errorf("unexpected defaults: %+v", s)
 				}
@@ -422,5 +435,29 @@ func TestLoadSettings(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// Exercise the real production deploy program, not the infra_ci substitute.
+func TestPinnedHostAMIPreservesLaunchTemplateWithoutSSM(t *testing.T) {
+	s := settings{Hostname: "ajent.social", Region: "us-west-2", Stack: "test", HostAMI: "ami-0123456789abcdef0", ImageDigest: "sha256:" + strings.Repeat("a", 64), CaddyImage: "caddy@sha256:" + strings.Repeat("b", 64), RollingService: true, RetireLegacyHost: true}
+	mocks := &infraMocks{protected: map[string]bool{}, secretInputs: map[string]bool{}, rejectParameter: true}
+	if err := pulumi.RunErr(func(ctx *pulumi.Context) error { return deploy(ctx, s) }, pulumi.WithMocks("ajent-infra", "test", mocks)); err != nil {
+		t.Fatal(err)
+	}
+	if mocks.parameterCalls != 0 {
+		t.Fatalf("SSM calls = %d", mocks.parameterCalls)
+	}
+	count := 0
+	for _, r := range mocks.resources {
+		if r.Type == "aws:ec2/launchTemplate:LaunchTemplate" && r.Name == "application-fleet" {
+			count++
+			if r.Inputs["imageId"] != s.HostAMI {
+				t.Fatalf("imageId = %v, want %s", r.Inputs["imageId"], s.HostAMI)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("launch templates = %d, want 1", count)
 	}
 }

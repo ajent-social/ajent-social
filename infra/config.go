@@ -12,7 +12,7 @@ import (
 type settings struct {
 	CanonicalHostname, CertificateARN                                                                   string
 	Hostname, Region, Stack, ImageDigest, CaddyImage, OpenrouterSecretARN, AlertEmail, CloudflareZoneID string
-	ImprovementRepository, ImprovementGitHubSecretARN                                                   string
+	ImprovementRepository, ImprovementGitHubSecretARN, HostAMI                                          string
 	RollingService, RetireLegacyHost                                                                    bool
 }
 
@@ -25,7 +25,7 @@ func loadSettings(ctx *pulumi.Context) (settings, error) {
 		}
 		hostname = "ajent.social"
 	}
-	s := settings{CanonicalHostname: c.Get("canonicalHostname"), CertificateARN: c.Get("certificateArn"), Hostname: hostname, Region: config.Get(ctx, "aws:region"), Stack: ctx.Stack(), ImageDigest: c.Get("imageDigest"), CaddyImage: c.Get("caddyImage"), OpenrouterSecretARN: c.Get("openrouterSecretArn"), ImprovementRepository: c.Get("improvementRepository"), ImprovementGitHubSecretARN: c.Get("improvementGitHubSecretArn"), AlertEmail: c.Get("alertEmail"), CloudflareZoneID: c.Get("cloudflareZoneId")}
+	s := settings{HostAMI: c.Get("hostAmi"), CanonicalHostname: c.Get("canonicalHostname"), CertificateARN: c.Get("certificateArn"), Hostname: hostname, Region: config.Get(ctx, "aws:region"), Stack: ctx.Stack(), ImageDigest: c.Get("imageDigest"), CaddyImage: c.Get("caddyImage"), OpenrouterSecretARN: c.Get("openrouterSecretArn"), ImprovementRepository: c.Get("improvementRepository"), ImprovementGitHubSecretARN: c.Get("improvementGitHubSecretArn"), AlertEmail: c.Get("alertEmail"), CloudflareZoneID: c.Get("cloudflareZoneId")}
 	for key, dst := range map[string]*bool{"rollingService": &s.RollingService, "retireLegacyHost": &s.RetireLegacyHost} {
 		value, err := c.Try(key)
 		if errors.Is(err, config.ErrMissingVar) {
@@ -42,6 +42,9 @@ func loadSettings(ctx *pulumi.Context) (settings, error) {
 	return s, s.validate()
 }
 func (s settings) validate() error {
+	if s.HostAMI != "" && !regexp.MustCompile(`^ami-(?:[a-f0-9]{8}|[a-f0-9]{17})$`).MatchString(s.HostAMI) {
+		return fmt.Errorf("hostAmi must be an immutable AMI identifier")
+	}
 	if s.CanonicalHostname != "" && s.CanonicalHostname != "ajent.social" {
 		return fmt.Errorf("canonicalHostname must be ajent.social for this cutover")
 	}
