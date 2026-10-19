@@ -47,16 +47,25 @@ func TestDNSRegistrationPreservesProviderContract(t *testing.T) {
 			if !reflect.DeepEqual(a.Inputs.Mappable(), want) {
 				t.Fatal("DNS inputs changed")
 			}
-			alias := false
+			alias, typeAlias := false, false
 			for _, v := range a.RegisterRPC.GetAliases() {
+				if v.GetSpec().GetType() == "cloudflare:index/record:Record" || strings.Contains(v.GetUrn(), "::cloudflare:index/record:Record::") {
+					typeAlias = true
+				}
 				if v.GetSpec().GetName() == "dogfood-dns" || strings.HasSuffix(v.GetUrn(), "::dogfood-dns") {
 					alias = true
 				}
 			}
 			for _, v := range a.RegisterRPC.GetAliasURNs() {
+				if strings.Contains(v, "::cloudflare:index/record:Record::") {
+					typeAlias = true
+				}
 				if strings.HasSuffix(v, "::dogfood-dns") {
 					alias = true
 				}
+			}
+			if !typeAlias {
+				t.Fatal("historical resource type alias lost")
 			}
 			if !alias {
 				t.Fatal("historical resource alias lost")
