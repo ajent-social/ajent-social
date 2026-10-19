@@ -114,6 +114,20 @@ jobs:
           [[ "$migration" =~ ^[a-f0-9]{40}$ ]] || { echo 'Complete the separate no-op Go migration before releasing.' >&2; exit 1; }
           git merge-base --is-ancestor "$migration" HEAD || { echo 'The recorded Go migration revision is not in this release commit.' >&2; exit 1; }
 
+      - name: Preserve deployed host AMI for application release
+        shell: bash
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          checkpoint=$(mktemp)
+          trap 'rm -f "$checkpoint"' EXIT
+          pulumi -C infra stack export --stack "$PULUMI_STACK" --file "$checkpoint" >/dev/null
+          ami=$(python3 scripts/deployed-host-ami.py "$checkpoint")
+          # Config set changes the checked-out config only, before the no-op gate.
+          pulumi -C infra config set hostAmi "$ami" --stack "$PULUMI_STACK" --non-interactive >/dev/null
+
       - name: Verify infrastructure program is unchanged before publishing
         shell: bash
         env:
