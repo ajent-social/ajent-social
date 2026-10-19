@@ -4,6 +4,7 @@ go 1.26.9
 
 require (
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.44.0
+	github.com/pulumi/pulumi-cloudflare/sdk/v6 v6.20.0
 	github.com/pulumi/pulumi-random/sdk/v4 v4.21.1
 	github.com/pulumi/pulumi/sdk/v3 v3.261.0
 )
