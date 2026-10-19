@@ -23,11 +23,11 @@ func (m *dnsContractMocks) NewResource(args pulumi.MockResourceArgs) (string, re
 }
 
 func TestDNSRegistrationPreservesProviderContract(t *testing.T) {
-	for _, kind := range []string{"A", "CNAME"} {
-		t.Run(kind, func(t *testing.T) {
+	for _, tc := range []struct{ kind, content string }{{"A", "192.0.2.1"}, {"CNAME", "target.example.test"}} {
+		t.Run(tc.kind, func(t *testing.T) {
 			m := &dnsContractMocks{}
 			err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-				return registerProductionDNS(ctx, "zone-test", "service.example.test", kind, pulumi.String("target.example.test"))
+				return registerProductionDNS(ctx, "zone-test", "service.example.test", tc.kind, pulumi.String(tc.content))
 			}, pulumi.WithMocks("project", "stack", m))
 			if err != nil {
 				t.Fatal(err)
@@ -42,8 +42,8 @@ func TestDNSRegistrationPreservesProviderContract(t *testing.T) {
 			if a.RegisterRPC.GetVersion() != "6.20.0" {
 				t.Fatal("provider version changed")
 			}
-			want := map[string]any{"zoneId": "zone-test", "name": "service.example.test", "type": kind,
-				"content": "target.example.test", "ttl": float64(300), "proxied": false, "comment": "Ajent service; DNS-only"}
+			want := map[string]any{"zoneId": "zone-test", "name": "service.example.test", "type": tc.kind,
+				"content": tc.content, "ttl": float64(300), "proxied": false, "comment": "Ajent service; DNS-only"}
 			if !reflect.DeepEqual(a.Inputs.Mappable(), want) {
 				t.Fatal("DNS inputs changed")
 			}
