@@ -231,12 +231,16 @@ func deploy(ctx *pulumi.Context, s settings) error {
 		if err != nil {
 			return err
 		}
-		ami, err := ssm.LookupParameter(ctx, &ssm.LookupParameterArgs{Name: "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"})
-		if err != nil {
-			return err
+		ami := s.HostAMI
+		if ami == "" {
+			latest, err := ssm.LookupParameter(ctx, &ssm.LookupParameterArgs{Name: "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"})
+			if err != nil {
+				return err
+			}
+			ami = latest.Value
 		}
 		deps := []pulumi.Resource{policy, ssmAttachment, dbVersion, ownerVersion, gateway, route}
-		c := foundation{Settings: s, Tags: tags, VPC: vpc, PublicSubnet: publicSubnet, Route: route, AppSG: appSG, Profile: profile, AMI: pulumi.String(ami.Value), Repository: repository, Logs: logs, DB: db, DBSecret: dbSecret, OwnerSecret: ownerSecret, Alerts: alerts, Dependencies: deps}
+		c := foundation{Settings: s, Tags: tags, VPC: vpc, PublicSubnet: publicSubnet, Route: route, AppSG: appSG, Profile: profile, AMI: pulumi.String(ami), Repository: repository, Logs: logs, DB: db, DBSecret: dbSecret, OwnerSecret: ownerSecret, Alerts: alerts, Dependencies: deps}
 		if s.RollingService {
 			edge, err = rollingService(ctx, c, az.Names[1])
 			if err != nil {
