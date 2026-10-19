@@ -132,7 +132,9 @@ byte-for-byte compatible with the former TypeScript generator.
 DNS uses the supported Pulumi resource-registration API with Cloudflare provider
 6.20.0 explicitly pinned, preserving its logical name, type, inputs and historical
 name/type aliases without compiling the generated SDK for unrelated Cloudflare products.
-The same DNS registration runs in CI and production.
+The same DNS registration runs in CI and production. The infrastructure CI job
+now compiles the full production program and runs its resource-parity fixtures
+before a release can build or publish an application image.
 
 Resource constructors keep the original logical names and provider versions.
 Database, secrets and certificate protection, ASG desired-capacity ownership,
