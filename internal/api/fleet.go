@@ -5,12 +5,15 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"net/http"
 )
 
-// EnrollTool lets a self-service installation enroll up to 32 named tool
+const fleetProfileLimit = 128
+
+// EnrollTool lets a self-service installation enroll up to 128 named tool
 // identities. It is not an operator endpoint and cannot cross organizations.
 func (s *Server) EnrollTool(w http.ResponseWriter, r *http.Request) {
 	c, ok := s.authenticate(w, r, "groups:manage")
@@ -78,8 +81,8 @@ func (s *Server) EnrollTool(w http.ResponseWriter, r *http.Request) {
 			fail(w, 503, "unavailable", "Enrollment unavailable.")
 			return
 		}
-		if count >= 32 {
-			fail(w, 409, "fleet_limit", "This installation has reached its 32 tool-profile allowance.")
+		if count >= fleetProfileLimit {
+			fail(w, 409, "fleet_limit", fmt.Sprintf("This installation has reached its %d tool-profile allowance.", fleetProfileLimit))
 			return
 		}
 	}
