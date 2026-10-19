@@ -121,13 +121,18 @@ Run Pulumi from this directory on the authenticated CI runner; `Pulumi.yaml` sel
 from the application. Node/npm are no longer needed for infrastructure checks.
 
 On the shared mini, **do not run Go infrastructure builds, tests or previews**:
-the generated AWS/Cloudflare SDKs exceed its memory budget. Use the infrastructure
+the generated AWS SDKs exceed its memory budget. Use the infrastructure
 CI job; it limits compiler concurrency and memory and preserves dependency caches.
 The commands in this document are CI-runner commands. `scripts/deploy.sh` requires
 `CI=true`; an authenticated deployment runner and the existing lease are required
 before applying. Do not export CI locally to bypass this restriction.
 Host bootstrap helpers remain Python programs embedded by Go; their output is
 byte-for-byte compatible with the former TypeScript generator.
+
+DNS uses the supported Pulumi resource-registration API with Cloudflare provider
+6.20.0 explicitly pinned, preserving its logical name, type, inputs and historical
+name/type aliases without compiling the generated SDK for unrelated Cloudflare products.
+The same DNS registration runs in CI and production.
 
 Resource constructors keep the original logical names and provider versions.
 Database, secrets and certificate protection, ASG desired-capacity ownership,
