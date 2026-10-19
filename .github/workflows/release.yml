@@ -114,6 +114,16 @@ jobs:
           [[ "$migration" =~ ^[a-f0-9]{40}$ ]] || { echo 'Complete the separate no-op Go migration before releasing.' >&2; exit 1; }
           git merge-base --is-ancestor "$migration" HEAD || { echo 'The recorded Go migration revision is not in this release commit.' >&2; exit 1; }
 
+      - name: Verify infrastructure program is unchanged before publishing
+        shell: bash
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Keep the settled image/configuration and never refresh live secrets.
+          # A provider-registration change must not mutate unrelated resources.
+          pulumi -C infra preview --stack "$PULUMI_STACK" --refresh=false --expect-no-changes
+
       - name: Publish tested ARM64 image
         id: image
         shell: bash
