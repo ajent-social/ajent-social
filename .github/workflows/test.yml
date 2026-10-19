@@ -83,7 +83,8 @@ jobs:
           fi
       - name: Isolated DNS proof browser verification
         run: |
-          export AGENT_BROWSER_EXECUTABLE_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
+          AGENT_BROWSER_EXECUTABLE_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
+          export AGENT_BROWSER_EXECUTABLE_PATH
           scripts/test-dns-browser.sh
         env:
           AJENT_DNS_BROWSER_ADMIN_DSN: postgres://postgres:test@127.0.0.1:5432/ajent_browser?sslmode=disable
@@ -98,7 +99,7 @@ jobs:
             artifacts/ajentd -addr 127.0.0.1:55440 > "artifacts/$suite-journeys/server.log" 2>&1 &
             server_pid=$!
             trap 'kill "$server_pid"; wait "$server_pid" || true' EXIT
-            for attempt in {1..100}; do
+            for _attempt in {1..100}; do
               if curl -fsS "$AJENT_BROWSER_ORIGIN/healthz" > /dev/null; then break; fi
               sleep 0.2
             done
