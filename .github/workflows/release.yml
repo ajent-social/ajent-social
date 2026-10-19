@@ -30,6 +30,12 @@ jobs:
       AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
       PULUMI_STACK: ${{ vars.PULUMI_STACK }}
       AWS_REGION: us-west-2
+      # Keep the full production provider SDK compile within runner memory.
+      # These are build limits; production previews retain the real providers.
+      GOMAXPROCS: '1'
+      GOFLAGS: '-p=1'
+      GOGC: '20'
+      GOMEMLIMIT: '5GiB'
 
     steps:
       - name: Validate release configuration
