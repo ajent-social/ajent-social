@@ -32,12 +32,12 @@ jobs:
           restore-keys: ${{ runner.os }}-infra-go-${{ hashFiles('infra/go.mod', 'infra/go.sum') }}-
       - run: go mod download
         working-directory: infra
-      # CI omits the generated pulumi-cloudflare SDK (-tags infra_ci); that package
-      # alone OOM-kills the shared runner. Production builds keep the real SDK.
-      - run: go test -tags infra_ci -vet=off -v ./...
+      # DNS no longer imports the monolithic generated Cloudflare SDK.
+      # Compile and test the production program and its resource-parity fixtures.
+      - run: go test -vet=off -v ./...
         working-directory: infra
       - run: python3 -m unittest discover -s infra/tests -p '*_test.py'
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 -tags infra_ci ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
         working-directory: infra
       - uses: actions/setup-node@v4
         with:
