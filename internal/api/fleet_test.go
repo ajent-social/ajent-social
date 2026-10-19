@@ -87,14 +87,35 @@ func TestFleetPersistentProjectProfilesBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w := f.request("POST", "/v1/signup", "", fmt.Sprintf(`{"token":%q,"handle":"profile-capacity"}`, root), ""); w.Code != 201 {
-		t.Fatalf("signup status %d", w.Code)
+	signup := f.request("POST", "/v1/signup", "", fmt.Sprintf(`{"token":%q,"handle":"profile-capacity"}`, root), "")
+	if signup.Code != 201 {
+		t.Fatalf("signup status %d", signup.Code)
+	}
+	var parent struct {
+		CredentialID string `json:"credential_id"`
+	}
+	if err := json.Unmarshal(signup.Body.Bytes(), &parent); err != nil || parent.CredentialID == "" {
+		t.Fatal("missing signup credential identity")
 	}
 	var lastToken string
 	for n := 1; n <= 128; n++ {
-		token, _, _, err := auth.Generate()
+		token, lookup, digest, err := auth.Generate()
 		if err != nil {
 			t.Fatal(err)
+		}
+		// Seed the middle of the quota without exhausting the independent
+		// 120-request/minute limiter. Admission through 33 and at 128/129
+		// still goes through the real authenticated HTTP handler.
+		if n > 33 && n < 128 {
+			_, err := f.s.DB.Pool.Exec(context.Background(), `WITH seeded AS (
+			 INSERT INTO credentials(agent_id,lookup_id,secret_digest,scopes)
+			 SELECT agent_id,$2,$3,scopes FROM credentials WHERE id=$1 RETURNING id)
+			 INSERT INTO fleet_members(parent_credential_id,profile,credential_id)
+			 SELECT $1,$4,id FROM seeded`, parent.CredentialID, lookup, digest, fmt.Sprintf("project-%03d", n))
+			if err != nil {
+				t.Fatal(err)
+			}
+			continue
 		}
 		body := fmt.Sprintf(`{"profile":"project-%03d","token":%q}`, n, token)
 		if w := f.request("POST", "/v1/fleet", root, body, ""); w.Code != 201 {
