@@ -9,6 +9,12 @@ on:
         type: boolean
         default: false
 
+      reconcile_previous_release:
+        description: Reconcile only an interrupted launch-template version update before release
+        required: false
+        type: boolean
+        default: false
+
 concurrency:
   group: ajent-production-release
   cancel-in-progress: false
@@ -127,6 +133,22 @@ jobs:
           ami=$(python3 scripts/deployed-host-ami.py "$checkpoint")
           # Config set changes the checked-out config only, before the no-op gate.
           pulumi -C infra config set hostAmi "$ami" --stack "$PULUMI_STACK" --non-interactive >/dev/null
+
+      - name: Reconcile interrupted application rollout
+        if: inputs.reconcile_previous_release
+        shell: bash
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          evidence=$(mktemp -d)
+          trap 'rm -rf "$evidence"' EXIT
+          pulumi -C infra preview --stack "$PULUMI_STACK" --refresh=false --json --save-plan "$evidence/plan.json" > "$evidence/preview.jsonl"
+          python3 scripts/check-release-recovery.py "$evidence/preview.jsonl"
+          pulumi -C infra up --stack "$PULUMI_STACK" --refresh=false --plan "$evidence/plan.json" --yes
+          group=$(pulumi -C infra stack output autoscalingGroup --stack "$PULUMI_STACK")
+          python3 scripts/wait-rollout.py "$group" --region "$AWS_REGION"
 
       - name: Verify infrastructure program is unchanged before publishing
         shell: bash
