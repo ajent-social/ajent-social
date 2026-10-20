@@ -139,6 +139,8 @@ jobs:
         shell: bash
         env:
           PULUMI_EXPERIMENTAL: 'true'
+          # --json is an aggregate object by default; the guard validates event JSONL.
+          PULUMI_ENABLE_STREAMING_JSON_PREVIEW: 'true'
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
