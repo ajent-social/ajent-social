@@ -138,6 +138,7 @@ jobs:
         if: inputs.reconcile_previous_release
         shell: bash
         env:
+          PULUMI_EXPERIMENTAL: 'true'
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
