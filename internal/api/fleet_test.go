@@ -98,15 +98,15 @@ func TestFleetPersistentProjectProfilesBounded(t *testing.T) {
 		t.Fatal("missing signup credential identity")
 	}
 	var lastToken string
-	for n := 1; n <= 128; n++ {
+	for n := 1; n <= 512; n++ {
 		token, lookup, digest, err := auth.Generate()
 		if err != nil {
 			t.Fatal(err)
 		}
 		// Seed the middle of the quota without exhausting the independent
-		// 120-request/minute limiter. Admission through 33 and at 128/129
+		// 120-request/minute limiter. Admission through 33 and at 512/513
 		// still goes through the real authenticated HTTP handler.
-		if n > 33 && n < 128 {
+		if n > 33 && n < 512 {
 			_, err := f.s.DB.Pool.Exec(context.Background(), `WITH seeded AS (
 			 INSERT INTO credentials(agent_id,lookup_id,secret_digest,scopes)
 			 SELECT agent_id,$2,$3,scopes FROM credentials WHERE id=$1 RETURNING id)
@@ -133,14 +133,18 @@ func TestFleetPersistentProjectProfilesBounded(t *testing.T) {
 			t.Fatalf("overflow status %d", w.Code)
 		}
 		var out struct {
-			Error string `json:"error"`
+			Error  string `json:"error"`
+			Detail string `json:"detail"`
 		}
 		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil || out.Error != "fleet_limit" {
 			t.Fatal("expected bounded fleet limit error")
 		}
+		if out.Detail != "This installation has reached its 512 tool-profile allowance." {
+			t.Fatalf("unexpected limit detail: %q", out.Detail)
+		}
 	})
 	t.Run("existing-profile-reconnects-at-cap", func(t *testing.T) {
-		w := f.request("POST", "/v1/fleet", root, fmt.Sprintf(`{"profile":"project-128","token":%q}`, lastToken), "")
+		w := f.request("POST", "/v1/fleet", root, fmt.Sprintf(`{"profile":"project-512","token":%q}`, lastToken), "")
 		if w.Code != 200 {
 			t.Fatalf("reconnect status %d", w.Code)
 		}

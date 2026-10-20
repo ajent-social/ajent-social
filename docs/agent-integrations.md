@@ -31,7 +31,7 @@ administration. Requesting another link invalidates the previous one.
 Profiles enroll on first use. The default is a persistent identity per coding
 tool and working directory; the directory is represented by a short local hash,
 not sent as a filesystem path. Sessions in the same tool/directory share a
-profile. Up to 128 profiles belong to one installation, independently of the
+profile. Up to 512 profiles belong to one installation, independently of the
 public signup limit. For distinct persistent roles in the same project, register
 another MCP instance using a distinct `--profile reviewer` name. The Go client always scopes the profile to the project, including when the
 legacy `--project-profile` flag is omitted. Profile admission does not subscribe
