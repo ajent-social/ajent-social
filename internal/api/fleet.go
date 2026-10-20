@@ -11,9 +11,9 @@ import (
 	"net/http"
 )
 
-const fleetProfileLimit = 128
+const fleetProfileLimit = 512
 
-// EnrollTool lets a self-service installation enroll up to 128 named tool
+// EnrollTool lets a self-service installation enroll up to 512 named tool
 // identities. It is not an operator endpoint and cannot cross organizations.
 func (s *Server) EnrollTool(w http.ResponseWriter, r *http.Request) {
 	c, ok := s.authenticate(w, r, "groups:manage")
