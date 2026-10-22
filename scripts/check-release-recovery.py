@@ -4,6 +4,16 @@ import json
 import sys
 
 
+def recorded_output_drift(meta, previous, selected):
+    """The desired template version is already stored, but the last observed output lags it."""
+    if previous != selected or not isinstance(selected, str) or not selected.isdecimal():
+        return False
+    observed = (meta.get("old") or {}).get("outputs", {}).get("launchTemplate", {}).get("version")
+    if not isinstance(observed, str) or not observed.isdecimal() or int(observed) >= int(selected):
+        return False
+    return meta.get("detailedDiff") == {"launchTemplate.version": {"diffKind": "update", "inputDiff": False}}
+
+
 def validate(events):
     changes = []
     summaries = []
@@ -27,6 +37,11 @@ def validate(events):
         if old_lt.get("id") != "lt-053e4c8f50d1233a3" or new_lt.get("id") != old_lt["id"]:
             raise ValueError("launch template identity changed")
         previous, selected = old_lt.pop("version", None), new_lt.pop("version", None)
+        if recorded_output_drift(meta, previous, selected):
+            if old != new:
+                raise ValueError("recovery would change inputs other than template version")
+            changes.append(meta)
+            continue
         if not isinstance(previous, str) or not previous.isdecimal() or not isinstance(selected, str) or not selected.isdecimal() or int(selected) <= int(previous):
             raise ValueError("recovery requires a newer numbered template version")
         if old != new:

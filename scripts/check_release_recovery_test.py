@@ -45,6 +45,34 @@ class ReleaseRecoveryTest(unittest.TestCase):
                 events[0]["resourcePreEvent"]["metadata"]["new"]["inputs"]["launchTemplate"]["version"] = version
                 with self.assertRaises(ValueError): module.validate(events)
 
+    def test_accepts_recorded_version_output_drift(self):
+        events = self.events()
+        meta = events[0]["resourcePreEvent"]["metadata"]
+        meta["old"]["inputs"]["launchTemplate"]["version"] = "45"
+        meta["new"]["inputs"]["launchTemplate"]["version"] = "45"
+        meta["old"]["outputs"] = {"launchTemplate": {"id": "lt-053e4c8f50d1233a3", "version": "44"}}
+        meta["detailedDiff"] = {"launchTemplate.version": {"diffKind": "update", "inputDiff": False}}
+        self.assertIn("Validated", module.validate(events))
+
+    def test_rejects_output_drift_that_changes_other_inputs_or_diff(self):
+        events = self.events()
+        meta = events[0]["resourcePreEvent"]["metadata"]
+        meta["old"]["inputs"]["launchTemplate"]["version"] = "45"
+        meta["new"]["inputs"]["launchTemplate"]["version"] = "45"
+        meta["old"]["outputs"] = {"launchTemplate": {"id": "lt-053e4c8f50d1233a3", "version": "44"}}
+        meta["detailedDiff"] = {"launchTemplate.version": {"diffKind": "update", "inputDiff": False}}
+        meta["new"]["inputs"]["desiredCapacity"] = 3
+        with self.assertRaises(ValueError):
+            module.validate(events)
+        events = self.events()
+        meta = events[0]["resourcePreEvent"]["metadata"]
+        meta["old"]["inputs"]["launchTemplate"]["version"] = "45"
+        meta["new"]["inputs"]["launchTemplate"]["version"] = "45"
+        meta["old"]["outputs"] = {"launchTemplate": {"id": "lt-053e4c8f50d1233a3", "version": "45"}}
+        meta["detailedDiff"] = {"launchTemplate.version": {"diffKind": "update", "inputDiff": False}, "desiredCapacity": {"diffKind": "update"}}
+        with self.assertRaises(ValueError):
+            module.validate(events)
+
     def test_rejects_incomplete_duplicate_or_error_preview(self):
         cases = [[], self.events()[:1], self.events() + self.events(), self.events() + [{"diagnosticEvent": {"severity": "error"}}]]
         for events in cases:
