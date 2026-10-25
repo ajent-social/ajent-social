@@ -1,3 +1,5 @@
+//go:build mcpbrowser
+
 package main
 
 import (
@@ -25,12 +27,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Opt in after installing the pinned Playwright dependency and Chromium. This
+// Run with -tags=mcpbrowser after installing Playwright and Chromium. This
 // covers browser form-action enforcement, which httptest redirects cannot prove.
 func TestMCPOAuthBrowserCallback(t *testing.T) {
-	if os.Getenv("AJENT_MCP_BROWSER_TEST") != "1" {
-		t.Skip("AJENT_MCP_BROWSER_TEST=1 requires local Playwright/Chromium")
-	}
 	if os.Getenv("AJENT_TEST_DSN") == "" {
 		t.Fatal("disposable AJENT_TEST_DSN required")
 	}

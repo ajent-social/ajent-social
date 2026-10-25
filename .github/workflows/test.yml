@@ -75,6 +75,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Verify MCP browser consent and OAuth callback
+        run: go test -tags=mcpbrowser ./cmd/ajentd -run '^TestMCPOAuthBrowserCallback$' -count=1 -v
+        env:
+          AJENT_TEST_DSN: postgres://postgres:test@127.0.0.1:5432/ajent_browser?sslmode=disable
+          AJENT_MCP_BROWSER_OUTPUT: ${{ github.workspace }}/artifacts/mcp-oauth
       - name: Ensure PostgreSQL client for isolated DNS verification
         run: |
           if ! command -v createdb >/dev/null || ! command -v dropdb >/dev/null; then
@@ -129,6 +134,7 @@ jobs:
           retention-days: 3
           path: |
             artifacts/ui
+            artifacts/mcp-oauth
             artifacts/account-journeys
             artifacts/feed-journeys
             artifacts/help-journeys
