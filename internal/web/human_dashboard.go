@@ -56,6 +56,9 @@ type HumanDashboard struct {
 }
 
 func (s *Server) humanDashboard(w http.ResponseWriter, r *http.Request) {
+	if s.MCPResume(w, r) {
+		return
+	}
 	h := s.human(r)
 	if h == nil {
 		redirect(w, r, "/human/login")

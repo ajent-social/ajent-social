@@ -3,6 +3,7 @@ module ajent
 go 1.26.10
 
 require (
+	github.com/ajent-social/go v0.0.0-20260924042100-b90bbb417d9d
 	github.com/fxamacker/cbor/v2 v2.9.2
 	github.com/go-webauthn/webauthn v0.17.4
 	github.com/google/uuid v1.6.0

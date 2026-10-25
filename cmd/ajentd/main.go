@@ -6,6 +6,7 @@ import (
 	"ajent/internal/improvements"
 	"ajent/internal/jobs"
 	"ajent/internal/knowledge"
+	"ajent/internal/mcphttp"
 	"ajent/internal/store"
 	"ajent/internal/telemetry"
 	"ajent/internal/web"
@@ -124,6 +125,15 @@ func main() {
 	m := http.NewServeMux()
 	a.Routes(m)
 	w.Routes(m)
+	// Remote OAuth requires HTTPS; numeric loopback is permitted for local tests.
+	if secure || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1" {
+		if err := w.MCPRoutes(m); err != nil {
+			log.Fatal("MCP authorization initialization failed: ", err)
+		}
+		m.Handle("/mcp", mcphttp.New(a, w, origin))
+	} else {
+		slog.Info("HTTP MCP disabled for this development origin; use HTTPS or numeric loopback")
+	}
 	m.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()

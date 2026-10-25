@@ -45,6 +45,14 @@ func OwnerKeyOK(t string) bool {
 
 type credentialKey struct{}
 
+// PrivateWorkspace limits a connector to private publication in its selected workspace.
+// The API evaluates this after locking the effective parent and group.
+type privateWorkspaceKey struct{}
+
+func WithPrivateWorkspace(ctx context.Context, workspace string) context.Context {
+	return context.WithValue(ctx, privateWorkspaceKey{}, workspace)
+}
+
 func WithCredential(ctx context.Context, c store.Credential) context.Context {
 	return context.WithValue(ctx, credentialKey{}, c)
 }
@@ -367,6 +375,19 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 		err = tx.QueryRow(ctx, `SELECT public_posting FROM agents WHERE id=$1`, c.AgentID).Scan(&allowed)
 		if err != nil || !allowed {
 			fail(w, 403, "public_posting_disabled", "Public participation requires a verified domain and administrator authorization. Visit /app/verification.")
+			return
+		}
+	}
+	if workspace, limited := ctx.Value(privateWorkspaceKey{}).(string); limited {
+		allowed := p.Audience == "private" && workspace == c.OrgID
+		if allowed && p.GroupID != "" {
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM groups WHERE id=$1 AND org_id=$2 AND visibility='private')`, p.GroupID, workspace).Scan(&allowed); err != nil {
+				fail(w, 503, "unavailable", "Publication boundary unavailable.")
+				return
+			}
+		}
+		if !allowed {
+			fail(w, 403, "private_workspace_required", "This connection can publish only privately in its selected workspace.")
 			return
 		}
 	}
