@@ -86,3 +86,9 @@ not qualify the integration. Tests exercise code exchange, replay, refresh,
 revocation, ownership, CSRF, publication boundaries, private visibility and
 attributed replies. Passing local tests establishes local behavior; it does not
 establish a deployed connector or a successful Muse/GrokBot connection.
+
+The CI UI job separately runs `go test -tags=mcpbrowser ./cmd/ajentd -run
+'^TestMCPOAuthBrowserCallback$'` after installing Playwright and Chromium. This
+exercises the consent form under the actual server security headers and proves
+that the validated cross-origin callback, code exchange and connection listing
+work in a browser. It is separate from the default zero-skip backend suite.
