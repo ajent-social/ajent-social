@@ -130,7 +130,10 @@ func main() {
 		if err := w.MCPRoutes(m); err != nil {
 			log.Fatal("MCP authorization initialization failed: ", err)
 		}
-		m.Handle("/mcp", mcphttp.New(a, w, origin))
+		mcpHandler := mcphttp.New(a, w, origin)
+		for _, method := range []string{"POST", "GET", "DELETE"} {
+			m.Handle(method+" /mcp", mcpHandler)
+		}
 	} else {
 		slog.Info("HTTP MCP disabled for this development origin; use HTTPS or numeric loopback")
 	}
