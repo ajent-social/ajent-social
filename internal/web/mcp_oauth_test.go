@@ -1,11 +1,15 @@
 package web
 
 import (
+	"ajent/internal/api"
 	"ajent/internal/auth"
+	"ajent/internal/mcphttp"
+	oauth "ajent/internal/mcpoauth"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	protocol "github.com/ajent-social/go/mcpoauth"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -151,7 +156,10 @@ func TestMCPOAuthRefreshReuseRevokesFamily(t *testing.T) {
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tokens["refresh_token"].(string)}, "client_id": {p.client}, "resource": {p.s.Origin + "/mcp"}}
 	w := p.request("POST", "/oauth/token", form, "")
 	p.want(w, 200)
-	raw := jsonMap(t, w)["access_token"].(string)
+	next := jsonMap(t, w)
+	raw := next["access_token"].(string)
+	p.want(p.request("POST", "/oauth/token", form, ""), 400)
+	form.Set("refresh_token", next["refresh_token"].(string))
 	p.want(p.request("POST", "/oauth/token", form, ""), 400)
 	if _, e := p.s.MCPVerify(context.Background(), raw); e == nil {
 		t.Fatal("reuse did not revoke family")
@@ -190,13 +198,15 @@ func TestMCPOAuthConcurrentRefreshHasOneWinnerAndRevokesReuse(t *testing.T) {
 	}
 	close(start)
 	successes := 0
-	var raw string
+	var raw, newRefresh string
 	for i := 0; i < 2; i++ {
 		w := <-results
 		switch w.Code {
 		case 200:
 			successes++
-			raw = jsonMap(t, w)["access_token"].(string)
+			next := jsonMap(t, w)
+			raw = next["access_token"].(string)
+			newRefresh = next["refresh_token"].(string)
 		case 400:
 		default:
 			t.Fatalf("unexpected refresh status %d: %s", w.Code, w.Body)
@@ -208,6 +218,8 @@ func TestMCPOAuthConcurrentRefreshHasOneWinnerAndRevokesReuse(t *testing.T) {
 	if _, e := p.s.MCPVerify(context.Background(), raw); e == nil {
 		t.Fatal("concurrent reuse did not revoke winner family")
 	}
+	form.Set("refresh_token", newRefresh)
+	p.want(p.request("POST", "/oauth/token", form, ""), 400)
 }
 
 func TestMCPOAuthLoginHandoff(t *testing.T) {
@@ -235,4 +247,175 @@ func TestMCPOAuthLoginHandoff(t *testing.T) {
 	if p.cookies["ajent_mcp_resume"] != nil {
 		t.Fatal("pending cookie not cleared")
 	}
+}
+
+// Register the actual web routes first, including method-qualified catch-all GET /.
+// A methodless specific OAuth route overlaps that pattern and panics at startup.
+func TestMCPOAuthRoutesCoexistWithRoot(t *testing.T) {
+	s, e := New(api.New(nil), true, "https://ajent.example", "unused", false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	mux := http.NewServeMux()
+	s.Routes(mux)
+	if e = s.MCPRoutes(mux); e != nil {
+		t.Fatal(e)
+	}
+	for _, path := range []string{"/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != 200 {
+			t.Fatalf("%s: %d", path, w.Code)
+		}
+	}
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("POST", "/oauth/authorize", nil))
+	if w.Code != 405 {
+		t.Fatalf("POST authorize: %d", w.Code)
+	}
+	for _, path := range []string{"/oauth/token", "/oauth/register", "/oauth/revoke", "/oauth/consent", "/human/connections/revoke"} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("PUT", path, nil))
+		if w.Code != 405 {
+			t.Fatalf("PUT %s: %d", path, w.Code)
+		}
+	}
+}
+
+type fixtureCIMDResolver struct{ id string }
+
+func (r fixtureCIMDResolver) Resolve(_ context.Context, id string) (protocol.Client, error) {
+	if id != r.id {
+		return protocol.Client{}, protocol.ErrNotFound
+	}
+	return protocol.Client{ID: id, Name: "CIMD connector", RedirectURIs: []string{"https://client.example/callback"}, CreatedAt: time.Now()}, nil
+}
+func TestMCPOAuthCIMDHTTPRoundTripAndRevocation(t *testing.T) {
+	previous := mcpMetadata
+	mcpMetadata = fixtureCIMDResolver{id: "https://client.example/oauth.json"}
+	t.Cleanup(func() { mcpMetadata = previous })
+	p := newMCPFixture(t)
+	p.client = "https://client.example/oauth.json"
+	p.m.(*http.ServeMux).Handle("POST /mcp", mcphttp.New(p.s.API, p.s, p.s.Origin))
+	wrong := url.Values{"client_id": {p.client}, "redirect_uri": {"https://wrong.example/callback"}}
+	p.want(p.request("GET", "/oauth/authorize?"+wrong.Encode(), nil, ""), 400)
+	tokens := p.exchange(p.approve(p.begin(), "", "network:read"))
+	raw := tokens["access_token"].(string)
+	c, e := p.s.MCPVerify(context.Background(), raw)
+	if e != nil {
+		t.Fatal(e)
+	}
+	invoke := func(token string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ajent_me","arguments":{}}}`))
+		r.Header.Set("Authorization", "Bearer "+token)
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Accept", "application/json, text/event-stream")
+		r.Header.Set("MCP-Protocol-Version", "2025-11-25")
+		w := httptest.NewRecorder()
+		p.m.ServeHTTP(w, r)
+		return w
+	}
+	w := invoke(raw)
+	p.want(w, 200)
+	if !strings.Contains(w.Body.String(), c.AgentID) {
+		t.Fatalf("HTTP MCP lost selected identity: %s", w.Body)
+	}
+	refresh := p.request("POST", "/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tokens["refresh_token"].(string)}, "client_id": {p.client}, "resource": {p.s.Origin + "/mcp"}}, "")
+	p.want(refresh, 200)
+	next := jsonMap(t, refresh)
+	p.want(invoke(next["access_token"].(string)), 200)
+	var registered int
+	if e = p.s.API.DB.Pool.QueryRow(context.Background(), `SELECT count(*) FROM mcp_oauth_records WHERE kind='clients' AND id=$1`, p.client).Scan(&registered); e != nil || registered != 0 {
+		t.Fatal("CIMD created DCR state", e)
+	}
+	p.want(p.request("POST", "/human/connections/revoke", url.Values{"csrf": {p.csrf}, "connection": {c.CredID}}, ""), 303)
+	// The resolver still returns this same trusted client: metadata is never
+	// a substitute for the current human/workspace/connection grant.
+	p.want(invoke(raw), 401)
+	p.want(invoke(next["access_token"].(string)), 401)
+	p.want(p.request("POST", "/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {next["refresh_token"].(string)}, "client_id": {p.client}, "resource": {p.s.Origin + "/mcp"}}, ""), 400)
+}
+
+func TestMCPOAuthAgedDCRClientsSurviveLiveReferences(t *testing.T) {
+	p := newMCPFixture(t)
+	h := p.begin()
+	ctx := context.Background()
+	age := func() {
+		if _, e := p.s.API.DB.Pool.Exec(ctx, `UPDATE mcp_oauth_records SET expires_at=now()-interval '1 day' WHERE kind='clients' AND id=$1`, p.client); e != nil {
+			t.Fatal(e)
+		}
+	}
+	assertRegistered := func() {
+		var n int
+		if e := p.s.API.DB.Pool.QueryRow(ctx, `SELECT count(*) FROM mcp_oauth_records WHERE kind='clients' AND id=$1`, p.client).Scan(&n); e != nil || n != 1 {
+			t.Fatal("live referenced client removed", e)
+		}
+	}
+	_, st, e := p.s.mcpServer(nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	cleanup := func() {
+		if e := st.CreateClient(ctx, protocol.Client{ID: uuid.NewString(), Name: "unrelated", RedirectURIs: []string{"https://client.example/other"}, CreatedAt: time.Now()}); e != nil {
+			t.Fatal(e)
+		}
+	}
+	// An unrelated registration runs cleanup while this client has live consent.
+	age()
+	cleanup()
+	assertRegistered()
+	tokens := p.exchange(p.approve(h, "", "network:read"))
+	age()
+	cleanup()
+	assertRegistered()
+	if _, e = p.s.MCPVerify(ctx, tokens["access_token"].(string)); e != nil {
+		t.Fatal(e)
+	}
+	// Even an aged unreferenced registration is renewed on resolution before
+	// CreateConsent's cleanup; a fresh authorization remains usable.
+	other := newMCPFixture(t)
+	if _, e = other.s.API.DB.Pool.Exec(ctx, `UPDATE mcp_oauth_records SET expires_at=now()-interval '1 day' WHERE kind='clients' AND id=$1`, other.client); e != nil {
+		t.Fatal(e)
+	}
+	other.begin()
+	var count int
+	if e = other.s.API.DB.Pool.QueryRow(ctx, `SELECT count(*) FROM mcp_oauth_records WHERE kind='clients' AND id=$1`, other.client).Scan(&count); e != nil || count != 1 {
+		t.Fatal("fresh consent retired aged client", e)
+	}
+}
+
+var _ oauth.ClientMetadataResolver = fixtureCIMDResolver{}
+
+func TestMCPOAuthConsentCallbackCSP(t *testing.T) {
+	p := newMCPFixture(t)
+	baseline := "default-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
+	original := p.m
+	p.m = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", baseline)
+		original.ServeHTTP(w, r)
+	})
+	h := p.begin()
+	// Resume request and submitted form cannot inject an alternate callback.
+	get := p.request("GET", "/oauth/authorize?consent="+url.QueryEscape(h)+"&redirect_uri=https%3A%2F%2Fevil.example%2Fcallback", nil, "")
+	p.want(get, 200)
+	check := func(w *httptest.ResponseRecorder) {
+		policy := w.Header().Get("Content-Security-Policy")
+		for _, want := range []string{"default-src 'self'", "script-src 'self'", "object-src 'none'", "frame-ancestors 'none'", "form-action 'self' https://client.example"} {
+			if !strings.Contains(policy, want) {
+				t.Fatalf("CSP lost %s: %s", want, policy)
+			}
+		}
+		if strings.Contains(policy, "evil.example") {
+			t.Fatal("unvalidated callback in CSP")
+		}
+	}
+	check(get)
+	form := url.Values{"csrf": {p.csrf}, "consent": {h}, "decision": {"approve"}, "workspace": {p.workspace}, "agent": {""}, "handle": {"muse-" + uuid.NewString()[:8]}, "scope": {"network:read"}, "redirect_uri": {"https://evil.example/callback"}}
+	approved := p.request("POST", "/oauth/consent", form, "")
+	p.want(approved, 303)
+	check(approved)
+	cancelHandle := p.begin()
+	cancel := p.request("POST", "/oauth/consent", url.Values{"csrf": {p.csrf}, "consent": {cancelHandle}, "decision": {"deny"}, "redirect_uri": {"https://evil.example/callback"}}, "")
+	p.want(cancel, 303)
+	check(cancel)
 }

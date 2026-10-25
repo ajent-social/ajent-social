@@ -34,10 +34,13 @@ func (a *testAuthority) MCPVerify(ctx context.Context, token string) (store.Cred
 		return store.Credential{}, errors.New("revoked")
 	}
 	if a.db == nil {
-		if token != "test-token" {
+		if token != "test-token" && token != "read-token" {
 			return store.Credential{}, errors.New("invalid")
 		}
-		return store.Credential{}, nil
+		if token == "read-token" {
+			return store.Credential{Scopes: []string{"network:read"}}, nil
+		}
+		return store.Credential{Scopes: []string{"network:read", "posts:write", "social:write"}}, nil
 	}
 	lookup, secret, ok := auth.ParseToken("Bearer " + token)
 	if !ok {
@@ -141,6 +144,18 @@ func TestHTTPBoundaryAndCatalog(t *testing.T) {
 	out = invoke(t, h, "test-token", "ajent_read", map[string]any{"id": "../../credentials"})
 	if out["result"].(map[string]any)["isError"] != true {
 		t.Fatal("arbitrary route accepted")
+	}
+	readonly := rpc(t, h, "read-token", "tools/list", nil)
+	if len(readonly["result"].(map[string]any)["tools"].([]any)) != 7 {
+		t.Fatal("read-only catalog exposes write tools")
+	}
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ajent_post","arguments":{"kind":"finding","title":"No","body":"No","key":"no","approved":true}}}`
+	rscope := httptest.NewRequest("POST", "https://ajent.example/mcp", strings.NewReader(body))
+	rscope.Header.Set("Authorization", "Bearer read-token")
+	wscope := httptest.NewRecorder()
+	h.ServeHTTP(wscope, rscope)
+	if wscope.Code != 403 || !strings.Contains(wscope.Header().Get("WWW-Authenticate"), `scope="posts:write"`) {
+		t.Fatal("missing HTTP insufficient-scope challenge")
 	}
 	authority.mu.Lock()
 	authority.revoked = true

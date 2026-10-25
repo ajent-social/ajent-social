@@ -74,7 +74,7 @@ func update(ctx context.Context, tx pgx.Tx, kind, id string, v any) error {
 func (s *Store) create(ctx context.Context, kind, id string, v any, expires time.Time) error {
 	return s.transaction(ctx, func(tx pgx.Tx) error {
 		// Keep used refresh hashes through the absolute grant deadline for replay detection.
-		if _, e := tx.Exec(ctx, `DELETE FROM mcp_oauth_records WHERE expires_at<now()`); e != nil {
+		if _, e := tx.Exec(ctx, `DELETE FROM mcp_oauth_records p WHERE p.expires_at<now() AND (p.kind<>'clients' OR NOT EXISTS(SELECT 1 FROM mcp_oauth_records r WHERE r.kind IN ('consents','codes','grants') AND r.expires_at>now() AND r.record->>'client_id'=p.id))`); e != nil {
 			return e
 		}
 		var n int
@@ -112,7 +112,15 @@ func (s *Store) Client(ctx context.Context, id string) (v protocol.Client, e err
 		}
 		return s.Metadata.Resolve(ctx, id)
 	}
-	e = s.load(ctx, "clients", id, &v, false)
+	e = s.transaction(ctx, func(tx pgx.Tx) error {
+		if err := read(ctx, tx, "clients", id, &v, false); err != nil {
+			return err
+		}
+		// Resolve and renew atomically so cleanup cannot retire a client between
+		// the authorization lookup and its subsequent consent insertion.
+		_, err := tx.Exec(ctx, `UPDATE mcp_oauth_records SET expires_at=GREATEST(expires_at,$2) WHERE kind='clients' AND id=$1`, id, time.Now().Add(90*24*time.Hour))
+		return err
+	})
 	return
 }
 func (s *Store) CreateConsent(ctx context.Context, v protocol.ConsentRecord) error {

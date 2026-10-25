@@ -6,23 +6,28 @@ import (
 	"ajent/internal/ratelimit"
 	"ajent/internal/store"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
+	"strings"
 
 	"time"
+	"unicode"
 
 	protocol "github.com/ajent-social/go/mcpoauth"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
-var mcpMetadata = oauth.NewCIMDResolver()
+var mcpMetadata oauth.ClientMetadataResolver = oauth.NewCIMDResolver()
 var mcpScopes = []string{"network:read", "posts:write", "social:write"}
 var mcpHandle = regexp.MustCompile(`^[a-z][a-z0-9-]{1,39}$`)
 
@@ -52,7 +57,7 @@ func (s *Server) MCPRoutes(m *http.ServeMux) error {
 			h.ServeHTTP(w, r)
 		})
 	}
-	m.Handle("/.well-known/oauth-authorization-server", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	m.Handle("GET /.well-known/oauth-authorization-server", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Preserve protocol metadata and advertise the independently validated CIMD path.
 		rec := &metadataResponse{header: make(http.Header)}
 		o.MetadataHandler().ServeHTTP(rec, r)
@@ -73,12 +78,12 @@ func (s *Server) MCPRoutes(m *http.ServeMux) error {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(doc)
 	}))
-	m.Handle("/.well-known/oauth-protected-resource", o.ProtectedResourceHandler())
-	m.Handle("/.well-known/oauth-protected-resource/mcp", o.ProtectedResourceHandler())
+	m.Handle("GET /.well-known/oauth-protected-resource", o.ProtectedResourceHandler())
+	m.Handle("GET /.well-known/oauth-protected-resource/mcp", o.ProtectedResourceHandler())
 	authorize := o.AuthorizeHandler(func(w http.ResponseWriter, r *http.Request, handle string, req protocol.ConsentRequest) {
 		s.mcpConsent(w, r, handle, req)
 	})
-	m.Handle("/oauth/authorize", protect(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authorizeRoute := protect(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Query().Get("consent") != "" {
 			handle := r.URL.Query().Get("consent")
 			req, e := o.Consent(r.Context(), handle)
@@ -90,10 +95,12 @@ func (s *Server) MCPRoutes(m *http.ServeMux) error {
 			return
 		}
 		authorize.ServeHTTP(w, r)
-	})))
-	m.Handle("/oauth/register", protect(o.RegisterHandler()))
-	m.Handle("/oauth/token", protect(o.TokenHandler()))
-	m.Handle("/oauth/revoke", protect(o.RevokeHandler()))
+	}))
+	m.Handle("GET /oauth/authorize", authorizeRoute)
+	m.Handle("POST /oauth/authorize", authorizeRoute)
+	m.Handle("POST /oauth/register", protect(o.RegisterHandler()))
+	m.Handle("POST /oauth/token", protect(o.TokenHandler()))
+	m.Handle("POST /oauth/revoke", protect(o.RevokeHandler()))
 	m.Handle("POST /oauth/consent", protect(http.HandlerFunc(s.mcpApprove)))
 	m.HandleFunc("GET /human/connections", s.mcpConnections)
 	m.HandleFunc("POST /human/connections/revoke", s.mcpDisconnect)
@@ -189,6 +196,11 @@ func (s *Server) mcpConsent(w http.ResponseWriter, r *http.Request, handle strin
 		http.Redirect(w, r, "/human/login", http.StatusSeeOther)
 		return
 	}
+	_, st, e := s.mcpServer(nil)
+	if e != nil || mcpConsentCSP(r.Context(), w, st, handle) != nil {
+		http.Error(w, "Connection request unavailable", 400)
+		return
+	}
 	p := mcpConsentPage{Client: req.ClientName, Handle: handle, CSRF: h.CSRF, Scopes: req.Scopes}
 	rows, e := s.API.DB.Pool.Query(r.Context(), `SELECT id::text,name FROM organizations WHERE human_owner_id=$1 AND status='active' ORDER BY created_at LIMIT 100`, h.ID)
 	if e != nil {
@@ -250,9 +262,18 @@ func (s *Server) mcpApprove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Sign in again to continue.", 401)
 		return
 	}
-	o, _, e := s.mcpServer(tx)
+	o, st, e := s.mcpServer(tx)
 	if e != nil {
 		http.Error(w, "Connection unavailable", 503)
+		return
+	}
+	req, e := o.Consent(r.Context(), handle)
+	if e != nil {
+		http.Error(w, "Connection request expired", 400)
+		return
+	}
+	if e = mcpConsentCSP(r.Context(), w, st, handle); e != nil {
+		http.Error(w, "Connection request unavailable", 400)
 		return
 	}
 	if r.PostForm.Get("decision") == "deny" {
@@ -270,11 +291,6 @@ func (s *Server) mcpApprove(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.PostForm.Get("decision") != "approve" {
 		http.Error(w, "Choose whether to connect", 400)
-		return
-	}
-	req, e := o.Consent(r.Context(), handle)
-	if e != nil {
-		http.Error(w, "Connection request expired", 400)
 		return
 	}
 	scopes := r.PostForm["scope"]
@@ -385,4 +401,38 @@ func mcpSessionLive(ctx context.Context, tx pgx.Tx, r *http.Request, human strin
 	var present bool
 	e = tx.QueryRow(ctx, `SELECT true FROM human_sessions WHERE digest=$1 AND human_id=$2 AND expires_at>now() FOR SHARE`, auth.Digest(c.Value), human).Scan(&present)
 	return e == nil && present
+}
+
+// mcpConsentCSP permits the exact callback origin from the immutable protocol
+// record, never redirect_uri supplied to the form/resume request. Chromium
+// applies form-action to redirected form submissions as well as the POST target.
+func mcpConsentCSP(ctx context.Context, w http.ResponseWriter, st *oauth.Store, handle string) error {
+	sum := sha256.Sum256([]byte(handle))
+	rec, e := st.Consent(ctx, hex.EncodeToString(sum[:]))
+	if e != nil {
+		return e
+	}
+	callback, e := url.Parse(rec.RedirectURI)
+	if e != nil || callback.User != nil || callback.Host == "" || (callback.Scheme != "https" && callback.Scheme != "http") || strings.ContainsAny(callback.Host, ";*") || strings.IndexFunc(callback.Host, unicode.IsSpace) >= 0 {
+		return fmt.Errorf("invalid callback origin")
+	}
+	origin := callback.Scheme + "://" + callback.Host
+	policy := w.Header().Get("Content-Security-Policy")
+	if policy == "" {
+		policy = "default-src 'self'; form-action 'self'"
+	}
+	directives := strings.Split(policy, ";")
+	found := false
+	for i, d := range directives {
+		fields := strings.Fields(d)
+		if len(fields) > 0 && fields[0] == "form-action" {
+			directives[i] = " form-action 'self' " + origin
+			found = true
+		}
+	}
+	if !found {
+		directives = append(directives, " form-action 'self' "+origin)
+	}
+	w.Header().Set("Content-Security-Policy", strings.Join(directives, ";"))
+	return nil
 }
