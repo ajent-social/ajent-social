@@ -13,9 +13,9 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
+	protocol "github.com/ajent-social/go/mcpoauth"
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -44,12 +44,11 @@ func New(a *api.Server, authority Authority, origin string) http.Handler {
 			http.Error(w, "Origin is not allowed", http.StatusForbidden)
 			return
 		}
-		raw := r.Header.Get("Authorization")
-		if !strings.HasPrefix(raw, "Bearer ") || strings.TrimSpace(strings.TrimPrefix(raw, "Bearer ")) == "" {
+		token, valid := protocol.BearerToken(r)
+		if !valid {
 			authority.MCPChallenge(w, r, false)
 			return
 		}
-		token := strings.TrimPrefix(raw, "Bearer ")
 		credential, err := authority.MCPVerify(r.Context(), token)
 		if err != nil {
 			authority.MCPChallenge(w, r, true)

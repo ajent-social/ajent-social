@@ -121,6 +121,18 @@ func TestHTTPBoundaryAndCatalog(t *testing.T) {
 			t.Fatal("missing no-store")
 		}
 	}
+	for _, header := range []string{"bearer test-token", "bEaReR test-token", "Bearer   test-token  "} {
+		r := httptest.NewRequest("POST", "https://ajent.example/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+		r.Header.Set("Authorization", header)
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Accept", "application/json, text/event-stream")
+		r.Header.Set("MCP-Protocol-Version", "2025-11-25")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatalf("valid Bearer scheme rejected: HTTP %d", w.Code)
+		}
+	}
 	init := rpc(t, h, "test-token", "initialize", map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "test", "version": "1"}})
 	if init["error"] != nil {
 		t.Fatalf("initialize: %#v", init)
