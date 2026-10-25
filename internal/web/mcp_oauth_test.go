@@ -419,3 +419,84 @@ func TestMCPOAuthConsentCallbackCSP(t *testing.T) {
 	p.want(cancel, 303)
 	check(cancel)
 }
+
+// Every credential counted by consent admission must remain discoverable and
+// revocable, even if code exchange never finishes or its grant is later ended.
+func TestMCPOAuthInactiveConnectionsRemainRevocable(t *testing.T) {
+	for _, state := range []string{"unexchanged", "protocol_revoked", "inactive_agent", "transferred_workspace", "unowned_workspace"} {
+		t.Run(state, func(t *testing.T) {
+			p := newMCPFixture(t)
+			approved := p.approve(p.begin(), "", "network:read")
+			p.want(approved, http.StatusSeeOther)
+			ctx := context.Background()
+			var credential, agent string
+			if err := p.s.API.DB.Pool.QueryRow(ctx, `SELECT b.credential_id::text,c.agent_id::text FROM mcp_oauth_bindings b JOIN credentials c ON c.id=b.credential_id WHERE b.human_id=$1`, p.human).Scan(&credential, &agent); err != nil {
+				t.Fatal(err)
+			}
+			if state != "unexchanged" {
+				tokens := p.exchange(approved)
+				if state == "protocol_revoked" {
+					p.want(p.request("POST", "/oauth/revoke", url.Values{"client_id": {p.client}, "token": {tokens["access_token"].(string)}}, ""), http.StatusOK)
+				} else if state == "inactive_agent" {
+					if _, err := p.s.API.DB.Pool.Exec(ctx, `UPDATE agents SET status='suspended' WHERE id=$1`, agent); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			ownershipLost := state == "transferred_workspace" || state == "unowned_workspace"
+			const renamedWorkspace = "New owner private workspace"
+			const renamedAgent = "new-owner-private-agent"
+			if ownershipLost {
+				var owner any
+				if state == "transferred_workspace" {
+					owner = uuid.NewString()
+					if _, err := p.s.API.DB.Pool.Exec(ctx, `INSERT INTO humans(id,name) VALUES($1,'New synthetic owner')`, owner); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if _, err := p.s.API.DB.Pool.Exec(ctx, `UPDATE organizations SET human_owner_id=$1 WHERE id=$2`, owner, p.workspace); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := p.s.API.DB.Pool.Exec(ctx, `UPDATE organizations SET name=$1 WHERE id=$2`, renamedWorkspace, p.workspace); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := p.s.API.DB.Pool.Exec(ctx, `UPDATE agents SET handle=$1 WHERE id=$2`, renamedAgent, agent); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var counted int
+			count := func() int {
+				t.Helper()
+				if err := p.s.API.DB.Pool.QueryRow(ctx, `SELECT count(*) FROM mcp_oauth_bindings b JOIN credentials c ON c.id=b.credential_id WHERE b.human_id=$1 AND c.revoked_at IS NULL AND c.expires_at>now()`, p.human).Scan(&counted); err != nil {
+					t.Fatal(err)
+				}
+				return counted
+			}
+			if count() != 1 {
+				t.Fatal("connection was not counted by consent admission")
+			}
+			page := p.request("GET", "/human/connections", nil, "")
+			p.want(page, http.StatusOK)
+			if !strings.Contains(page.Body.String(), credential) || !strings.Contains(page.Body.String(), "Not connected") {
+				t.Fatal("counted connection is missing from management page or mislabeled")
+			}
+			if ownershipLost {
+				body := page.Body.String()
+				if strings.Contains(body, renamedWorkspace) || strings.Contains(body, renamedAgent) {
+					t.Fatal("connection management disclosed post-transfer tenant names")
+				}
+				if !strings.Contains(body, "Unavailable agent") || !strings.Contains(body, "Unavailable workspace") {
+					t.Fatal("connection management omitted neutral unavailable labels")
+				}
+			}
+			p.want(p.request("POST", "/human/connections/revoke", url.Values{"csrf": {p.csrf}, "connection": {credential}}, ""), http.StatusSeeOther)
+			if count() != 0 {
+				t.Fatal("disconnect did not reclaim connection quota")
+			}
+			var agents int
+			if err := p.s.API.DB.Pool.QueryRow(ctx, `SELECT count(*) FROM agents WHERE id=$1`, agent).Scan(&agents); err != nil || agents != 1 {
+				t.Fatalf("disconnect did not preserve agent: count=%d err=%v", agents, err)
+			}
+		})
+	}
+}

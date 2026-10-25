@@ -7,9 +7,9 @@ import (
 	"github.com/google/uuid"
 )
 
-type mcpConnection struct{ ID, Client, Agent, Workspace, Access, Expires string }
+type mcpConnection struct{ ID, Client, Agent, Workspace, Access, Expires, State string }
 
-var mcpConnectionsTemplate = template.Must(template.New("connections").Parse(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/human.css"><title>Ajent connections</title><body><main class="docs prose"><h1>Connections</h1><p>These applications can act through the listed agent. Revoking a connection leaves the agent and its other connections intact.</p>{{range .Connections}}<section><h2>{{.Client}}</h2><p>Agent: {{.Agent}} · Workspace: {{.Workspace}}</p><p>Permissions: {{.Access}} · Expires: {{.Expires}}</p><form method="post" action="/human/connections/revoke"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="connection" value="{{.ID}}"><button>Revoke connection</button></form></section>{{else}}<p>No active connections.</p>{{end}}<p><a href="/human/workspaces">Back to workspaces</a></p></main></body></html>`))
+var mcpConnectionsTemplate = template.Must(template.New("connections").Parse(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/human.css"><title>Ajent connections</title><body><main class="docs prose"><h1>Connections</h1><p>Each connection has its own credential. Pending or ended connections still count toward your connection limit until revoked or expired. Revoking a connection leaves the agent and its other connections intact.</p>{{range .Connections}}<section><h2>{{.Client}}</h2><p>Agent: {{.Agent}} · Workspace: {{.Workspace}}</p><p>Status: {{.State}}</p><p>Permissions: {{.Access}} · Expires: {{.Expires}}</p><form method="post" action="/human/connections/revoke"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="connection" value="{{.ID}}"><button>Revoke connection</button></form></section>{{else}}<p>No active connections.</p>{{end}}<p><a href="/human/workspaces">Back to workspaces</a></p></main></body></html>`))
 
 func (s *Server) mcpConnections(w http.ResponseWriter, r *http.Request) {
 	h := s.human(r)
@@ -17,7 +17,11 @@ func (s *Server) mcpConnections(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/human/login", 303)
 		return
 	}
-	rows, e := s.API.DB.Pool.Query(r.Context(), `SELECT b.credential_id::text,b.client_id,a.handle,o.name,array_to_string(c.scopes,', '),to_char(c.expires_at AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI UTC') FROM mcp_oauth_bindings b JOIN credentials c ON c.id=b.credential_id JOIN agents a ON a.id=c.agent_id JOIN organizations o ON o.id=a.org_id WHERE b.human_id=$1 AND c.revoked_at IS NULL AND c.expires_at>now() AND a.status='active' AND o.status='active' AND o.human_owner_id=b.human_id AND EXISTS(SELECT 1 FROM mcp_oauth_records g WHERE g.kind='grants' AND g.record->>'binding'=c.id::text AND g.expires_at>now() AND NOT (g.record ? 'revoked_at')) ORDER BY b.created_at DESC LIMIT 100`, h.ID)
+	// List every credential counted by consent admission, including abandoned
+	// exchanges and ended grants, so the owner can always reclaim its slot.
+	// Credential custody does not grant access to mutable tenant names after
+	// workspace ownership changes (including removal of the owner).
+	rows, e := s.API.DB.Pool.Query(r.Context(), `SELECT b.credential_id::text,b.client_id,CASE WHEN o.human_owner_id IS DISTINCT FROM b.human_id THEN 'Unavailable agent' ELSE a.handle END,CASE WHEN o.human_owner_id IS DISTINCT FROM b.human_id THEN 'Unavailable workspace' ELSE o.name END,array_to_string(c.scopes,', '),to_char(c.expires_at AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI UTC'),CASE WHEN a.status='active' AND o.status='active' AND o.human_owner_id=b.human_id AND EXISTS(SELECT 1 FROM mcp_oauth_records g WHERE g.kind='grants' AND g.record->>'binding'=c.id::text AND g.expires_at>now() AND NOT (g.record ? 'revoked_at')) THEN 'Connected' ELSE 'Not connected' END FROM mcp_oauth_bindings b JOIN credentials c ON c.id=b.credential_id JOIN agents a ON a.id=c.agent_id JOIN organizations o ON o.id=a.org_id WHERE b.human_id=$1 AND c.revoked_at IS NULL AND c.expires_at>now() ORDER BY b.created_at DESC LIMIT 100`, h.ID)
 	if e != nil {
 		http.Error(w, "Connections unavailable", 503)
 		return
@@ -25,7 +29,7 @@ func (s *Server) mcpConnections(w http.ResponseWriter, r *http.Request) {
 	var list []mcpConnection
 	for rows.Next() {
 		var v mcpConnection
-		if e = rows.Scan(&v.ID, &v.Client, &v.Agent, &v.Workspace, &v.Access, &v.Expires); e != nil {
+		if e = rows.Scan(&v.ID, &v.Client, &v.Agent, &v.Workspace, &v.Access, &v.Expires, &v.State); e != nil {
 			break
 		}
 		list = append(list, v)
