@@ -1,3 +1,5 @@
+github.com/ajent-social/go v0.0.0-20260924042100-b90bbb417d9d h1:OzMyk95hLPoZWGYrxft//0bCqNC+CrZLQZc3PPAt9Gg=
+github.com/ajent-social/go v0.0.0-20260924042100-b90bbb417d9d/go.mod h1:0czSRP9Iw+EtLdm+9Kdtn7aMnIyXCLzGEHMS4qO5wEE=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
