@@ -15,10 +15,12 @@ SPEC.loader.exec_module(MODULE)
 
 
 def secret_event():
-    old = {"id": "production-release:PULUMI_ACCESS_TOKEN",
+    old = {"id": "production-release:PULUMI_ACCESS_TOKEN", "urn": MODULE.TOKEN_URN,
            "inputs": {"repository": "production-release", "secretName": "PULUMI_ACCESS_TOKEN", "plaintextValue": "[secret]"}}
+    new = copy.deepcopy(old)
+    new["id"] = ""  # Actual Pulumi 3.226 planned-update state shape.
     return {"resourcePreEvent": {"metadata": {"op": "update", "urn": MODULE.TOKEN_URN,
-            "type": MODULE.TOKEN_TYPE, "old": old, "new": copy.deepcopy(old),
+            "type": MODULE.TOKEN_TYPE, "old": old, "new": new,
             "diffs": ["plaintextValue"], "detailedDiff": {"plaintextValue": {"kind": "update"}}}}}
 
 
@@ -135,7 +137,7 @@ class TokenTests(unittest.TestCase):
         event = secret_event()
         stack = {"resourcePreEvent": {"metadata": {"op": "update", "type": "pulumi:pulumi:Stack", "urn": "urn:pulumi:production::ajent-release-executor::pulumi:pulumi:Stack::ajent-release-executor-production"}}}
         MODULE.verify_preview(preview(stack, event))
-        for mutation in ("create", "foreign", "repository", "property", "id"):
+        for mutation in ("create", "foreign", "repository", "property", "id", "old_id", "old_urn", "new_urn", "missing_old_urn", "missing_new_urn", "detailed_property"):
             changed = copy.deepcopy(event)
             metadata = changed["resourcePreEvent"]["metadata"]
             if mutation == "create": metadata["op"] = "create"
@@ -143,8 +145,25 @@ class TokenTests(unittest.TestCase):
             if mutation == "repository": metadata["new"]["inputs"]["repository"] = "another"
             if mutation == "property": metadata["diffs"].append("secretName")
             if mutation == "id": metadata["new"]["id"] = "other"
+            if mutation == "old_id": metadata["old"]["id"] = "other"
+            if mutation == "old_urn": metadata["old"]["urn"] += "-other"
+            if mutation == "new_urn": metadata["new"]["urn"] += "-other"
+            if mutation == "missing_old_urn": metadata["old"].pop("urn")
+            if mutation == "missing_new_urn": metadata["new"].pop("urn")
+            if mutation == "detailed_property": metadata["detailedDiff"]["secretName"] = {"kind": "update"}
             with self.subTest(mutation=mutation), self.assertRaises(MODULE.TokenError):
                 MODULE.verify_preview(preview(changed))
+
+    def test_preview_accepts_empty_absent_or_unchanged_planned_id(self):
+        for planned_id in ("", None, "production-release:PULUMI_ACCESS_TOKEN"):
+            event = secret_event()
+            new = event["resourcePreEvent"]["metadata"]["new"]
+            if planned_id is None:
+                new.pop("id")
+            else:
+                new["id"] = planned_id
+            with self.subTest(planned_id=planned_id):
+                MODULE.verify_preview(preview(event))
 
     def test_secret_uses_stdin_and_saved_plan_apply(self):
         commands = []

@@ -128,8 +128,15 @@ def verify_preview(events):
                 raise TokenError("Preview changes a resource outside the existing release secret")
             old = metadata.get("old") or {}
             new = metadata.get("new") or {}
-            if not old.get("id") or old.get("id") != new.get("id"):
-                raise TokenError("Preview must update the same existing secret")
+            expected_id = "production-release:PULUMI_ACCESS_TOKEN"
+            if old.get("id") != expected_id:
+                raise TokenError("Preview must update the expected existing secret")
+            if old.get("urn") != TOKEN_URN or new.get("urn") != TOKEN_URN:
+                raise TokenError("Preview secret state URNs do not match release custody")
+            # Pulumi previews leave the planned state ID empty until the
+            # provider update executes. A populated ID must retain identity.
+            if new.get("id") not in (None, "", expected_id):
+                raise TokenError("Preview changes the existing secret identity")
             old_inputs, new_inputs = dict(old.get("inputs") or {}), dict(new.get("inputs") or {})
             if "plaintextValue" not in old_inputs or "plaintextValue" not in new_inputs:
                 raise TokenError("Secret preview omitted plaintextValue inputs")
