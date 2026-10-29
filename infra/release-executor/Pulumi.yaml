@@ -26,6 +26,10 @@
       "type": "string",
       "secret": true,
       "default": "disabled"
+    },
+    "sourceAppClientId": {
+      "type": "string",
+      "default": "disabled"
     }
   },
   "resources": {
@@ -583,6 +587,17 @@
         "repository": "${releaseRepository.name}",
         "secretName": "PULUMI_ACCESS_TOKEN",
         "plaintextValue": "${pulumiAccessToken}"
+      },
+      "options": {
+        "provider": "${githubProvider}"
+      }
+    },
+    "variableAJENT_SOURCE_APP_CLIENT_ID": {
+      "type": "github:index/actionsVariable:ActionsVariable",
+      "properties": {
+        "repository": "${releaseRepository.name}",
+        "variableName": "AJENT_SOURCE_APP_CLIENT_ID",
+        "value": "${sourceAppClientId}"
       },
       "options": {
         "provider": "${githubProvider}"

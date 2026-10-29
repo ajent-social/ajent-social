@@ -56,8 +56,12 @@ jobs:
         shell: bash
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          AJENT_SOURCE_APP_CLIENT_ID: ${{ vars.AJENT_SOURCE_APP_CLIENT_ID }}
+          AJENT_SOURCE_APP_PRIVATE_KEY: ${{ secrets.AJENT_SOURCE_APP_PRIVATE_KEY }}
         run: |
           set -euo pipefail
+          [[ -n "$AJENT_SOURCE_APP_CLIENT_ID" && "$AJENT_SOURCE_APP_CLIENT_ID" != disabled ]] || { echo 'Configure the scoped source App client ID.' >&2; exit 1; }
+          [[ -n "$AJENT_SOURCE_APP_PRIVATE_KEY" ]] || { echo 'Configure the scoped source App private key.' >&2; exit 1; }
           [[ "$AJENT_SOURCE_REVISION" =~ ^[a-f0-9]{40}$ ]] || { echo 'Exact source SHA required.' >&2; exit 1; }
           [[ "$GITHUB_REPOSITORY" == "ajent-social/production-release" ]] || exit 1
           [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo 'Releases must use main.' >&2; exit 1; }
@@ -67,9 +71,21 @@ jobs:
           [[ -n "$PULUMI_STACK" ]] || { echo 'Configure the PULUMI_STACK repository variable.' >&2; exit 1; }
           [[ -n "${{ vars.AJENT_IMAGE_BUILD_ROLE_ARN }}" && -n "${{ vars.AJENT_IMAGE_BUILD_PROJECT }}" && -n "${{ vars.AJENT_RELEASE_SOURCE_BUCKET }}" ]] || { echo 'Configure the isolated CodeBuild release executor variables.' >&2; exit 1; }
 
+      - name: Create scoped source-read token
+        id: source-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.AJENT_SOURCE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AJENT_SOURCE_APP_PRIVATE_KEY }}
+          owner: ajent-social
+          repositories: ajent-social
+          permission-contents: read
+          permission-actions: read
+
       - uses: actions/checkout@v4
         with:
           repository: ajent-social/ajent-social
+          token: ${{ steps.source-token.outputs.token }}
           ref: ${{ inputs.source_revision }}
           fetch-depth: 0
 
@@ -83,7 +99,7 @@ jobs:
 
       - name: Require successful main CI for this commit
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.source-token.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -217,6 +233,30 @@ jobs:
           aws-region: us-west-2
           role-session-name: ajent-production-release-${{ github.run_id }}
           unset-current-credentials: true
+
+      # GitHub App installation tokens expire after one hour. Refresh checkout
+      # credentials after the provider compile and CodeBuild wait; preserve the
+      # ignored, encrypted Pulumi.production.yaml restored above.
+      - name: Refresh scoped source-read token before deployment
+        id: source-token-refresh
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.AJENT_SOURCE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AJENT_SOURCE_APP_PRIVATE_KEY }}
+          owner: ajent-social
+          repositories: ajent-social
+          permission-contents: read
+          permission-actions: read
+
+      - name: Refresh exact source checkout credentials
+        uses: actions/checkout@v4
+        with:
+          repository: ajent-social/ajent-social
+          token: ${{ steps.source-token-refresh.outputs.token }}
+          ref: ${{ inputs.source_revision }}
+          fetch-depth: 0
+          clean: false
+          persist-credentials: true
 
       - name: Apply release and wait for rollout
         env:

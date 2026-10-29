@@ -19,6 +19,31 @@ the private workflow is the single release scheduler. The launcher verifies
 both the reviewed control SHA and the independently CI-approved application
 SHA. The checked-in workflow template is `runners/release/workflow.yml`.
 
+The private control workflow reads application source through a dedicated GitHub
+App installed only on `ajent-social/ajent-social`, with Contents read and Actions
+read (Metadata read is implicit). Its installation token performs both exact-SHA
+checkout and source-main CI lookup. The workflow requests only those read
+permissions and that one repository; it does not fall back to the public repo's
+`GITHUB_TOKEN`, a personal source token, or a deployment credential. The App
+neither changes nor grants AWS access.
+
+IaC owns only the public App client-ID metadata: private-key material is not a
+Pulumi input or resource. Set `sourceAppClientId` to the authorized App client ID;
+IaC projects it to the private control repo's `AJENT_SOURCE_APP_CLIENT_ID` Actions
+variable. The default `disabled` value stops releases. Provision the App private
+key out of band, through the separately authorized secure provisioning helper,
+ONLY into the private control repo secret `AJENT_SOURCE_APP_PRIVATE_KEY`. Never
+put the key in Pulumi config/state, source, argv, receipts, or public-repo secrets.
+The workflow checks that both inputs exist before checkout without printing them.
+
+Installation tokens expire after one hour. Immediately before deployment the
+workflow mints a second scoped token and repeats checkout of the same application
+SHA with `fetch-depth: 0`, `clean: false`, and persisted refreshed credentials.
+This keeps the restored, ignored encrypted `infra/Pulumi.production.yaml` while
+allowing `scripts/deploy.sh` to fetch current main after lengthy infrastructure
+compilation and CodeBuild. Both token actions retain their default post-job
+revocation; there is no long-lived source bearer token on the runner.
+
 The task has no IAM task role, no inbound access and HTTPS-only egress. Its
 execution role can pull only the runner image, write logs and read only the
 one-use JIT parameter. Workflow OIDC trust permits only the control repo main
