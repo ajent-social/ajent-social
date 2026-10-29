@@ -26,7 +26,9 @@ permissions:
 jobs:
   release:
     if: github.ref == 'refs/heads/main' && inputs.confirm_production
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - ${{ format('ajent-release-{0}', github.run_id) }}
     timeout-minutes: 180
     permissions:
       actions: read
@@ -41,7 +43,7 @@ jobs:
       GOMAXPROCS: '1'
       GOFLAGS: '-p=1'
       GOGC: '20'
-      GOMEMLIMIT: '5GiB'
+      GOMEMLIMIT: '8GiB'
 
     steps:
       - name: Validate release configuration
@@ -55,6 +57,7 @@ jobs:
           [[ -n "$AWS_DEPLOY_ROLE_ARN" ]] || { echo 'Configure the AWS_DEPLOY_ROLE_ARN repository variable.' >&2; exit 1; }
           [[ -n "$PULUMI_ACCESS_TOKEN" ]] || { echo 'Configure the PULUMI_ACCESS_TOKEN repository secret.' >&2; exit 1; }
           [[ -n "$PULUMI_STACK" ]] || { echo 'Configure the PULUMI_STACK repository variable.' >&2; exit 1; }
+          [[ -n "${{ vars.AJENT_IMAGE_BUILD_ROLE_ARN }}" && -n "${{ vars.AJENT_IMAGE_BUILD_PROJECT }}" && -n "${{ vars.AJENT_RELEASE_SOURCE_BUCKET }}" ]] || { echo 'Configure the isolated CodeBuild release executor variables.' >&2; exit 1; }
 
       - uses: actions/checkout@v4
         with:
@@ -89,8 +92,6 @@ jobs:
         with:
           go-version-file: infra/go.mod
           cache: false
-
-      - uses: docker/setup-qemu-action@v3
 
       - name: Configure AWS credentials with OIDC
         uses: aws-actions/configure-aws-credentials@v6
@@ -163,18 +164,48 @@ jobs:
           # A provider-registration change must not mutate unrelated resources.
           pulumi -C infra preview --stack "$PULUMI_STACK" --refresh=false --expect-no-changes
 
-      - name: Publish tested ARM64 image
-        id: image
-        shell: bash
+      - name: Read production image repository
+        id: repository
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: printf 'url=%s\n' "$(pulumi -C infra stack output repositoryUrl --stack "$PULUMI_STACK")" >> "$GITHUB_OUTPUT"
+
+      - name: Use isolated image-build credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AJENT_IMAGE_BUILD_ROLE_ARN }}
+          aws-region: us-west-2
+          role-session-name: ajent-image-build-${{ github.run_id }}
+          unset-current-credentials: true
+
+      - name: Publish tested ARM64 image with CodeBuild
+        id: image
+        shell: bash
         run: |
           set -euo pipefail
-          log="$RUNNER_TEMP/publish-image.log"
-          scripts/publish-image.sh "$PULUMI_STACK" | tee "$log"
-          digest=$(sed -n 's/^Verified image pushed\. Configure imageDigest: //p' "$log")
-          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo 'Image publisher did not return an immutable digest.' >&2; exit 1; }
+          set +e
+          digest=$(python3 scripts/codebuild-image.py \
+            --project "${{ vars.AJENT_IMAGE_BUILD_PROJECT }}" \
+            --bucket "${{ vars.AJENT_RELEASE_SOURCE_BUCKET }}" \
+            --repository "${{ steps.repository.outputs.url }}" \
+            --revision "$GITHUB_SHA" \
+            --receipt "$RUNNER_TEMP/codebuild-image-receipt.json")
+          result=$?
+          set -e
+          if [[ -f "$RUNNER_TEMP/codebuild-image-receipt.json" ]]; then
+            aws s3 cp "$RUNNER_TEMP/codebuild-image-receipt.json" "s3://${{ vars.AJENT_RELEASE_SOURCE_BUCKET }}/sources/receipts/${{ github.run_id }}.json" --only-show-errors
+          fi
+          [[ "$result" == 0 ]] || exit "$result"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo 'CodeBuild did not return an immutable image digest.' >&2; exit 1; }
           printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Restore production rollout credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-west-2
+          role-session-name: ajent-production-release-${{ github.run_id }}
+          unset-current-credentials: true
 
       - name: Apply release and wait for rollout
         env:
