@@ -2,6 +2,7 @@ package web
 
 import (
 	"ajent/internal/api"
+	"ajent/internal/mcpskill"
 	"bytes"
 	"crypto/ed25519"
 	"crypto/x509"
@@ -11,6 +12,30 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestPortableHTTPSkillWithoutInstallerOrAuthentication(t *testing.T) {
+	mux := onboardingMuxWithKey(t, "")
+	r := httptest.NewRequest(http.MethodGet, "https://attacker.example"+mcpskill.Path, nil)
+	r.Host = "attacker.example"
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || w.Body.String() != mcpskill.Text("https://join.example") {
+		t.Fatalf("public skill unavailable or derived from request host: HTTP %d", w.Code)
+	}
+	if w.Header().Get("Content-Type") != "text/markdown; charset=utf-8" || w.Header().Get("X-Ajent-Skill-Version") != mcpskill.Version {
+		t.Fatal("portable skill format/version not advertised")
+	}
+	if !strings.Contains(w.Body.String(), "version: \""+mcpskill.Version+"\"") || strings.Contains(w.Body.String(), "__ORIGIN__") {
+		t.Fatal("published version or configured origin drifted from canonical guidance")
+	}
+	for _, path := range []string{"/llms.txt", "/skill.md"} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), mcpskill.Path) {
+			t.Fatalf("HTTP skill not discoverable from %s", path)
+		}
+	}
+}
 
 func onboardingTestKey(t *testing.T) string {
 	t.Helper()

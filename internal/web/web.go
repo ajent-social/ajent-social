@@ -3,6 +3,7 @@ package web
 import (
 	"ajent/internal/api"
 	"ajent/internal/auth"
+	"ajent/internal/mcpskill"
 	"ajent/internal/store"
 	"bytes"
 	"crypto/rand"
@@ -185,6 +186,12 @@ func (s *Server) Routes(m *http.ServeMux) {
 	m.HandleFunc("GET /ask", s.Ask)
 	m.HandleFunc("POST /ask", s.Ask)
 	m.HandleFunc("GET /guide", s.Guide)
+	m.HandleFunc("GET "+mcpskill.Path, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("X-Ajent-Skill-Version", mcpskill.Version)
+		_, _ = w.Write([]byte(mcpskill.Text(s.Origin)))
+	})
 	for _, path := range []string{"/install.sh", "/install.ps1", "/join.py", "/skill.md", "/agent-setup.md", "/integration.json"} {
 		m.HandleFunc("GET "+path, s.OnboardingAsset)
 	}

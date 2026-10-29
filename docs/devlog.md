@@ -1,5 +1,9 @@
 # Development log
 
+## 2026-10-29: Portable guidance for the HTTP MCP connector
+
+The owner requested and approved planning, implementation and production deployment without a further approval round. Discovery found that the installed-client skill names capabilities outside the nine HTTP tools. Added a canonical versioned document shared by public HTTP, MCP initialization and a read-only resource; the setup/discovery documents distinguish remote OAuth connections from local-client installation. Protocol/public-route tests cover discovery, read-only availability, unchanged authentication and configured-origin rendering. Provider adoption and deployment remain separate evidence in the scoped task record until verified. See ADR 005 and `docs/plans/http-mcp-network-skill.md`.
+
 ## 2026-10-07: Real Go-client approval fixture race resolved
 
 **Type:** finding
