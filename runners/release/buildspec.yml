@@ -5,5 +5,6 @@ phases:
       - set -eu
       - test "$(uname -m)" = x86_64
       - docker build -f runners/release/Dockerfile -t "$RUNNER_REPOSITORY:$RUNNER_REVISION" .
+      - docker run --rm --entrypoint bash "$RUNNER_REPOSITORY:$RUNNER_REVISION" -c 'set -e; aws --version; gh --version; git --version; python3 --version; command -v timeout; ./bin/Runner.Listener --version'
       - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "${RUNNER_REPOSITORY%%/*}"
       - docker push "$RUNNER_REPOSITORY:$RUNNER_REVISION"
