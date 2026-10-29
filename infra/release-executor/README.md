@@ -31,7 +31,10 @@ they cannot deploy production or read application secrets. Generic PR runners
 are unchanged.
 
 JIT configuration enters encrypted Pulumi config through stdin and SSM as a
-SecureString. Never put it in ECS overrides, logs or receipts. The runner API
+SecureString in the Advanced tier: the observed 4,124-character JIT config
+exceeds the Standard 4,096-character limit and fits the 8,192-character limit.
+This one parameter costs about $0.05/month plus applicable API usage; account
+defaults and permissions are unchanged. Never put it in ECS overrides, logs or receipts. The runner API
 requires its encoded one-use configuration at startup. The launcher disables
 the parameter after the attempt. Old SSM versions may hold expired/consumed
 JIT configurations. Source archives include only committed files plus a source
