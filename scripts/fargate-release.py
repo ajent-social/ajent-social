@@ -169,19 +169,24 @@ def validate_preconditions(repo, revision, control_revision):
         raise ValueError("Control repository must be private with forking disabled")
     if gh(f"repos/{CONTROL_REPO}/commits/main").get("sha") != control_revision:
         raise ValueError("Selected control revision must remain current main")
-    baseline = set()
-    for candidate in (repo, CONTROL_REPO):
-        releases = workflow_runs(candidate, "release.yml")
-        if any(run.get("status") != "completed" for run in releases):
-            raise ValueError("An existing release is active; reconcile it first")
-        # Old queued work must not disappear behind 100 newer completed runs.
-        for status in ("queued", "in_progress", "waiting", "requested", "pending"):
-            active = gh(f"repos/{candidate}/actions/workflows/release.yml/runs?status={status}&per_page=1")
-            if active.get("workflow_runs"):
-                raise ValueError("An existing release is active; reconcile it first")
-        if candidate == CONTROL_REPO:
-            baseline = {run["id"] for run in releases}
-    return baseline
+    # The legacy public workflow is removed during migration. Query repository
+    # runs by path so a deleted workflow's filename endpoint is not required.
+    for status in ("queued", "in_progress", "waiting", "requested", "pending"):
+        active = gh(f"repos/{repo}/actions/runs?status={status}&per_page=100")
+        runs = active.get("workflow_runs", [])
+        if active.get("total_count", len(runs)) > len(runs):
+            raise ValueError("Legacy release check is incomplete; reconcile active runs")
+        if any(run.get("path", "").split("@", 1)[0] == ".github/workflows/release.yml" for run in runs):
+            raise ValueError("A legacy application release is active; reconcile it first")
+    releases = workflow_runs(CONTROL_REPO, "release.yml")
+    if any(run.get("status") != "completed" for run in releases):
+        raise ValueError("An existing control release is active; reconcile it first")
+    # Old queued work must not disappear behind 100 newer completed runs.
+    for status in ("queued", "in_progress", "waiting", "requested", "pending"):
+        active = gh(f"repos/{CONTROL_REPO}/actions/workflows/release.yml/runs?status={status}&per_page=1")
+        if active.get("workflow_runs"):
+            raise ValueError("An existing control release is active; reconcile it first")
+    return {run["id"] for run in releases}
 
 
 def matching_dispatch(runs, baseline, revision, requested_at):
