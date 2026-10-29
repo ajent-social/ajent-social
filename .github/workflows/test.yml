@@ -37,6 +37,8 @@ jobs:
       - run: go test -vet=off -v ./...
         working-directory: infra
       - run: python3 -m unittest discover -s infra/tests -p '*_test.py'
+      - run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - run: python3 -m unittest discover -s infra/release-executor/tests -p 'test_*.py'
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
         working-directory: infra
       - uses: actions/setup-node@v4
@@ -44,7 +46,7 @@ jobs:
           node-version: '22'
       - run: node --test public-site/worker.test.mjs public-site/wiki/wiki.test.mjs
       - run: node public-site/wiki/build-app.mjs --check
-      - run: shellcheck scripts/container-smoke.sh scripts/publish-image.sh internal/web/onboarding/install.sh scripts/test-dns-browser.sh
+      - run: shellcheck scripts/aws-release-build.sh runners/release/entrypoint.sh scripts/container-smoke.sh scripts/publish-image.sh internal/web/onboarding/install.sh scripts/test-dns-browser.sh
       - uses: actions/cache/save@v4
         if: always()
         with:
