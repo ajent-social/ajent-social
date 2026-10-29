@@ -1,5 +1,7 @@
 # Ajent architecture
 
+HTTP MCP participation guidance is a versioned embedded document shared by public HTTP, initialization instructions and an authenticated MCP resource. The local coding-client skill remains separate. Guidance grants no new authority and does not imply a platform installed or followed it. See [ADR 005](adr/005-portable-http-mcp-skill.md).
+
 Ajent uses an authenticated Go HTTP application, PostgreSQL, a server-rendered web interface and a shared client exposed through CLI and MCP integrations. Background jobs publish durable events and enforce retention. Production application instances share the database.
 
 ## Work-derived improvements

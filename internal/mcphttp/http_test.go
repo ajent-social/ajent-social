@@ -3,6 +3,7 @@ package mcphttp
 import (
 	"ajent/internal/api"
 	"ajent/internal/auth"
+	"ajent/internal/mcpskill"
 	"ajent/internal/store"
 	"ajent/migrations"
 	"context"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +26,58 @@ type testAuthority struct {
 	revoked bool
 	calls   int
 	db      *store.Store
+}
+
+func TestPortableSkillDiscovery(t *testing.T) {
+	h := New(api.New(nil), &testAuthority{}, "https://ajent.example")
+	// Guidance may name exactly the supported HTTP tools, including write tools
+	// a read-only connection will not see. Installed-client-only tools cannot leak in.
+	mentioned := map[string]bool{}
+	for _, name := range regexp.MustCompile(`ajent_[a-z_]+`).FindAllString(mcpskill.Text("https://ajent.example"), -1) {
+		mentioned[name] = true
+	}
+	full := rpc(t, h, "test-token", "tools/list", nil)["result"].(map[string]any)["tools"].([]any)
+	if len(full) != 9 || len(mentioned) != len(full) {
+		t.Fatalf("guidance/catalog mismatch: %d tools, %d mentioned", len(full), len(mentioned))
+	}
+	for _, tool := range full {
+		if !mentioned[tool.(map[string]any)["name"].(string)] {
+			t.Fatal("HTTP tool absent from guidance")
+		}
+	}
+	for _, token := range []string{"test-token", "read-token"} {
+		t.Run(token, func(t *testing.T) {
+			init := rpc(t, h, token, "initialize", map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "skill-test", "version": "1"}})
+			result := init["result"].(map[string]any)
+			if result["instructions"] != mcpskill.Text("https://ajent.example") {
+				t.Fatal("initialization did not provide the complete canonical skill")
+			}
+			if result["capabilities"].(map[string]any)["resources"] == nil {
+				t.Fatal("resource capability missing")
+			}
+			list := rpc(t, h, token, "resources/list", nil)["result"].(map[string]any)["resources"].([]any)
+			if len(list) != 1 || list[0].(map[string]any)["uri"] != mcpskill.ResourceURI {
+				t.Fatalf("unexpected skill catalog: %#v", list)
+			}
+			read := rpc(t, h, token, "resources/read", map[string]any{"uri": mcpskill.ResourceURI})
+			contents := read["result"].(map[string]any)["contents"].([]any)
+			if len(contents) != 1 || contents[0].(map[string]any)["text"] != result["instructions"] || contents[0].(map[string]any)["mimeType"] != "text/markdown" {
+				t.Fatalf("resource differs from initialization skill: %#v", contents)
+			}
+			unknown := rpc(t, h, token, "resources/read", map[string]any{"uri": "https://untrusted.example/instructions"})
+			if unknown["error"] == nil {
+				t.Fatal("unregistered resource unexpectedly accepted")
+			}
+		})
+	}
+	// The skill is public over HTTP, but resources keep the connection's auth gate.
+	r := httptest.NewRequest("POST", "https://ajent.example/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"ajent://skills/http-network/v1"}}`))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusUnauthorized || !strings.Contains(w.Header().Get("WWW-Authenticate"), "resource_metadata=") {
+		t.Fatal("resource discovery bypassed the existing OAuth challenge")
+	}
 }
 
 func (a *testAuthority) MCPVerify(ctx context.Context, token string) (store.Credential, error) {
