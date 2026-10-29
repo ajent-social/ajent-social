@@ -1,8 +1,13 @@
 name: Production release
+run-name: Ajent production ${{ inputs.source_revision }}
 
 on:
   workflow_dispatch:
     inputs:
+      source_revision:
+        description: Exact CI-approved current main commit of ajent-social/ajent-social
+        required: true
+        type: string
       confirm_production:
         description: Confirm that this run should release the selected main commit to production
         required: true
@@ -38,6 +43,7 @@ jobs:
       AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
       PULUMI_STACK: ${{ vars.PULUMI_STACK }}
       AWS_REGION: us-west-2
+      AJENT_SOURCE_REVISION: ${{ inputs.source_revision }}
       # Keep the full production provider SDK compile within runner memory.
       # These are build limits; production previews retain the real providers.
       GOMAXPROCS: '1'
@@ -52,6 +58,8 @@ jobs:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
+          [[ "$AJENT_SOURCE_REVISION" =~ ^[a-f0-9]{40}$ ]] || { echo 'Exact source SHA required.' >&2; exit 1; }
+          [[ "$GITHUB_REPOSITORY" == "ajent-social/production-release" ]] || exit 1
           [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo 'Releases must use main.' >&2; exit 1; }
           [[ "${{ inputs.confirm_production }}" == "true" ]] || { echo 'Production confirmation is required.' >&2; exit 1; }
           [[ -n "$AWS_DEPLOY_ROLE_ARN" ]] || { echo 'Configure the AWS_DEPLOY_ROLE_ARN repository variable.' >&2; exit 1; }
@@ -61,14 +69,17 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
+          repository: ajent-social/ajent-social
+          ref: ${{ inputs.source_revision }}
           fetch-depth: 0
 
       - name: Require selected commit to remain current main
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$AJENT_SOURCE_REVISION" ]] || exit 1
           git fetch origin main
-          [[ "$(git rev-parse origin/main)" == "$GITHUB_SHA" ]] || { echo 'Main advanced after this run was selected; dispatch the current main commit.' >&2; exit 1; }
+          [[ "$(git rev-parse origin/main)" == "$AJENT_SOURCE_REVISION" ]] || { echo 'Main advanced after this run was selected; dispatch the current main commit.' >&2; exit 1; }
 
       - name: Require successful main CI for this commit
         env:
@@ -76,8 +87,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test.yml --commit "$GITHUB_SHA" --json status,conclusion,event,headSha --limit 20 \
-            | jq -c '[.[] | select(.event == "push" and .headSha == env.GITHUB_SHA)][0]')
+          run=$(gh run list --repo "ajent-social/ajent-social" --workflow test.yml --commit "$AJENT_SOURCE_REVISION" --json status,conclusion,event,headSha --limit 20 \
+            | jq -c '[.[] | select(.event == "push" and .headSha == env.AJENT_SOURCE_REVISION)][0]')
           [[ "$run" != "null" ]] || { echo 'No main push CI run was found for this commit.' >&2; exit 1; }
           [[ "$(jq -r .status <<<"$run")" == "completed" && "$(jq -r .conclusion <<<"$run")" == "success" ]] || {
             echo 'The main push CI run for this commit has not succeeded.' >&2
@@ -188,7 +199,7 @@ jobs:
             --project "${{ vars.AJENT_IMAGE_BUILD_PROJECT }}" \
             --bucket "${{ vars.AJENT_RELEASE_SOURCE_BUCKET }}" \
             --repository "${{ steps.repository.outputs.url }}" \
-            --revision "$GITHUB_SHA" \
+            --revision "$AJENT_SOURCE_REVISION" \
             --receipt "$RUNNER_TEMP/codebuild-image-receipt.json")
           result=$?
           set -e
