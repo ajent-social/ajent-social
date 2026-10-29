@@ -19,8 +19,14 @@ class CredentialBoundaries(unittest.TestCase):
         statements = json.loads(RESOURCES['imageBuildRole']['properties']['assumeRolePolicy'])['Statement']
         self.assertEqual(len(statements), 1)
         condition = statements[0]['Condition']['StringEquals']
-        self.assertEqual(condition['token.actions.githubusercontent.com:sub'],
-                         'repo:ajent-social@325803062/ajent-social@1359554173:ref:refs/heads/main')
+        subjects = condition['token.actions.githubusercontent.com:sub']
+        self.assertEqual(subjects, [
+            'repo:ajent-social/production-release:ref:refs/heads/main',
+            'repo:ajent-social@325803062/production-release@${releaseRepositoryId}:ref:refs/heads/main',
+        ])
+        repo = RESOURCES['releaseRepository']['properties']
+        self.assertEqual(repo['visibility'], 'private')
+        self.assertFalse(repo['allowForking'])
         self.assertEqual(condition['token.actions.githubusercontent.com:aud'], 'sts.amazonaws.com')
 
     def test_no_builder_can_deploy_or_read_runtime_secrets(self):
@@ -31,6 +37,14 @@ class CredentialBoundaries(unittest.TestCase):
                     self.assertNotIn(action.split(':')[0], ('iam', 'autoscaling', 'ec2', 'secretsmanager', 'kms'))
                 if name != 'executionPolicy':
                     self.assertFalse(any(a.startswith('ssm:') for a in statement['Action']))
+
+    def test_rollout_identity_uses_approved_existing_permissions(self):
+        expected = json.loads((Path(__file__).resolve().parents[1] / 'deploy-policy.json').read_text())
+        actual = json.loads(RESOURCES['deploymentPolicy']['properties']['policy'])
+        self.assertEqual(actual, expected)
+        actions = [a for entry in actual['Statement'] for a in entry['Action']]
+        self.assertNotIn('secretsmanager:GetSecretValue', actions)
+        self.assertNotIn('iam:UpdateAssumeRolePolicy', actions)
 
     def test_sources_are_private_versioned_and_expiring(self):
         self.assertEqual(RESOURCES['sourceVersioning']['properties']['versioningConfiguration']['status'], 'Enabled')

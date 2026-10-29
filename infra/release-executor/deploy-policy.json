@@ -1,0 +1,164 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "ecr:GetAuthorizationToken"
+      ],
+      "Effect": "Allow",
+      "Resource": "*",
+      "Sid": "ECRAuthorization"
+    },
+    {
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:CompleteLayerUpload",
+        "ecr:DescribeImages",
+        "ecr:InitiateLayerUpload",
+        "ecr:PutImage",
+        "ecr:UploadLayerPart"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "ajent"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:ecr:us-west-2:394824061124:repository/application-images-*",
+      "Sid": "AjentImagePublish"
+    },
+    {
+      "Action": [
+        "ec2:CreateLaunchTemplateVersion"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "ajent"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:ec2:us-west-2:394824061124:launch-template/*",
+      "Sid": "AjentLaunchTemplateVersion"
+    },
+    {
+      "Action": [
+        "ec2:RunInstances"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "ec2:LaunchTemplate": "arn:aws:ec2:us-west-2:394824061124:launch-template/lt-053e4c8f50d1233a3"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:ec2:us-west-2:394824061124:network-interface/*",
+        "arn:aws:ec2:us-west-2:394824061124:instance/*",
+        "arn:aws:ec2:us-west-2:394824061124:volume/*"
+      ],
+      "Sid": "AjentTemplateLaunchResources"
+    },
+    {
+      "Action": [
+        "ec2:RunInstances"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "ec2:LaunchTemplate": "arn:aws:ec2:us-west-2:394824061124:launch-template/lt-053e4c8f50d1233a3"
+        },
+        "Bool": {
+          "ec2:IsLaunchTemplateResource": "true"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:ec2:us-west-2::image/*",
+        "arn:aws:ec2:us-west-2:394824061124:security-group/*"
+      ],
+      "Sid": "AjentTemplateReferencedResources"
+    },
+    {
+      "Action": [
+        "ec2:RunInstances"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "ajent"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:ec2:us-west-2:394824061124:launch-template/lt-053e4c8f50d1233a3",
+      "Sid": "AjentTemplateLaunchAdmission"
+    },
+    {
+      "Action": [
+        "ec2:RunInstances"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "ec2:LaunchTemplate": "arn:aws:ec2:us-west-2:394824061124:launch-template/lt-053e4c8f50d1233a3"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:ec2:us-west-2:394824061124:subnet/subnet-048cd741f2c9b711b",
+        "arn:aws:ec2:us-west-2:394824061124:subnet/subnet-02e4ab41794425c49"
+      ],
+      "Sid": "AjentFleetSubnetLaunchAdmission"
+    },
+    {
+      "Action": [
+        "autoscaling:UpdateAutoScalingGroup"
+      ],
+      "Condition": {
+        "Bool": {
+          "autoscaling:LaunchTemplateVersionSpecified": "true"
+        },
+        "StringEquals": {
+          "aws:ResourceTag/Project": "ajent"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:autoscaling:us-west-2:394824061124:autoScalingGroup:*:autoScalingGroupName/application-fleet-*",
+      "Sid": "AjentAutoscalingGroupUpdate"
+    },
+    {
+      "Action": [
+        "autoscaling:StartInstanceRefresh"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "ajent"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:autoscaling:us-west-2:394824061124:autoScalingGroup:*:autoScalingGroupName/application-fleet-*",
+      "Sid": "AjentStartInstanceRefresh"
+    },
+    {
+      "Action": [
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:DescribeInstanceRefreshes",
+        "ec2:DescribeAvailabilityZones",
+        "ec2:DescribeLaunchTemplates",
+        "ec2:DescribeLaunchTemplateVersions",
+        "elasticloadbalancing:DescribeTargetHealth"
+      ],
+      "Effect": "Allow",
+      "Resource": "*",
+      "Sid": "AjentReleaseRead"
+    },
+    {
+      "Action": [
+        "iam:PassRole"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ec2.amazonaws.com"
+        }
+      },
+      "Effect": "Allow",
+      "Resource": "arn:aws:iam::394824061124:role/host-9a2c0c8",
+      "Sid": "PassAjentRuntimeRoleToEC2"
+    }
+  ]
+}
