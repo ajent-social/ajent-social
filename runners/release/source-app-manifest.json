@@ -1,0 +1,18 @@
+{
+  "name": "Ajent Production Source Read",
+  "url": "https://ajent.social",
+  "description": "Read-only access to the Ajent application source and CI results for isolated production releases.",
+  "public": false,
+  "hook_attributes": {
+    "url": "https://ajent.social",
+    "active": false
+  },
+  "default_permissions": {
+    "contents": "read",
+    "actions": "read",
+    "metadata": "read"
+  },
+  "default_events": [],
+  "request_oauth_on_install": false,
+  "setup_on_update": false
+}
