@@ -49,7 +49,7 @@ cleanup is a reconciliation requirement, never a successful release claim.
    account; select an existing public subnet and matching VPC. No NAT gateway
    or persistent ECS service is created. Export GITHUB_TOKEN from existing
    local `gh` authentication only into the Pulumi process environment. Do not
-   print it. Set encrypted jitConfig/pulumiToken to `disabled`. Preview and
+   print it. Set encrypted jitConfig/pulumiAccessToken to `disabled`. Preview and
    inspect all changes, save and apply that plan. The protected private repo,
    reviewed workflow template and repo variables are managed by this stack.
 2. Bootstrap the runner image using runnerBuildProject and a version-pinned

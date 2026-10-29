@@ -8,6 +8,10 @@ RESOURCES = PROGRAM['resources']
 
 
 class CredentialBoundaries(unittest.TestCase):
+    def test_config_names_cannot_shadow_resources(self):
+        self.assertFalse(set(PROGRAM['config']) & set(RESOURCES))
+        self.assertEqual(RESOURCES['pulumiToken']['properties']['plaintextValue'], '${pulumiAccessToken}')
+
     def test_task_has_no_aws_principal(self):
         task = RESOURCES['runnerTask']['properties']
         self.assertNotIn('taskRoleArn', task)
