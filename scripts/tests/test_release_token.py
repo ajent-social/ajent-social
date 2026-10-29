@@ -156,6 +156,8 @@ class TokenTests(unittest.TestCase):
         with patch.dict(os.environ, {"GITHUB_TOKEN": "github-original"}):
             MODULE.install_secret("minted-secret-never-log", self.args, "original-owner-auth", command=command)
         self.assertEqual(len(commands), 3)
+        self.assertIn("pulumiAccessToken", commands[0][0])
+        self.assertNotIn("pulumiToken", commands[0][0])
         self.assertEqual(commands[0][1]["input_text"], "minted-secret-never-log\n")
         for arguments, kwargs in commands:
             self.assertNotIn("minted-secret-never-log", " ".join(arguments))

@@ -172,7 +172,7 @@ def install_secret(value, args, owner_token, *, command=run_command):
     if not environment["GITHUB_TOKEN"]:
         raise TokenError("No GitHub authentication available for the IaC provider")
     base = ["pulumi", "-C", str(args.directory)]
-    command(base + ["config", "set", "pulumiToken", "--secret", "--stack", args.stack,
+    command(base + ["config", "set", "pulumiAccessToken", "--secret", "--stack", args.stack,
                     "--non-interactive"], environment=environment, input_text=value + "\n", timeout=90)
     with tempfile.TemporaryDirectory(prefix="ajent-token-plan-") as temporary:
         os.chmod(temporary, 0o700)
