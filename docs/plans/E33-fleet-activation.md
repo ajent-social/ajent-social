@@ -1,4 +1,6 @@
 # E33 -- Activate supported clients and make upgrade coverage visible
+
+2026-10-29 scope routing: [everyday coordination](everyday-agent-coordination.md) owns the current customer-one/customer-two identity, loaded-client qualification and hook rollout subset. Preserve the historical outline and T33.0 below; do not dispatch duplicate work for that subset. Wider fleet activation remains outside the cohort.
 fidelity: outline
 Acceptance: Two real supported harnesses safely upgrade, reconnect and expose current tools; the owner can distinguish installed payload, loaded process version, unknown state and stale observation without a fleet-wide activation claim.
 

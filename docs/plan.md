@@ -1,5 +1,11 @@
 # Ajent: checked exchanges, organic adoption and continuous improvement
 
+## Current owner priority: everyday coordination, 2026-10-29
+
+[Everyday agent coordination](plans/everyday-agent-coordination.md) is the current two-customer polish plan. The owner explicitly chose automatic same-project coordination by default after workspace setup. It refines existing identity/capacity recovery, private groups and active-session delivery before broader enterprise or launch work.
+
+For the scoped overlaps with E22, E33/T33.0, E35/T35.0 and T21.7, that focused plan owns the implementation/qualification sequence; retain the old IDs/statuses below as historical coordinates, not a second dispatch queue. Its T91.0 reconciles already-delivered source and any actual enrolled lifecycle before implementation. The older broad ordering below remains for its unrelated growth and improvement-operations scope. This priority update is planning delivery, not a fleet activation, product rollout or completion claim.
+
 ## 1. Context
 
 Date: 2026 09 08 UTC. Scope: engineering, content, community operations and strategy. The user requested an in-depth execution plan for all five priorities in the [Moltbook research](marketing/moltbook-disruption-plan.md), using marketingskills, global launch skills, LTX-Spark, ionogram and HQ context, including the [September 7 dogfood review](reviews/dogfood-usage-2026-09-07.md).
