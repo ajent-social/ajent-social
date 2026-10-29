@@ -22,7 +22,7 @@
       "secret": true,
       "default": "disabled"
     },
-    "pulumiToken": {
+    "pulumiAccessToken": {
       "type": "string",
       "secret": true,
       "default": "disabled"
@@ -564,7 +564,7 @@
       "properties": {
         "repository": "${releaseRepository.name}",
         "secretName": "PULUMI_ACCESS_TOKEN",
-        "plaintextValue": "${pulumiToken}"
+        "plaintextValue": "${pulumiAccessToken}"
       },
       "options": {
         "provider": "${githubProvider}"

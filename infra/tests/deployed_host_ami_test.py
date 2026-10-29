@@ -59,7 +59,7 @@ class DeployedHostAMITests(unittest.TestCase):
             self.assertTrue(helper.immutableAMI(value))
 
     def step(self):
-        workflow = (ROOT / '.github/workflows/release.yml').read_text()
+        workflow = (ROOT / 'runners/release/workflow.yml').read_text()
         names = ['Restore deployed stack configuration', 'Require completed Go infrastructure migration',
                  'Preserve deployed host AMI for application release',
                  'Verify infrastructure program is unchanged before publishing', 'Publish tested ARM64 image']

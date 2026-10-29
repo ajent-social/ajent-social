@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class ReleaseConfigTests(unittest.TestCase):
     def restore_step(self):
-        workflow = (ROOT / '.github/workflows/release.yml').read_text()
+        workflow = (ROOT / 'runners/release/workflow.yml').read_text()
         title = '      - name: Restore deployed stack configuration\n'
         self.assertIn(title, workflow)
         block = workflow.split(title, 1)[1].split('\n      - ', 1)[0]
