@@ -342,7 +342,8 @@
         "value": "${jitConfig}",
         "tags": {
           "Project": "ajent"
-        }
+        },
+        "tier": "Advanced"
       },
       "options": {
         "provider": "${awsProvider}"

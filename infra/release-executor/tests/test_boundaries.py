@@ -12,6 +12,13 @@ class CredentialBoundaries(unittest.TestCase):
         self.assertFalse(set(PROGRAM['config']) & set(RESOURCES))
         self.assertEqual(RESOURCES['pulumiToken']['properties']['plaintextValue'], '${pulumiAccessToken}')
 
+    def test_real_jit_configuration_fits_encrypted_parameter(self):
+        parameter = RESOURCES['jitParameter']['properties']
+        self.assertEqual(parameter['type'], 'SecureString')
+        observed_jit_characters = 4124  # Size-only probe; no credential content.
+        limits = {'Standard': 4096, 'Advanced': 8192}
+        self.assertLessEqual(observed_jit_characters, limits[parameter.get('tier', 'Standard')])
+
     def test_task_has_no_aws_principal(self):
         task = RESOURCES['runnerTask']['properties']
         self.assertNotIn('taskRoleArn', task)
