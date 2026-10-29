@@ -8,3 +8,10 @@ artifacts/
 .code-review-graph/
 infra/Pulumi.*.yaml
 !infra/Pulumi.example.yaml
+
+# Release executor configuration, plans and private receipts
+infra/release-executor/Pulumi.*.yaml
+infra/release-executor/.pulumi/
+scripts/__pycache__/
+scripts/tests/__pycache__/
+infra/release-executor/tests/__pycache__/

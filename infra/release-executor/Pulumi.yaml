@@ -1,0 +1,450 @@
+{
+  "name": "ajent-release-executor",
+  "runtime": "yaml",
+  "description": "On-demand isolated Ajent Fargate release runner and CodeBuild image builders",
+  "config": {
+    "vpcId": {
+      "type": "string"
+    },
+    "subnetId": {
+      "type": "string"
+    },
+    "applicationRepository": {
+      "type": "string",
+      "default": "application-images-a0ac9e0"
+    },
+    "runnerImage": {
+      "type": "string",
+      "default": "394824061124.dkr.ecr.us-west-2.amazonaws.com/ajent-release-runner:bootstrap-not-runnable"
+    },
+    "jitConfig": {
+      "type": "string",
+      "secret": true,
+      "default": "disabled"
+    }
+  },
+  "resources": {
+    "awsProvider": {
+      "type": "pulumi:providers:aws",
+      "properties": {
+        "region": "us-west-2"
+      },
+      "options": {
+        "version": "7.44.0"
+      }
+    },
+    "sources": {
+      "type": "aws:s3:BucketV2",
+      "properties": {
+        "bucket": "ajent-release-sources-394824061124",
+        "forceDestroy": false,
+        "tags": {
+          "Project": "ajent",
+          "Purpose": "release-executor"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "sourceVersioning": {
+      "type": "aws:s3:BucketVersioningV2",
+      "properties": {
+        "bucket": "${sources.id}",
+        "versioningConfiguration": {
+          "status": "Enabled"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "sourceEncryption": {
+      "type": "aws:s3:BucketServerSideEncryptionConfigurationV2",
+      "properties": {
+        "bucket": "${sources.id}",
+        "rules": [
+          {
+            "applyServerSideEncryptionByDefault": {
+              "sseAlgorithm": "AES256"
+            }
+          }
+        ]
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "sourcePrivacy": {
+      "type": "aws:s3:BucketPublicAccessBlock",
+      "properties": {
+        "bucket": "${sources.id}",
+        "blockPublicAcls": true,
+        "blockPublicPolicy": true,
+        "ignorePublicAcls": true,
+        "restrictPublicBuckets": true
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "sourceTLS": {
+      "type": "aws:s3:BucketPolicy",
+      "properties": {
+        "bucket": "${sources.id}",
+        "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Deny\",\"Action\":\"s3:*\",\"Principal\":\"*\",\"Resource\":[\"${sources.arn}\",\"${sources.arn}/*\"],\"Condition\":{\"Bool\":{\"aws:SecureTransport\":\"false\"}}}]}"
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "sourceLifecycle": {
+      "type": "aws:s3:BucketLifecycleConfigurationV2",
+      "properties": {
+        "bucket": "${sources.id}",
+        "rules": [
+          {
+            "id": "expire-source-bundles",
+            "status": "Enabled",
+            "filter": {
+              "prefix": "sources/"
+            },
+            "expiration": {
+              "days": 7
+            },
+            "noncurrentVersionExpiration": {
+              "noncurrentDays": 7
+            },
+            "abortIncompleteMultipartUpload": {
+              "daysAfterInitiation": 1
+            }
+          }
+        ]
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "runnerRepository": {
+      "type": "aws:ecr:Repository",
+      "properties": {
+        "name": "ajent-release-runner",
+        "imageTagMutability": "IMMUTABLE",
+        "imageScanningConfiguration": {
+          "scanOnPush": true
+        },
+        "forceDelete": false,
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "logs": {
+      "type": "aws:cloudwatch:LogGroup",
+      "properties": {
+        "name": "/ajent/release-executor",
+        "retentionInDays": 14,
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "applicationBuilderRole": {
+      "type": "aws:iam:Role",
+      "properties": {
+        "name": "ajent-release-applicationBuilder",
+        "assumeRolePolicy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"codebuild.amazonaws.com\"},\"Condition\":{\"StringEquals\":{\"aws:SourceAccount\":\"394824061124\"},\"ArnLike\":{\"aws:SourceArn\":\"arn:aws:codebuild:us-west-2:394824061124:project/ajent-release-*\"}}}]}",
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "applicationBuilderPolicy": {
+      "type": "aws:iam:RolePolicy",
+      "properties": {
+        "role": "${applicationBuilderRole.id}",
+        "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:GetObjectVersion\"],\"Resource\":\"${sources.arn}/sources/*\"},{\"Effect\":\"Allow\",\"Action\":[\"s3:GetBucketLocation\"],\"Resource\":\"${sources.arn}\"},{\"Effect\":\"Allow\",\"Action\":[\"logs:CreateLogStream\",\"logs:PutLogEvents\"],\"Resource\":\"${logs.arn}:*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:GetAuthorizationToken\"],\"Resource\":\"*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:BatchCheckLayerAvailability\",\"ecr:CompleteLayerUpload\",\"ecr:DescribeImages\",\"ecr:DescribeRepositories\",\"ecr:InitiateLayerUpload\",\"ecr:PutImage\",\"ecr:UploadLayerPart\",\"ecr:BatchGetImage\",\"ecr:GetDownloadUrlForLayer\"],\"Resource\":\"arn:aws:ecr:us-west-2:394824061124:repository/${applicationRepository}\"}]}"
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "applicationBuilder": {
+      "type": "aws:codebuild:Project",
+      "properties": {
+        "name": "ajent-release-applicationBuilder",
+        "serviceRole": "${applicationBuilderRole.arn}",
+        "buildTimeout": 60,
+        "queuedTimeout": 10,
+        "concurrentBuildLimit": 1,
+        "artifacts": {
+          "type": "NO_ARTIFACTS"
+        },
+        "source": {
+          "type": "S3",
+          "location": "${sources.bucket}/sources/not-started.zip",
+          "buildspec": "{\"version\": \"0.2\", \"phases\": {\"build\": {\"commands\": [\"bash scripts/aws-release-build.sh\"]}}}"
+        },
+        "environment": {
+          "type": "ARM_CONTAINER",
+          "computeType": "BUILD_GENERAL1_LARGE",
+          "image": "aws/codebuild/amazonlinux-aarch64-standard:3.0",
+          "privilegedMode": true
+        },
+        "logsConfig": {
+          "cloudwatchLogs": {
+            "status": "ENABLED",
+            "groupName": "${logs.name}",
+            "streamName": "applicationBuilder"
+          }
+        },
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${applicationBuilderPolicy}"
+        ]
+      }
+    },
+    "runnerBuilderRole": {
+      "type": "aws:iam:Role",
+      "properties": {
+        "name": "ajent-release-runnerBuilder",
+        "assumeRolePolicy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"codebuild.amazonaws.com\"},\"Condition\":{\"StringEquals\":{\"aws:SourceAccount\":\"394824061124\"},\"ArnLike\":{\"aws:SourceArn\":\"arn:aws:codebuild:us-west-2:394824061124:project/ajent-release-*\"}}}]}",
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "runnerBuilderPolicy": {
+      "type": "aws:iam:RolePolicy",
+      "properties": {
+        "role": "${runnerBuilderRole.id}",
+        "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:GetObjectVersion\"],\"Resource\":\"${sources.arn}/sources/*\"},{\"Effect\":\"Allow\",\"Action\":[\"s3:GetBucketLocation\"],\"Resource\":\"${sources.arn}\"},{\"Effect\":\"Allow\",\"Action\":[\"logs:CreateLogStream\",\"logs:PutLogEvents\"],\"Resource\":\"${logs.arn}:*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:GetAuthorizationToken\"],\"Resource\":\"*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:BatchCheckLayerAvailability\",\"ecr:CompleteLayerUpload\",\"ecr:DescribeImages\",\"ecr:DescribeRepositories\",\"ecr:InitiateLayerUpload\",\"ecr:PutImage\",\"ecr:UploadLayerPart\",\"ecr:BatchGetImage\",\"ecr:GetDownloadUrlForLayer\"],\"Resource\":\"${runnerRepository.arn}\"}]}"
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "runnerBuilder": {
+      "type": "aws:codebuild:Project",
+      "properties": {
+        "name": "ajent-release-runnerBuilder",
+        "serviceRole": "${runnerBuilderRole.arn}",
+        "buildTimeout": 30,
+        "queuedTimeout": 10,
+        "concurrentBuildLimit": 1,
+        "artifacts": {
+          "type": "NO_ARTIFACTS"
+        },
+        "source": {
+          "type": "S3",
+          "location": "${sources.bucket}/sources/not-started.zip",
+          "buildspec": "runners/release/buildspec.yml"
+        },
+        "environment": {
+          "type": "LINUX_CONTAINER",
+          "computeType": "BUILD_GENERAL1_SMALL",
+          "image": "aws/codebuild/standard:7.0",
+          "privilegedMode": true
+        },
+        "logsConfig": {
+          "cloudwatchLogs": {
+            "status": "ENABLED",
+            "groupName": "${logs.name}",
+            "streamName": "runnerBuilder"
+          }
+        },
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${runnerBuilderPolicy}"
+        ]
+      }
+    },
+    "imageBuildRole": {
+      "type": "aws:iam:Role",
+      "properties": {
+        "name": "ajent-release-image-build",
+        "assumeRolePolicy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Principal\":{\"Federated\":\"arn:aws:iam::394824061124:oidc-provider/token.actions.githubusercontent.com\"},\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\",\"token.actions.githubusercontent.com:sub\":\"repo:ajent-social@325803062/ajent-social@1359554173:ref:refs/heads/main\"}}}]}",
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "imageBuildPolicy": {
+      "type": "aws:iam:RolePolicy",
+      "properties": {
+        "role": "${imageBuildRole.id}",
+        "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:PutObject\",\"s3:GetObject\",\"s3:GetObjectVersion\"],\"Resource\":\"${sources.arn}/sources/*\"},{\"Effect\":\"Allow\",\"Action\":[\"s3:GetBucketLocation\"],\"Resource\":\"${sources.arn}\"},{\"Effect\":\"Allow\",\"Action\":[\"codebuild:StartBuild\",\"codebuild:StopBuild\",\"codebuild:BatchGetBuilds\"],\"Resource\":\"${applicationBuilder.arn}\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:DescribeImages\",\"ecr:DescribeRepositories\"],\"Resource\":\"arn:aws:ecr:us-west-2:394824061124:repository/${applicationRepository}\"}]}"
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "jitParameter": {
+      "type": "aws:ssm:Parameter",
+      "properties": {
+        "name": "/ajent/release-executor/jit",
+        "type": "SecureString",
+        "value": "${jitConfig}",
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "executionRole": {
+      "type": "aws:iam:Role",
+      "properties": {
+        "name": "ajent-release-task-execution",
+        "assumeRolePolicy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"},\"Condition\":{\"StringEquals\":{\"aws:SourceAccount\":\"394824061124\"},\"ArnLike\":{\"aws:SourceArn\":\"arn:aws:ecs:us-west-2:394824061124:*\"}}}]}",
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "executionPolicy": {
+      "type": "aws:iam:RolePolicy",
+      "properties": {
+        "role": "${executionRole.id}",
+        "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"ecr:GetAuthorizationToken\"],\"Resource\":\"*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:BatchGetImage\",\"ecr:GetDownloadUrlForLayer\",\"ecr:BatchCheckLayerAvailability\"],\"Resource\":\"${runnerRepository.arn}\"},{\"Effect\":\"Allow\",\"Action\":[\"logs:CreateLogStream\",\"logs:PutLogEvents\"],\"Resource\":\"${logs.arn}:*\"},{\"Effect\":\"Allow\",\"Action\":[\"ssm:GetParameters\"],\"Resource\":\"${jitParameter.arn}\"}]}"
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "cluster": {
+      "type": "aws:ecs:Cluster",
+      "properties": {
+        "name": "ajent-release",
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "runnerSecurityGroup": {
+      "type": "aws:ec2:SecurityGroup",
+      "properties": {
+        "name": "ajent-release-runner",
+        "description": "No inbound access; HTTPS egress only",
+        "vpcId": "${vpcId}",
+        "ingress": [],
+        "egress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 443,
+            "toPort": 443,
+            "cidrBlocks": [
+              "0.0.0.0/0"
+            ]
+          }
+        ],
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}"
+      }
+    },
+    "runnerTask": {
+      "type": "aws:ecs:TaskDefinition",
+      "properties": {
+        "family": "ajent-release-runner",
+        "cpu": "4096",
+        "memory": "16384",
+        "networkMode": "awsvpc",
+        "requiresCompatibilities": [
+          "FARGATE"
+        ],
+        "executionRoleArn": "${executionRole.arn}",
+        "runtimePlatform": {
+          "operatingSystemFamily": "LINUX",
+          "cpuArchitecture": "X86_64"
+        },
+        "ephemeralStorage": {
+          "sizeInGib": 40
+        },
+        "containerDefinitions": {
+          "fn::toJSON": [
+            {
+              "name": "runner",
+              "image": "${runnerImage}",
+              "essential": true,
+              "linuxParameters": {
+                "initProcessEnabled": true
+              },
+              "secrets": [
+                {
+                  "name": "AJENT_JIT_CONFIG",
+                  "valueFrom": "${jitParameter.arn}"
+                }
+              ],
+              "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                  "awslogs-group": "${logs.name}",
+                  "awslogs-region": "us-west-2",
+                  "awslogs-stream-prefix": "runner"
+                }
+              }
+            }
+          ]
+        },
+        "tags": {
+          "Project": "ajent"
+        }
+      },
+      "options": {
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${executionPolicy}"
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "sourceBucket": "${sources.bucket}",
+    "runnerRepository": "${runnerRepository.repositoryUrl}",
+    "imageBuildRoleArn": "${imageBuildRole.arn}",
+    "applicationBuildProject": "${applicationBuilder.name}",
+    "runnerBuildProject": "${runnerBuilder.name}",
+    "clusterArn": "${cluster.arn}",
+    "taskDefinitionArn": "${runnerTask.arn}",
+    "securityGroupId": "${runnerSecurityGroup.id}",
+    "subnetId": "${subnetId}",
+    "logGroupName": "${logs.name}",
+    "runnerImage": "${runnerImage}"
+  }
+}
