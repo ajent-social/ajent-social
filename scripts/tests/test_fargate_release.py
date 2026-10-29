@@ -149,6 +149,27 @@ class CorrelationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.validate_preconditions("ajent-social/ajent-social", CONTROL_SHA, CONTROL_SHA)
 
+    def test_deleted_legacy_workflow_is_checked_through_repository_runs(self):
+        endpoints = []
+        def github(endpoint):
+            endpoints.append(endpoint)
+            if endpoint == "repos/ajent-social/ajent-social/commits/main":
+                return {"sha": SHA}
+            if endpoint == "repos/" + release.CONTROL_REPO:
+                return {"full_name": release.CONTROL_REPO, "private": True, "allow_forking": False}
+            if endpoint == f"repos/{release.CONTROL_REPO}/commits/main":
+                return {"sha": CONTROL_SHA}
+            if "repos/ajent-social/ajent-social/actions/runs?status=queued" in endpoint:
+                return {"total_count": 1, "workflow_runs": [{"path": ".github/workflows/release.yml", "status": "queued"}]}
+            return {"workflow_runs": []}
+        def workflows(repo, workflow):
+            if workflow == "test.yml":
+                return [{"id": 1, "head_sha": SHA, "head_branch": "main", "event": "push", "status": "completed", "conclusion": "success"}]
+            return []
+        with mock.patch.object(release, "gh", github), mock.patch.object(release, "workflow_runs", workflows), self.assertRaises(ValueError):
+            release.validate_preconditions("ajent-social/ajent-social", SHA, CONTROL_SHA)
+        self.assertFalse(any("repos/ajent-social/ajent-social/actions/workflows/release.yml" in e for e in endpoints))
+
     def test_public_repository_run_cannot_match_control_dispatch(self):
         public_run = run()
         public_run["repository"]["full_name"] = "ajent-social/ajent-social"
