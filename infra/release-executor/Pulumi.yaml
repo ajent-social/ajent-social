@@ -307,13 +307,16 @@
       "type": "aws:iam:Role",
       "properties": {
         "name": "ajent-release-image-build",
-        "assumeRolePolicy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"sts:AssumeRoleWithWebIdentity\", \"Principal\": {\"Federated\": \"arn:aws:iam::394824061124:oidc-provider/token.actions.githubusercontent.com\"}, \"Condition\": {\"StringEquals\": {\"token.actions.githubusercontent.com:aud\": \"sts.amazonaws.com\", \"token.actions.githubusercontent.com:sub\": [\"repo:ajent-social/production-release:ref:refs/heads/main\", \"repo:ajent-social@325803062/production-release@${releaseRepositoryId}:ref:refs/heads/main\"]}}}]}",
+        "assumeRolePolicy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"sts:AssumeRoleWithWebIdentity\", \"Principal\": {\"Federated\": \"arn:aws:iam::394824061124:oidc-provider/token.actions.githubusercontent.com\"}, \"Condition\": {\"StringEquals\": {\"token.actions.githubusercontent.com:aud\": \"sts.amazonaws.com\", \"token.actions.githubusercontent.com:sub\": [\"repo:ajent-social/production-release:ref:refs/heads/main\", \"repo:ajent-social@325803062/production-release@1437942819:ref:refs/heads/main\"]}}}]}",
         "tags": {
           "Project": "ajent"
         }
       },
       "options": {
-        "provider": "${awsProvider}"
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${releaseRepository}"
+        ]
       }
     },
     "imageBuildPolicy": {
@@ -495,14 +498,17 @@
       "type": "aws:iam:Role",
       "properties": {
         "name": "ajent-fargate-production-deploy",
-        "assumeRolePolicy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"sts:AssumeRoleWithWebIdentity\", \"Principal\": {\"Federated\": \"arn:aws:iam::394824061124:oidc-provider/token.actions.githubusercontent.com\"}, \"Condition\": {\"StringEquals\": {\"token.actions.githubusercontent.com:aud\": \"sts.amazonaws.com\", \"token.actions.githubusercontent.com:sub\": [\"repo:ajent-social/production-release:ref:refs/heads/main\", \"repo:ajent-social@325803062/production-release@${releaseRepositoryId}:ref:refs/heads/main\"]}}}]}",
+        "assumeRolePolicy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"sts:AssumeRoleWithWebIdentity\", \"Principal\": {\"Federated\": \"arn:aws:iam::394824061124:oidc-provider/token.actions.githubusercontent.com\"}, \"Condition\": {\"StringEquals\": {\"token.actions.githubusercontent.com:aud\": \"sts.amazonaws.com\", \"token.actions.githubusercontent.com:sub\": [\"repo:ajent-social/production-release:ref:refs/heads/main\", \"repo:ajent-social@325803062/production-release@1437942819:ref:refs/heads/main\"]}}}]}",
         "tags": {
           "Project": "ajent",
           "Purpose": "production-release"
         }
       },
       "options": {
-        "provider": "${awsProvider}"
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${releaseRepository}"
+        ]
       }
     },
     "deploymentPolicy": {
@@ -612,10 +618,5 @@
     "runnerImage": "${runnerImage}",
     "controlRepository": "${releaseRepository.fullName}",
     "deploymentRoleArn": "${deploymentRole.arn}"
-  },
-  "variables": {
-    "releaseRepositoryId": {
-      "fn::toJSON": "${releaseRepository.repoId}"
-    }
   }
 }

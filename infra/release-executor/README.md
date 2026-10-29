@@ -1,7 +1,7 @@
 # On-demand production release executor
 
 This Pulumi YAML project owns the isolated executor and its private control
-repository `ajent-social/production-release`. Organization policy disables private
+repository `ajent-social/production-release` (GitHub repository ID 1437942819). Organization policy disables private
 repository forks; the provider must omit allowForking because GitHub rejects
 even explicitly setting it to false under that policy. The launcher verifies
 the actual private/nonforkable metadata before registering any runner. Existing application resources

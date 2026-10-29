@@ -26,7 +26,7 @@ class CredentialBoundaries(unittest.TestCase):
         subjects = condition['token.actions.githubusercontent.com:sub']
         self.assertEqual(subjects, [
             'repo:ajent-social/production-release:ref:refs/heads/main',
-            'repo:ajent-social@325803062/production-release@${releaseRepositoryId}:ref:refs/heads/main',
+            'repo:ajent-social@325803062/production-release@1437942819:ref:refs/heads/main',
         ])
         repo = RESOURCES['releaseRepository']['properties']
         self.assertEqual(repo['visibility'], 'private')
