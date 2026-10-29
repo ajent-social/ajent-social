@@ -30,7 +30,7 @@ class CredentialBoundaries(unittest.TestCase):
         ])
         repo = RESOURCES['releaseRepository']['properties']
         self.assertEqual(repo['visibility'], 'private')
-        self.assertFalse(repo['allowForking'])
+        self.assertNotIn('allowForking', repo)  # Organization enforces this; launcher verifies actual false.
         self.assertEqual(condition['token.actions.githubusercontent.com:aud'], 'sts.amazonaws.com')
 
     def test_no_builder_can_deploy_or_read_runtime_secrets(self):
@@ -49,6 +49,14 @@ class CredentialBoundaries(unittest.TestCase):
         actions = [a for entry in actual['Statement'] for a in entry['Action']]
         self.assertNotIn('secretsmanager:GetSecretValue', actions)
         self.assertNotIn('iam:UpdateAssumeRolePolicy', actions)
+
+    def test_saved_plan_policy_dependencies_are_explicit(self):
+        for name, required in {
+            'executionPolicy': {'executionRole', 'runnerRepository', 'logs', 'jitParameter'},
+            'applicationBuilderPolicy': {'applicationBuilderRole', 'sources', 'logs'},
+            'runnerBuilderPolicy': {'runnerBuilderRole', 'sources', 'logs', 'runnerRepository'},
+        }.items():
+            self.assertEqual(set(RESOURCES[name]['options']['dependsOn']), {'${' + x + '}' for x in required})
 
     def test_sources_are_private_versioned_and_expiring(self):
         self.assertEqual(RESOURCES['sourceVersioning']['properties']['versioningConfiguration']['status'], 'Enabled')
