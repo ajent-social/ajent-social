@@ -521,22 +521,6 @@
         "provider": "${awsProvider}"
       }
     },
-    "releaseWorkflow": {
-      "type": "github:index/repositoryFile:RepositoryFile",
-      "properties": {
-        "repository": "${releaseRepository.name}",
-        "branch": "main",
-        "file": ".github/workflows/release.yml",
-        "content": {
-          "fn::readFile": "../../runners/release/workflow.yml"
-        },
-        "commitMessage": "Configure reviewed isolated production release workflow",
-        "overwriteOnCreate": false
-      },
-      "options": {
-        "provider": "${githubProvider}"
-      }
-    },
     "variableAWS_DEPLOY_ROLE_ARN": {
       "type": "github:index/actionsVariable:ActionsVariable",
       "properties": {

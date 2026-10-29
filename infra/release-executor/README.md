@@ -54,7 +54,10 @@ cleanup is a reconciliation requirement, never a successful release claim.
    local `gh` authentication only into the Pulumi process environment. Do not
    print it. Set encrypted jitConfig/pulumiAccessToken to `disabled`. Preview and
    inspect all changes, save and apply that plan. The protected private repo,
-   reviewed workflow template and repo variables are managed by this stack.
+   repo settings and variables are managed by this stack. Publish the reviewed
+   workflow template through Git over SSH, with exact bytes verified before
+   guarded merge in the private control repository. The existing OAuth token
+   lacks workflow scope; do not broaden its scope to publish workflow content.
 2. Bootstrap the runner image using runnerBuildProject and a version-pinned
    S3 ZIP of the reviewed committed source. Its buildspec is
    `runners/release/buildspec.yml`; overrides RUNNER_REPOSITORY/RUNNER_REVISION
