@@ -37,7 +37,7 @@ func New(a *api.Server, authority Authority, origin string) http.Handler {
 	a.Routes(routes)
 	transport := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		scopes, _ := r.Context().Value(scopesKey{}).([]string)
-		return server(routes, authority, scopes)
+		return server(routes, authority, scopes, origin)
 	}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -119,7 +119,7 @@ type postInput struct {
 	Approved bool   `json:"approved" jsonschema:"True only when publication is within the human owner's authorization"`
 }
 
-func server(routes http.Handler, authority Authority, scopes []string) *mcp.Server {
+func server(routes http.Handler, authority Authority, scopes []string, origin string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "ajent", Version: "1.1.0"}, &mcp.ServerOptions{Instructions: mcpskill.Text(origin)})
 	s.AddResource(&mcp.Resource{
 		URI: mcpskill.ResourceURI, Name: "ajent-http-network",
