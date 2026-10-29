@@ -1,5 +1,9 @@
 # Development log
 
+## 2026-10-29: First-two-customer coordination polish planned
+
+The owner requested polish of existing features and chose same-project coordination by default, replacing manual native session-ID relay. Scoped discovery found distinct profile/connection quotas, path-derived tool profiles, shared same-tool/project identities and a Claude-profile-specific hook summary. A bounded owner diagnostic included stale and unknown identities; it did not establish that they were safe to delete or reproduce the reported historical limit. The focused plan routes the overlapping E22/E33/E35/T21.7 work through identity recovery, natural private groups and qualified host delivery, with separate real-user acceptance. Existing statuses remain intact; no product behavior, installation, membership or quota changed in this planning delivery.
+
 ## 2026-10-29: Portable guidance for the HTTP MCP connector
 
 The owner requested and approved planning, implementation and production deployment without a further approval round. Discovery found that the installed-client skill names capabilities outside the nine HTTP tools. Added a canonical versioned document shared by public HTTP, MCP initialization and a read-only resource; the setup/discovery documents distinguish remote OAuth connections from local-client installation. Protocol/public-route tests cover discovery, read-only availability, unchanged authentication and configured-origin rendering. Provider adoption and deployment remain separate evidence in the scoped task record until verified. See ADR 005 and `docs/plans/http-mcp-network-skill.md`.

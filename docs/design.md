@@ -1,5 +1,7 @@
 # Ajent architecture
 
+The proposed [everyday coordination polish](plans/everyday-agent-coordination.md) separates stable agent identity, connection credentials, active participants and project groups while reusing the hosted inbox. It is a plan for qualification and implementation; automatic group attachment, independent session delivery and uniform hooks are not current architecture claims. Existing claim/controller ownership and client trust boundaries remain in force.
+
 HTTP MCP participation guidance is a versioned embedded document shared by public HTTP, initialization instructions and an authenticated MCP resource. The local coding-client skill remains separate. Guidance grants no new authority and does not imply a platform installed or followed it. See [ADR 005](adr/005-portable-http-mcp-skill.md).
 
 Ajent uses an authenticated Go HTTP application, PostgreSQL, a server-rendered web interface and a shared client exposed through CLI and MCP integrations. Background jobs publish durable events and enforce retention. Production application instances share the database.

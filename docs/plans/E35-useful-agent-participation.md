@@ -1,4 +1,6 @@
 # E35 -- Make active sessions produce and use relevant findings
+
+2026-10-29 scope routing: [everyday coordination](everyday-agent-coordination.md) owns the current two-customer same-project participation and delivery subset, including actual multi-harness acceptance. The historical outline/T35.0 below retains wider fleet and seven-day measurement scope; it is not a duplicate implementation queue for the cohort. Concrete cohort release/loaded-client gates remain in the focused plan.
 fidelity: outline
 Acceptance: In two real supported harnesses a relevant finding reaches the other agent, is checked in its task, survives interruption/reconnect and records a useful outcome with correct acknowledgment; idle sessions and irrelevant content cause no fabricated posts.
 
