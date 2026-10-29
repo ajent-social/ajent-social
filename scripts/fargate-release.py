@@ -19,6 +19,7 @@ import time
 import uuid
 
 REGION = "us-west-2"
+CONTROL_REPO = "ajent-social/production-release"
 
 
 def utc_now():
@@ -36,8 +37,22 @@ def save_receipt(path, receipt):
 
 def command(args, *, body=None, env=None):
     """Never echo command output: registration responses can contain credentials."""
+    environment = env
+    if args and args[0] == "pulumi":
+        # Only the owning Pulumi GitHub provider needs this token. Keep it in
+        # the subprocess environment, never arguments, receipts or other jobs.
+        environment = dict(os.environ if env is None else env)
+        if not environment.get("GITHUB_TOKEN"):
+            token = environment.get("GH_TOKEN")
+            if not token:
+                auth = subprocess.run(["gh", "auth", "token"], capture_output=True,
+                                      text=True, check=True, timeout=30, env=environment)
+                token = auth.stdout.strip()
+            if not token:
+                raise ValueError("GitHub provider authentication is unavailable")
+            environment["GITHUB_TOKEN"] = token
     result = subprocess.run(args, input=body, capture_output=True, text=True,
-                            check=True, timeout=180, env=env)
+                            check=True, timeout=180, env=environment)
     return result.stdout
 
 
@@ -141,37 +156,47 @@ def workflow_runs(repo, workflow):
     return gh(f"repos/{repo}/actions/workflows/{workflow}/runs?per_page=100").get("workflow_runs", [])
 
 
-def validate_preconditions(repo, revision):
+def validate_preconditions(repo, revision, control_revision):
     if gh(f"repos/{repo}/commits/main").get("sha") != revision:
-        raise ValueError("Selected revision must remain current main")
+        raise ValueError("Selected application revision must remain current main")
     tests = [run for run in workflow_runs(repo, "test.yml")
              if run.get("head_sha") == revision and run.get("head_branch") == "main" and run.get("event") == "push"]
     tests.sort(key=lambda run: (run.get("created_at", ""), run.get("id", 0)), reverse=True)
     if not tests or tests[0].get("status") != "completed" or tests[0].get("conclusion") != "success":
-        raise ValueError("Latest exact-main push CI must have succeeded")
-    releases = workflow_runs(repo, "release.yml")
-    if any(run.get("status") != "completed" for run in releases):
-        raise ValueError("An existing release is active; reconcile it first")
-    # Do not let an older queued run disappear behind the last 100 completed
-    # entries. A single result for each active state is sufficient to refuse.
-    for status in ("queued", "in_progress", "waiting", "requested", "pending"):
-        active = gh(f"repos/{repo}/actions/workflows/release.yml/runs?status={status}&per_page=1")
-        if active.get("workflow_runs"):
+        raise ValueError("Latest exact-main application push CI must have succeeded")
+    control = gh(f"repos/{CONTROL_REPO}")
+    if control.get("full_name") != CONTROL_REPO or control.get("private") is not True or control.get("allow_forking") is not False:
+        raise ValueError("Control repository must be private with forking disabled")
+    if gh(f"repos/{CONTROL_REPO}/commits/main").get("sha") != control_revision:
+        raise ValueError("Selected control revision must remain current main")
+    baseline = set()
+    for candidate in (repo, CONTROL_REPO):
+        releases = workflow_runs(candidate, "release.yml")
+        if any(run.get("status") != "completed" for run in releases):
             raise ValueError("An existing release is active; reconcile it first")
-    return {run["id"] for run in releases}
+        # Old queued work must not disappear behind 100 newer completed runs.
+        for status in ("queued", "in_progress", "waiting", "requested", "pending"):
+            active = gh(f"repos/{candidate}/actions/workflows/release.yml/runs?status={status}&per_page=1")
+            if active.get("workflow_runs"):
+                raise ValueError("An existing release is active; reconcile it first")
+        if candidate == CONTROL_REPO:
+            baseline = {run["id"] for run in releases}
+    return baseline
 
 
 def matching_dispatch(runs, baseline, revision, requested_at):
     matches = [run for run in runs if run.get("id") not in baseline and
                run.get("event") == "workflow_dispatch" and run.get("head_sha") == revision and
-               run.get("head_branch") == "main" and run.get("created_at", "") >= requested_at]
+               run.get("head_branch") == "main" and run.get("repository", {}).get("full_name") == CONTROL_REPO and
+               run.get("created_at", "") >= requested_at]
     if len(matches) > 1:
         raise ValueError("Dispatch result is ambiguous; do not start or cancel unidentified releases")
     return matches[0] if matches else None
 
 
 def verify_run(run, revision):
-    if run.get("head_sha") != revision or run.get("event") != "workflow_dispatch" or run.get("head_branch") != "main":
+    if (run.get("head_sha") != revision or run.get("event") != "workflow_dispatch" or
+            run.get("head_branch") != "main" or run.get("repository", {}).get("full_name") != CONTROL_REPO):
         raise ValueError("Workflow run identity changed")
 
 
@@ -180,6 +205,8 @@ def launch(args, *, gh_call=gh, aws_call=aws, command_call=command, set_jit_call
            monotonic=time.monotonic, sleep=time.sleep):
     if not re.fullmatch(r"[a-f0-9]{40}", args.revision):
         raise ValueError("--revision requires a full commit SHA")
+    if not re.fullmatch(r"[a-f0-9]{40}", args.control_revision):
+        raise ValueError("--control-revision requires the full reviewed control commit SHA")
     if args.repo != "ajent-social/ajent-social":
         raise ValueError("This executor is restricted to ajent-social/ajent-social")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/ajent-release-executor/[A-Za-z0-9_.-]+", args.stack):
@@ -189,6 +216,7 @@ def launch(args, *, gh_call=gh, aws_call=aws, command_call=command, set_jit_call
     path = Path(args.receipt)
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     receipt = {"created_at": utc_now(), "revision": args.revision, "repo": args.repo,
+               "control_revision": args.control_revision, "control_repo": CONTROL_REPO,
                "stack": args.stack, "status": "PREPARING", "phase": "preconditions",
                "run_id": None, "task_arn": None, "runner_id": None,
                "client_token": uuid.uuid4().hex, "jit_cleanup": "NOT_NEEDED"}
@@ -201,7 +229,7 @@ def launch(args, *, gh_call=gh, aws_call=aws, command_call=command, set_jit_call
     complete = False
     primary_error = None
     try:
-        baseline = preconditions(args.repo, args.revision)
+        baseline = preconditions(args.repo, args.revision, args.control_revision)
         outputs = json.loads(command_call(["pulumi", "-C", str(args.executor_directory),
                                           "stack", "output", "--stack", args.stack, "--json"]))
         required = ("clusterArn", "taskDefinitionArn", "securityGroupId", "subnetId")
@@ -215,15 +243,15 @@ def launch(args, *, gh_call=gh, aws_call=aws, command_call=command, set_jit_call
         receipt["phase"] = "dispatch"
         receipt["status"] = "DISPATCH_REQUESTED"
         save_receipt(path, receipt)
-        gh_call(f"repos/{args.repo}/actions/workflows/release.yml/dispatches", method="POST",
-                body={"ref": "main", "inputs": {"confirm_production": True}})
+        gh_call(f"repos/{CONTROL_REPO}/actions/workflows/release.yml/dispatches", method="POST",
+                body={"ref": "main", "inputs": {"confirm_production": True, "source_revision": args.revision}})
         # The old dispatch endpoint returns no run ID. Correlate a single new
         # exact-head run; never resend the dispatch if its result is uncertain.
         correlation_deadline = min(deadline, monotonic() + 120)
         run = None
         while monotonic() < correlation_deadline:
-            run = matching_dispatch(runs_call(args.repo, "release.yml"), baseline,
-                                    args.revision, receipt["dispatch_requested_at"])
+            run = matching_dispatch(runs_call(CONTROL_REPO, "release.yml"), baseline,
+                                    args.control_revision, receipt["dispatch_requested_at"])
             if run:
                 break
             sleep(5)
@@ -233,11 +261,11 @@ def launch(args, *, gh_call=gh, aws_call=aws, command_call=command, set_jit_call
         receipt["run_url"] = run.get("html_url")
         receipt["phase"] = "jit_registration"
         save_receipt(path, receipt)
-        verify_run(run, args.revision)
+        verify_run(run, args.control_revision)
         if run.get("status") == "completed":
             raise RuntimeError("Release completed before runner launch")
         label = f"ajent-release-{run['id']}"
-        registration = gh_call(f"repos/{args.repo}/actions/runners/generate-jitconfig", method="POST",
+        registration = gh_call(f"repos/{CONTROL_REPO}/actions/runners/generate-jitconfig", method="POST",
                                body={"name": label, "runner_group_id": 1,
                                      "labels": ["self-hosted", label], "work_folder": "_work"})
         runner = registration.get("runner", {})
@@ -282,8 +310,8 @@ def launch(args, *, gh_call=gh, aws_call=aws, command_call=command, set_jit_call
         print(f"Release {receipt['run_id']} and Fargate task started; receipt: {path}", file=sys.stderr)
         stopped_deadline = None
         while monotonic() < deadline:
-            run = gh_call(f"repos/{args.repo}/actions/runs/{receipt['run_id']}")
-            verify_run(run, args.revision)
+            run = gh_call(f"repos/{CONTROL_REPO}/actions/runs/{receipt['run_id']}")
+            verify_run(run, args.control_revision)
             result = aws_call("ecs", "describe-tasks", "--cluster", outputs["clusterArn"], "--tasks", task_arn)
             tasks = result.get("tasks", [])
             if len(tasks) != 1 or tasks[0].get("taskArn") != task_arn or result.get("failures"):
@@ -325,10 +353,10 @@ def launch(args, *, gh_call=gh, aws_call=aws, command_call=command, set_jit_call
         receipt["error_type"] = type(error).__name__
         # Cleanup targets only identities this attempt actually received.
         for key, effect in (
-            ("run_id", lambda: gh_call(f"repos/{args.repo}/actions/runs/{receipt['run_id']}/cancel", method="POST")),
+            ("run_id", lambda: gh_call(f"repos/{CONTROL_REPO}/actions/runs/{receipt['run_id']}/cancel", method="POST")),
             ("task_arn", lambda: aws_call("ecs", "stop-task", "--cluster", outputs["clusterArn"],
                                          "--task", receipt["task_arn"], "--reason", "Owner release supervisor stopped")),
-            ("runner_id", lambda: gh_call(f"repos/{args.repo}/actions/runners/{receipt['runner_id']}", method="DELETE")),
+            ("runner_id", lambda: gh_call(f"repos/{CONTROL_REPO}/actions/runners/{receipt['runner_id']}", method="DELETE")),
         ):
             if receipt.get(key):
                 try:
@@ -358,7 +386,8 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stack", required=True)
     parser.add_argument("--receipt", required=True)
-    parser.add_argument("--revision", required=True)
+    parser.add_argument("--revision", required=True, help="Exact application main commit")
+    parser.add_argument("--control-revision", required=True, help="Exact reviewed private control main commit")
     parser.add_argument("--repo", default="ajent-social/ajent-social")
     parser.add_argument("--timeout-seconds", type=int, default=10800)
     parser.add_argument("--executor-directory", type=Path,
@@ -373,7 +402,8 @@ def main():
     try:
         result = launch(parse_args())
         print(json.dumps({"status": result["status"], "run_id": result["run_id"],
-                          "run_url": result.get("run_url"), "revision": result["revision"]}))
+                          "run_url": result.get("run_url"), "revision": result["revision"],
+                          "control_revision": result["control_revision"]}))
     except (Exception, KeyboardInterrupt) as error:
         print(str(error) if isinstance(error, RuntimeError) else "Release stopped; inspect its private receipt.", file=sys.stderr)
         return 1

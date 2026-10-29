@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -11,6 +12,7 @@ SPEC = importlib.util.spec_from_file_location("fargate_release", Path(__file__).
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 SHA = "a" * 40
+CONTROL_SHA = "c" * 40
 STACK = "owner/ajent-release-executor/production"
 URN = "urn:pulumi:production::ajent-release-executor::aws:ssm/parameter:Parameter::jitParameter"
 TASK = "arn:aws:ecs:us-west-2:394824061124:task/ajent-release/abc"
@@ -30,9 +32,35 @@ def preview(urn=URN, op="update", extra=None):
 
 
 def run(status="queued", conclusion=None, id=11):
-    return {"id": id, "head_sha": SHA, "head_branch": "main", "event": "workflow_dispatch",
+    return {"id": id, "head_sha": CONTROL_SHA, "head_branch": "main", "event": "workflow_dispatch",
+            "repository": {"full_name": release.CONTROL_REPO},
             "created_at": "2099-01-01T00:00:00Z", "status": status, "conclusion": conclusion,
             "html_url": "https://github.com/ajent-social/ajent-social/actions/runs/11"}
+
+
+class AuthenticationTests(unittest.TestCase):
+    def test_captured_gh_token_reaches_only_pulumi_environment(self):
+        calls = []
+        def subprocess_run(args, **kwargs):
+            calls.append((args, kwargs))
+            return SimpleNamespace(stdout="private-token\n" if args == ["gh", "auth", "token"] else "{}")
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(release.subprocess, "run", subprocess_run):
+            release.command(["pulumi", "stack", "output"])
+            release.command(["aws", "ecs", "list-clusters"])
+        self.assertEqual(calls[1][1]["env"]["GITHUB_TOKEN"], "private-token")
+        self.assertIsNone(calls[2][1]["env"])
+        self.assertTrue(all("private-token" not in arg for args, _ in calls for arg in args))
+        self.assertNotIn("GITHUB_TOKEN", os.environ)
+
+    def test_existing_github_provider_token_is_preserved(self):
+        calls = []
+        def subprocess_run(args, **kwargs):
+            calls.append((args, kwargs))
+            return SimpleNamespace(stdout="{}")
+        with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "already-scoped"}, clear=True), mock.patch.object(release.subprocess, "run", subprocess_run):
+            release.command(["pulumi", "preview"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1]["env"]["GITHUB_TOKEN"], "already-scoped")
 
 
 class PreviewTests(unittest.TestCase):
@@ -71,10 +99,10 @@ class PreviewTests(unittest.TestCase):
 
 class CorrelationTests(unittest.TestCase):
     def test_only_unique_new_exact_main_dispatch_matches(self):
-        self.assertEqual(release.matching_dispatch([run()], {1}, SHA, "2026-01-01T00:00:00Z")["id"], 11)
-        self.assertIsNone(release.matching_dispatch([run()], {11}, SHA, "2026-01-01T00:00:00Z"))
+        self.assertEqual(release.matching_dispatch([run()], {1}, CONTROL_SHA, "2026-01-01T00:00:00Z")["id"], 11)
+        self.assertIsNone(release.matching_dispatch([run()], {11}, CONTROL_SHA, "2026-01-01T00:00:00Z"))
         with self.assertRaises(ValueError):
-            release.matching_dispatch([run(), run(id=12)], set(), SHA, "2026-01-01T00:00:00Z")
+            release.matching_dispatch([run(), run(id=12)], set(), CONTROL_SHA, "2026-01-01T00:00:00Z")
 
     def test_preconditions_reject_active_release_or_failed_ci(self):
         def github(endpoint):
@@ -85,12 +113,52 @@ class CorrelationTests(unittest.TestCase):
                                            "created_at": "2099", "id": 1, "status": "completed", "conclusion": "failure"}]}
             return {"workflow_runs": [run()]}
         with mock.patch.object(release, "gh", github), self.assertRaises(ValueError):
-            release.validate_preconditions("ajent-social/ajent-social", SHA)
+            release.validate_preconditions("ajent-social/ajent-social", SHA, CONTROL_SHA)
 
+
+    def test_control_repository_must_be_private_and_fork_disabled(self):
+        for private, forking in ((False, False), (True, True), (True, None)):
+            with self.subTest(private=private, forking=forking):
+                def github(endpoint):
+                    if endpoint == "repos/ajent-social/ajent-social/commits/main":
+                        return {"sha": SHA}
+                    if endpoint == "repos/" + release.CONTROL_REPO:
+                        return {"full_name": release.CONTROL_REPO, "private": private, "allow_forking": forking}
+                    return {}
+                with mock.patch.object(release, "gh", github), mock.patch.object(release, "workflow_runs", return_value=[
+                        {"id": 1, "head_sha": SHA, "head_branch": "main", "event": "push", "status": "completed", "conclusion": "success"}]), self.assertRaises(ValueError):
+                    release.validate_preconditions("ajent-social/ajent-social", SHA, CONTROL_SHA)
+
+    def test_application_and_control_revisions_are_independent(self):
+        def github(endpoint):
+            if endpoint == "repos/ajent-social/ajent-social/commits/main":
+                return {"sha": SHA}
+            if endpoint == "repos/" + release.CONTROL_REPO:
+                return {"full_name": release.CONTROL_REPO, "private": True, "allow_forking": False}
+            if endpoint == f"repos/{release.CONTROL_REPO}/commits/main":
+                return {"sha": CONTROL_SHA}
+            return {"workflow_runs": []}
+        def workflows(repo, workflow):
+            if workflow == "test.yml":
+                return [{"id": 1, "head_sha": SHA, "head_branch": "main", "event": "push", "status": "completed", "conclusion": "success"}]
+            return []
+        with mock.patch.object(release, "gh", github), mock.patch.object(release, "workflow_runs", workflows):
+            self.assertEqual(release.validate_preconditions("ajent-social/ajent-social", SHA, CONTROL_SHA), set())
+            with self.assertRaises(ValueError):
+                release.validate_preconditions("ajent-social/ajent-social", SHA, SHA)
+            with self.assertRaises(ValueError):
+                release.validate_preconditions("ajent-social/ajent-social", CONTROL_SHA, CONTROL_SHA)
+
+    def test_public_repository_run_cannot_match_control_dispatch(self):
+        public_run = run()
+        public_run["repository"]["full_name"] = "ajent-social/ajent-social"
+        self.assertIsNone(release.matching_dispatch([public_run], set(), CONTROL_SHA, "2026-01-01T00:00:00Z"))
+        with self.assertRaises(ValueError):
+            release.verify_run(public_run, CONTROL_SHA)
 
 class LaunchTests(unittest.TestCase):
     def setup_case(self, directory):
-        args = argparse.Namespace(stack=STACK, receipt=str(Path(directory) / "receipt.json"), revision=SHA,
+        args = argparse.Namespace(stack=STACK, receipt=str(Path(directory) / "receipt.json"), revision=SHA, control_revision=CONTROL_SHA,
                                   repo="ajent-social/ajent-social", timeout_seconds=60,
                                   executor_directory=Path(directory))
         effects = []
@@ -120,7 +188,7 @@ class LaunchTests(unittest.TestCase):
             return {}
         kwargs = {"gh_call": github, "aws_call": aws, "command_call": lambda args: json.dumps(OUTPUTS),
                   "set_jit_call": lambda stack, directory, value: secrets.append(value),
-                  "preconditions": lambda repo, sha: {1}, "runs_call": lambda *args: [run()],
+                  "preconditions": lambda repo, sha, control_sha: {1}, "runs_call": lambda *args: [run()],
                   "monotonic": lambda: 0, "sleep": lambda _: None}
         return args, kwargs, effects, secrets
 
@@ -129,6 +197,14 @@ class LaunchTests(unittest.TestCase):
             args, kwargs, effects, secrets = self.setup_case(directory)
             result = release.launch(args, **kwargs)
             self.assertEqual(result["status"], "WORKFLOW_SUCCEEDED")
+            self.assertEqual(result["revision"], SHA)
+            self.assertEqual(result["control_revision"], CONTROL_SHA)
+            dispatches = [e for e in effects if e[0] == "gh" and e[1].endswith("/dispatches")]
+            self.assertEqual(len(dispatches), 1)
+            self.assertIn(release.CONTROL_REPO, dispatches[0][1])
+            self.assertEqual(dispatches[0][2]["body"]["inputs"]["source_revision"], SHA)
+            registrations = [e for e in effects if e[0] == "gh" and "generate-jitconfig" in e[1]]
+            self.assertTrue(all(release.CONTROL_REPO in e[1] for e in registrations))
             self.assertEqual(secrets, ["secret-registration", "disabled"])
             self.assertEqual(os.stat(args.receipt).st_mode & 0o777, 0o600)
             self.assertNotIn("secret-registration", Path(args.receipt).read_text())
