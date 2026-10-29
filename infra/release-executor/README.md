@@ -1,7 +1,10 @@
 # On-demand production release executor
 
 This Pulumi YAML project owns the isolated executor and its private control
-repository `ajent-social/production-release`. Existing application resources
+repository `ajent-social/production-release`. Organization policy disables private
+repository forks; the provider must omit allowForking because GitHub rejects
+even explicitly setting it to false under that policy. The launcher verifies
+the actual private/nonforkable metadata before registering any runner. Existing application resources
 remain owned by `david-sire-run/ajent-infra/production`; the existing hosted
 release identity is unchanged. The executor stack is
 `david-sire-run/ajent-release-executor/production`, account 394824061124,

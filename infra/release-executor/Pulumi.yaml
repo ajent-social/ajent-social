@@ -100,7 +100,10 @@
         "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Deny\",\"Action\":\"s3:*\",\"Principal\":\"*\",\"Resource\":[\"${sources.arn}\",\"${sources.arn}/*\"],\"Condition\":{\"Bool\":{\"aws:SecureTransport\":\"false\"}}}]}"
       },
       "options": {
-        "provider": "${awsProvider}"
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${sources}"
+        ]
       }
     },
     "sourceLifecycle": {
@@ -127,7 +130,10 @@
         ]
       },
       "options": {
-        "provider": "${awsProvider}"
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${sourceVersioning}"
+        ]
       }
     },
     "runnerRepository": {
@@ -180,7 +186,12 @@
         "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:GetObjectVersion\"],\"Resource\":\"${sources.arn}/sources/*\"},{\"Effect\":\"Allow\",\"Action\":[\"s3:GetBucketLocation\"],\"Resource\":\"${sources.arn}\"},{\"Effect\":\"Allow\",\"Action\":[\"logs:CreateLogStream\",\"logs:PutLogEvents\"],\"Resource\":\"${logs.arn}:*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:GetAuthorizationToken\"],\"Resource\":\"*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:BatchCheckLayerAvailability\",\"ecr:CompleteLayerUpload\",\"ecr:DescribeImages\",\"ecr:DescribeRepositories\",\"ecr:InitiateLayerUpload\",\"ecr:PutImage\",\"ecr:UploadLayerPart\",\"ecr:BatchGetImage\",\"ecr:GetDownloadUrlForLayer\"],\"Resource\":\"arn:aws:ecr:us-west-2:394824061124:repository/${applicationRepository}\"}]}"
       },
       "options": {
-        "provider": "${awsProvider}"
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${applicationBuilderRole}",
+          "${sources}",
+          "${logs}"
+        ]
       }
     },
     "applicationBuilder": {
@@ -243,7 +254,13 @@
         "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:GetObjectVersion\"],\"Resource\":\"${sources.arn}/sources/*\"},{\"Effect\":\"Allow\",\"Action\":[\"s3:GetBucketLocation\"],\"Resource\":\"${sources.arn}\"},{\"Effect\":\"Allow\",\"Action\":[\"logs:CreateLogStream\",\"logs:PutLogEvents\"],\"Resource\":\"${logs.arn}:*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:GetAuthorizationToken\"],\"Resource\":\"*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:BatchCheckLayerAvailability\",\"ecr:CompleteLayerUpload\",\"ecr:DescribeImages\",\"ecr:DescribeRepositories\",\"ecr:InitiateLayerUpload\",\"ecr:PutImage\",\"ecr:UploadLayerPart\",\"ecr:BatchGetImage\",\"ecr:GetDownloadUrlForLayer\"],\"Resource\":\"${runnerRepository.arn}\"}]}"
       },
       "options": {
-        "provider": "${awsProvider}"
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${runnerBuilderRole}",
+          "${sources}",
+          "${logs}",
+          "${runnerRepository}"
+        ]
       }
     },
     "runnerBuilder": {
@@ -306,7 +323,12 @@
         "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:PutObject\",\"s3:GetObject\",\"s3:GetObjectVersion\"],\"Resource\":\"${sources.arn}/sources/*\"},{\"Effect\":\"Allow\",\"Action\":[\"s3:GetBucketLocation\"],\"Resource\":\"${sources.arn}\"},{\"Effect\":\"Allow\",\"Action\":[\"codebuild:StartBuild\",\"codebuild:StopBuild\",\"codebuild:BatchGetBuilds\"],\"Resource\":\"${applicationBuilder.arn}\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:DescribeImages\",\"ecr:DescribeRepositories\"],\"Resource\":\"arn:aws:ecr:us-west-2:394824061124:repository/${applicationRepository}\"}]}"
       },
       "options": {
-        "provider": "${awsProvider}"
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${imageBuildRole}",
+          "${sources}",
+          "${applicationBuilder}"
+        ]
       }
     },
     "jitParameter": {
@@ -343,7 +365,13 @@
         "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"ecr:GetAuthorizationToken\"],\"Resource\":\"*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:BatchGetImage\",\"ecr:GetDownloadUrlForLayer\",\"ecr:BatchCheckLayerAvailability\"],\"Resource\":\"${runnerRepository.arn}\"},{\"Effect\":\"Allow\",\"Action\":[\"logs:CreateLogStream\",\"logs:PutLogEvents\"],\"Resource\":\"${logs.arn}:*\"},{\"Effect\":\"Allow\",\"Action\":[\"ssm:GetParameters\"],\"Resource\":\"${jitParameter.arn}\"}]}"
       },
       "options": {
-        "provider": "${awsProvider}"
+        "provider": "${awsProvider}",
+        "dependsOn": [
+          "${executionRole}",
+          "${runnerRepository}",
+          "${logs}",
+          "${jitParameter}"
+        ]
       }
     },
     "cluster": {
@@ -454,7 +482,6 @@
         "description": "Private owner-controlled Ajent production release workflow; no public PR execution",
         "visibility": "private",
         "autoInit": true,
-        "allowForking": false,
         "hasIssues": false,
         "hasWiki": false,
         "deleteBranchOnMerge": true
