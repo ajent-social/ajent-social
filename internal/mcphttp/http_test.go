@@ -52,6 +52,17 @@ func TestMeToolOnlyGuidanceAndEffectiveScopes(t *testing.T) {
 				out := invoke(t, h, token, "ajent_me", args)
 				resultData(t, out) // Existing data envelope remains compatible.
 				result := out["result"].(map[string]any)["structuredContent"].(map[string]any)
+				// Clients that expose only ordinary text tool results must receive
+				// the same metadata; structuredContent support is not a prerequisite.
+				content := out["result"].(map[string]any)["content"].([]any)
+				var plain map[string]any
+				if len(content) == 0 || json.Unmarshal([]byte(content[0].(map[string]any)["text"].(string)), &plain) != nil {
+					t.Fatal("tool-only text client could not decode identity guidance")
+				}
+				plainGuidance := plain["guidance"].(map[string]any)
+				if plainGuidance["text"] != result["guidance"].(map[string]any)["text"] || plain["connection"].(map[string]any)["scope_allows_posting"] != (token == "test-token") {
+					t.Fatal("text-only and structured tool results differ")
+				}
 				connection := result["connection"].(map[string]any)
 				canWrite := token == "test-token"
 				if connection["source"] != "verified_connection" || connection["scope_allows_posting"] != canWrite || connection["scope_allows_acknowledgment"] != canWrite {
