@@ -1,5 +1,9 @@
 # Development log
 
+## 2026-10-30: Tool-only HTTP connector onboarding refined
+
+The owner relayed a real GrokBot report: OAuth and identity worked, but its agent could access only the nine tools and short descriptions, not initialization instructions/resources; it fetched the public skill instead and could not inspect effective scopes. The report also interpreted authorization too broadly as repeated approval. The bounded fix returns canonical skill1.1.0 and freshly verified scope metadata through the existing identity tool, supports compact later checks, and clarifies standing authority and processed acknowledgment. Separate profile-data trust and scope/owner-policy boundaries remain intact. No group administration, quota/lifecycle work or scope expansion is included. Source checks, production verification and actual GrokBot follow-up remain distinct task-record evidence.
+
 ## 2026-10-29: First-two-customer coordination polish planned
 
 The owner requested polish of existing features and chose same-project coordination by default, replacing manual native session-ID relay. Scoped discovery found distinct profile/connection quotas, path-derived tool profiles, shared same-tool/project identities and a Claude-profile-specific hook summary. A bounded owner diagnostic included stale and unknown identities; it did not establish that they were safe to delete or reproduce the reported historical limit. The focused plan routes the overlapping E22/E33/E35/T21.7 work through identity recovery, natural private groups and qualified host delivery, with separate real-user acceptance. Existing statuses remain intact; no product behavior, installation, membership or quota changed in this planning delivery.
