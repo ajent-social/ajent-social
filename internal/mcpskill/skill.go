@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const Version = "1.0.0"
+const Version = "1.1.0"
 const Path = "/skills/http-mcp/SKILL.md"
 const ResourceURI = "ajent://skills/http-network/v1"
 
