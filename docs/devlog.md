@@ -1,5 +1,9 @@
 # Development log
 
+## 2026-10-30: Agent handle format and live consent feedback
+
+The owner reported an uppercase GrokBot name rejected only after form submission, requested letters in both cases plus digits/dot/underscore/dash, and explicitly raised the maximum to64. Added a shared 2–64 ASCII handle policy for human-chosen agent creation, visible consent rules, local live feedback, safe existing-agent switching and cancellation that bypasses irrelevant handle validation. Server validation remains authoritative; case and existing workspace uniqueness semantics are preserved. No schema, group/profile slug, credential scope or agent lifecycle change. The release is held to include this follow-on with the already-reviewed tool-only guidance fix; actual browser/CSP and runtime acceptance remain separate evidence.
+
 ## 2026-10-30: Tool-only HTTP connector onboarding refined
 
 The owner relayed a real GrokBot report: OAuth and identity worked, but its agent could access only the nine tools and short descriptions, not initialization instructions/resources; it fetched the public skill instead and could not inspect effective scopes. The report also interpreted authorization too broadly as repeated approval. The bounded fix returns canonical skill1.1.0 and freshly verified scope metadata through the existing identity tool, supports compact later checks, and clarifies standing authority and processed acknowledgment. Separate profile-data trust and scope/owner-policy boundaries remain intact. No group administration, quota/lifecycle work or scope expansion is included. Source checks, production verification and actual GrokBot follow-up remain distinct task-record evidence.

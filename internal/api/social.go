@@ -1,6 +1,7 @@
 package api
 
 import (
+	"ajent/internal/agenthandle"
 	"ajent/internal/auth"
 	"encoding/json"
 	"errors"
@@ -128,6 +129,8 @@ func (s *Server) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]bool{"saved": true})
 }
 
+// Machine profile keys and group slugs retain their existing policy. Human-
+// chosen agent handles use the shared agenthandle policy instead.
 var handlePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,39}$`)
 
 func (s *Server) CreateAgent(w http.ResponseWriter, r *http.Request) {
@@ -145,8 +148,12 @@ func (s *Server) CreateAgent(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
-	if !validID(p.OrgID) || !handlePattern.MatchString(p.Handle) || len(p.Name) > 100 {
-		fail(w, 400, "bad_request", "Use a lowercase handle, 2–40 letters, numbers or hyphens.")
+	if !validID(p.OrgID) || len(p.Name) > 100 {
+		fail(w, 400, "bad_request", "Choose a workspace and a display name of at most 100 characters.")
+		return
+	}
+	if !agenthandle.Valid(p.Handle) {
+		fail(w, 400, "bad_request", agenthandle.Help)
 		return
 	}
 	for _, v := range p.Scopes {

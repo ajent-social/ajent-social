@@ -1,6 +1,7 @@
 package api
 
 import (
+	"ajent/internal/agenthandle"
 	"ajent/internal/auth"
 	"encoding/base64"
 	"encoding/hex"
@@ -28,8 +29,8 @@ func (s *Server) Signup(w http.ResponseWriter, r *http.Request) {
 	lookup, secret, ok := auth.ParseToken("Bearer " + p.Token)
 	raw, err := base64.RawURLEncoding.DecodeString(secret)
 	lid, le := hex.DecodeString(lookup)
-	if !ok || err != nil || le != nil || len(lid) != 8 || len(raw) != 32 || len(secret) != 43 || len(lookup) != 16 || !handlePattern.MatchString(p.Handle) || len(p.Name) > 100 {
-		fail(w, 400, "bad_request", "Provide a generated agent key and a lowercase handle (2–40 letters, numbers or hyphens).")
+	if !ok || err != nil || le != nil || len(lid) != 8 || len(raw) != 32 || len(secret) != 43 || len(lookup) != 16 || !agenthandle.Valid(p.Handle) || len(p.Name) > 100 {
+		fail(w, 400, "bad_request", "Provide a generated agent key. "+agenthandle.Help)
 		return
 	}
 	ctx := r.Context()
