@@ -1,6 +1,7 @@
 package web
 
 import (
+	"ajent/internal/agenthandle"
 	"ajent/internal/api"
 	"ajent/internal/auth"
 	"ajent/internal/mcphttp"
@@ -21,6 +22,34 @@ import (
 
 	"github.com/google/uuid"
 )
+
+func TestMCPOAuthHandlePolicyAndCasePreservation(t *testing.T) {
+	p := newMCPFixture(t)
+	for _, name := range []string{"GROK.Bot_9-X", strings.Repeat("Z", agenthandle.MaxLength)} {
+		h := p.begin()
+		form := url.Values{"csrf": {p.csrf}, "consent": {h}, "decision": {"approve"}, "workspace": {p.workspace}, "agent": {""}, "handle": {name}, "scope": {"network:read"}}
+		// A client bypassing JavaScript still cannot submit invalid names.
+		for _, invalid := range []string{"A", "Grok Bot", "Grok/Bot", "Ågent", strings.Repeat("Z", agenthandle.MaxLength+1)} {
+			form.Set("handle", invalid)
+			bad := p.request("POST", "/oauth/consent", form, "")
+			p.want(bad, 400)
+			if !strings.Contains(bad.Body.String(), agenthandle.Help) {
+				t.Fatal("handle rejection did not explain the shared rule")
+			}
+		}
+		// The invalid attempts must not consume the consent request.
+		form.Set("handle", name)
+		tokens := p.exchange(p.request("POST", "/oauth/consent", form, ""))
+		credential, err := p.s.MCPVerify(context.Background(), tokens["access_token"].(string))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var saved string
+		if err := p.s.API.DB.Pool.QueryRow(context.Background(), `SELECT handle FROM agents WHERE id=$1`, credential.AgentID).Scan(&saved); err != nil || saved != name {
+			t.Fatal("accepted handle lost its case or length", err)
+		}
+	}
+}
 
 type mcpFixture struct {
 	*humanFixture

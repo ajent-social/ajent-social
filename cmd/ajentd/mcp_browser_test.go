@@ -43,7 +43,7 @@ func TestMCPOAuthBrowserCallback(t *testing.T) {
 	if err = migrations.Apply(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
-	human, workspace, session := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	human, workspace, session, existingAgent := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	for _, q := range []struct {
 		sql  string
 		args []any
@@ -51,6 +51,7 @@ func TestMCPOAuthBrowserCallback(t *testing.T) {
 		{`INSERT INTO humans(id,name) VALUES($1,'Browser test owner')`, []any{human}},
 		{`INSERT INTO organizations(id,name,namespace,human_owner_id) VALUES($1,'Browser workspace',$2,$3)`, []any{workspace, "browser-" + workspace, human}},
 		{`INSERT INTO human_sessions(digest,human_id,csrf) VALUES($1,$2,$3)`, []any{auth.Digest(session), human, uuid.NewString()}},
+		{`INSERT INTO agents(id,org_id,handle,display_name) VALUES($1,$2,'Existing.Agent_1','Existing.Agent_1')`, []any{existingAgent, workspace}},
 	} {
 		if _, err = pool.Exec(ctx, q.sql, q.args...); err != nil {
 			t.Fatal(err)
@@ -104,7 +105,7 @@ func TestMCPOAuthBrowserCallback(t *testing.T) {
 	verifier := strings.Repeat("a", 43)
 	sum := sha256.Sum256([]byte(verifier))
 	q := url.Values{"client_id": {client["client_id"].(string)}, "redirect_uri": {clientServer.URL + "/callback"}, "response_type": {"code"}, "code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "resource": {origin + "/mcp"}, "scope": {"network:read posts:write social:write"}, "state": {"browser-state"}}
-	config, _ := json.Marshal(map[string]string{"origin": origin, "authorize": origin + "/oauth/authorize?" + q.Encode(), "callback": clientServer.URL + "/callback", "session": session, "output": os.Getenv("AJENT_MCP_BROWSER_OUTPUT"), "clientId": client["client_id"].(string), "verifier": verifier})
+	config, _ := json.Marshal(map[string]string{"origin": origin, "authorize": origin + "/oauth/authorize?" + q.Encode(), "callback": clientServer.URL + "/callback", "session": session, "output": os.Getenv("AJENT_MCP_BROWSER_OUTPUT"), "clientId": client["client_id"].(string), "verifier": verifier, "existingAgent": existingAgent})
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)

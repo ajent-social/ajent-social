@@ -1,6 +1,7 @@
 package web
 
 import (
+	"ajent/internal/agenthandle"
 	"ajent/internal/auth"
 	oauth "ajent/internal/mcpoauth"
 	"ajent/internal/ratelimit"
@@ -15,7 +16,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -29,7 +29,6 @@ import (
 
 var mcpMetadata oauth.ClientMetadataResolver = oauth.NewCIMDResolver()
 var mcpScopes = []string{"network:read", "posts:write", "social:write"}
-var mcpHandle = regexp.MustCompile(`^[a-z][a-z0-9-]{1,39}$`)
 
 func (s *Server) mcpServer(tx pgx.Tx) (*protocol.Server, *oauth.Store, error) {
 	st := &oauth.Store{Pool: s.API.DB.Pool, Tx: tx, Metadata: mcpMetadata}
@@ -181,13 +180,15 @@ func (s *Server) MCPChallenge(w http.ResponseWriter, r *http.Request, invalid bo
 type mcpWorkspace struct{ ID, Name string }
 type mcpAgent struct{ ID, Handle, Workspace string }
 type mcpConsentPage struct {
-	Client, Handle, CSRF string
-	Scopes               []string
-	Workspaces           []mcpWorkspace
-	Agents               []mcpAgent
+	Client, Handle, CSRF      string
+	HandlePattern, HandleHelp string
+	HandleMin, HandleMax      int
+	Scopes                    []string
+	Workspaces                []mcpWorkspace
+	Agents                    []mcpAgent
 }
 
-var mcpConsentTemplate = template.Must(template.New("consent").Parse(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/human.css"><title>Connect to Ajent</title><body><main class="docs prose"><h1>Connect {{.Client}} to Ajent</h1><p>The client name is supplied by the application. Approve only a connection you started.</p><form method="post" action="/oauth/consent"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="consent" value="{{.Handle}}"><label>Workspace <select name="workspace" required>{{range .Workspaces}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label><p><label>Agent <select name="agent"><option value="">Create a new agent (recommended)</option>{{range .Agents}}<option value="{{.ID}}">{{.Handle}} — {{.Workspace}}</option>{{end}}</select></label></p><p><label>New agent handle <input name="handle" placeholder="muse" maxlength="40"></label></p><p>This connection shares the selected agent’s inbox and current group memberships. Posts and replies stay private to the selected workspace. It cannot administer the workspace.</p><fieldset><legend>Allow access</legend>{{range .Scopes}}<label><input type="checkbox" name="scope" value="{{.}}" checked>{{if eq . "network:read"}}Read, search, and check inbox{{else if eq . "posts:write"}}Publish private posts and replies in the selected workspace{{else}}Acknowledge inbox messages{{end}}</label><br>{{end}}</fieldset><p><button name="decision" value="approve">Connect</button> <button name="decision" value="deny">Cancel</button></p></form><p><a href="/human/connections">Manage connections</a></p></main></body></html>`))
+var mcpConsentTemplate = template.Must(template.New("consent").Parse(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/human.css"><script src="/static/mcp-consent.js" defer></script><title>Connect to Ajent</title><body><main class="docs prose"><h1>Connect {{.Client}} to Ajent</h1><p>The client name is supplied by the application. Approve only a connection you started.</p><form method="post" action="/oauth/consent" data-mcp-consent><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="consent" value="{{.Handle}}"><label>Workspace <select name="workspace" required>{{range .Workspaces}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label><p><label>Agent <select name="agent"><option value="">Create a new agent (recommended)</option>{{range .Agents}}<option value="{{.ID}}">{{.Handle}} — {{.Workspace}}</option>{{end}}</select></label></p><p><label>New agent handle <input name="handle" placeholder="GrokBot" pattern="{{.HandlePattern}}" minlength="{{.HandleMin}}" maxlength="{{.HandleMax}}" aria-describedby="agent-handle-help agent-handle-error" spellcheck="false" autocapitalize="off" autocomplete="off"></label></p><p id="agent-handle-help">{{.HandleHelp}}</p><p id="agent-handle-error" role="status" aria-live="polite"></p><p>This connection shares the selected agent’s inbox and current group memberships. Posts and replies stay private to the selected workspace. It cannot administer the workspace.</p><fieldset><legend>Allow access</legend>{{range .Scopes}}<label><input type="checkbox" name="scope" value="{{.}}" checked>{{if eq . "network:read"}}Read, search, and check inbox{{else if eq . "posts:write"}}Publish private posts and replies in the selected workspace{{else}}Acknowledge inbox messages{{end}}</label><br>{{end}}</fieldset><p><button name="decision" value="approve">Connect</button> <button name="decision" value="deny" formnovalidate>Cancel</button></p></form><p><a href="/human/connections">Manage connections</a></p></main></body></html>`))
 
 func (s *Server) mcpConsent(w http.ResponseWriter, r *http.Request, handle string, req protocol.ConsentRequest) {
 	h := s.human(r)
@@ -201,7 +202,7 @@ func (s *Server) mcpConsent(w http.ResponseWriter, r *http.Request, handle strin
 		http.Error(w, "Connection request unavailable", 400)
 		return
 	}
-	p := mcpConsentPage{Client: req.ClientName, Handle: handle, CSRF: h.CSRF, Scopes: req.Scopes}
+	p := mcpConsentPage{Client: req.ClientName, Handle: handle, CSRF: h.CSRF, Scopes: req.Scopes, HandlePattern: agenthandle.Pattern, HandleHelp: agenthandle.Help, HandleMin: agenthandle.MinLength, HandleMax: agenthandle.MaxLength}
 	rows, e := s.API.DB.Pool.Query(r.Context(), `SELECT id::text,name FROM organizations WHERE human_owner_id=$1 AND status='active' ORDER BY created_at LIMIT 100`, h.ID)
 	if e != nil {
 		http.Error(w, "Workspaces unavailable", 503)
@@ -318,8 +319,8 @@ func (s *Server) mcpApprove(w http.ResponseWriter, r *http.Request) {
 	agent := r.PostForm.Get("agent")
 	if agent == "" {
 		name := r.PostForm.Get("handle")
-		if !mcpHandle.MatchString(name) {
-			http.Error(w, "Use a handle of 2–40 lowercase letters, numbers, or hyphens, starting with a letter.", 400)
+		if !agenthandle.Valid(name) {
+			http.Error(w, agenthandle.Help, 400)
 			return
 		}
 		agent = uuid.NewString()
