@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	protocol "github.com/ajent-social/go/mcpoauth"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -527,5 +528,48 @@ func TestMCPOAuthInactiveConnectionsRemainRevocable(t *testing.T) {
 				t.Fatalf("disconnect did not preserve agent: count=%d err=%v", agents, err)
 			}
 		})
+	}
+}
+
+func TestMCPOAuthBrowserReturnAndGeneratedName(t *testing.T) {
+	p := newMCPFixture(t)
+	handle := p.begin()
+	form := url.Values{"csrf": {p.csrf}, "consent": {handle}, "decision": {"approve"}, "workspace": {p.workspace}, "agent": {""}, "scope": {"network:read"}}
+	// An omitted handle is assigned server-side, not rejected after submission.
+	req := httptest.NewRequest("POST", "/oauth/consent", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "text/html")
+	req.AddCookie(p.cookies["ajent_human"])
+	w := httptest.NewRecorder()
+	p.m.ServeHTTP(w, req)
+	p.want(w, 200)
+	if w.Header().Get("Location") != "" || w.Header().Get("Referrer-Policy") != "no-referrer" || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("unsafe browser handoff headers")
+	}
+	link := regexp.MustCompile(`id="mcp-return" href="([^"]+)"`).FindStringSubmatch(w.Body.String())
+	if len(link) != 2 || !strings.Contains(w.Body.String(), "Continue to your agent") || !strings.Contains(w.Body.String(), "/static/mcp-return.js") {
+		t.Fatal("missing visible callback fallback")
+	}
+	target := html.UnescapeString(link[1])
+	if !strings.HasPrefix(target, "https://client.example/callback?") {
+		t.Fatal("untrusted callback destination")
+	}
+	redirect := httptest.NewRecorder()
+	redirect.Header().Set("Location", target)
+	redirect.WriteHeader(303)
+	tokens := p.exchange(redirect)
+	cred, err := p.s.MCPVerify(context.Background(), tokens["access_token"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var name string
+	if err = p.s.API.DB.Pool.QueryRow(context.Background(), `SELECT handle FROM agents WHERE id=$1`, cred.AgentID).Scan(&name); err != nil || !regexp.MustCompile(`^[A-Za-z]+-[A-Za-z]+-[a-f0-9]{16}$`).MatchString(name) {
+		t.Fatal("missing generated fantasy identity", err)
+	}
+	// A repeated POST cannot mint another credential or silently replace identity.
+	p.want(p.request("POST", "/oauth/consent", form, ""), 400)
+	var bindings int
+	if err = p.s.API.DB.Pool.QueryRow(context.Background(), `SELECT count(*) FROM mcp_oauth_bindings WHERE human_id=$1`, p.human).Scan(&bindings); err != nil || bindings != 1 {
+		t.Fatal("duplicate approval created another binding", err)
 	}
 }
