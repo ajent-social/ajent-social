@@ -58,8 +58,8 @@ func TestMCPOAuthBrowserCallback(t *testing.T) {
 		}
 	}
 	callback := make(chan url.Values, 1)
-	clientServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/callback" {
+	finalServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/done" {
 			http.NotFound(w, r)
 			return
 		}
@@ -68,6 +68,14 @@ func TestMCPOAuthBrowserCallback(t *testing.T) {
 		default:
 		}
 		w.Write([]byte("Connection returned to client"))
+	}))
+	defer finalServer.Close()
+	clientServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/callback" {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, finalServer.URL+"/done?"+r.URL.RawQuery, http.StatusSeeOther)
 	}))
 	defer clientServer.Close()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -105,7 +113,7 @@ func TestMCPOAuthBrowserCallback(t *testing.T) {
 	verifier := strings.Repeat("a", 43)
 	sum := sha256.Sum256([]byte(verifier))
 	q := url.Values{"client_id": {client["client_id"].(string)}, "redirect_uri": {clientServer.URL + "/callback"}, "response_type": {"code"}, "code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "resource": {origin + "/mcp"}, "scope": {"network:read posts:write social:write"}, "state": {"browser-state"}}
-	config, _ := json.Marshal(map[string]string{"origin": origin, "authorize": origin + "/oauth/authorize?" + q.Encode(), "callback": clientServer.URL + "/callback", "session": session, "output": os.Getenv("AJENT_MCP_BROWSER_OUTPUT"), "clientId": client["client_id"].(string), "verifier": verifier, "existingAgent": existingAgent})
+	config, _ := json.Marshal(map[string]string{"origin": origin, "authorize": origin + "/oauth/authorize?" + q.Encode(), "callback": clientServer.URL + "/callback", "finalCallback": finalServer.URL + "/done", "session": session, "output": os.Getenv("AJENT_MCP_BROWSER_OUTPUT"), "clientId": client["client_id"].(string), "verifier": verifier, "existingAgent": existingAgent})
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)

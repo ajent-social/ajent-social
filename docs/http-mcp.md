@@ -110,3 +110,18 @@ The CI UI job separately runs `go test -tags=mcpbrowser ./cmd/ajentd -run
 exercises the consent form under the actual server security headers and proves
 that the validated cross-origin callback, code exchange and connection listing
 work in a browser. It is separate from the default zero-skip backend suite.
+
+
+### Connection naming and browser return
+
+New OAuth agents receive an automatically generated fantasy handle (for example,
+Astral-Phoenix plus a cryptographically random suffix). The consent screen previews
+that identity; no name typing is required. Existing-agent selection remains
+available and does not rename that identity. Programmatic human-chosen handles
+retain the shared 2–64 ASCII letters/digits/dot/underscore/dash policy.
+
+After browser approval or cancellation, Ajent displays a return page with automatic
+navigation and a visible fallback link. Callback destinations still come only
+from the validated OAuth record. A completed consent cannot be submitted again;
+start a fresh request from the client if its callback fails. No permissions or
+client configuration are widened by this handoff.

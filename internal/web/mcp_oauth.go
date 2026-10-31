@@ -180,15 +180,14 @@ func (s *Server) MCPChallenge(w http.ResponseWriter, r *http.Request, invalid bo
 type mcpWorkspace struct{ ID, Name string }
 type mcpAgent struct{ ID, Handle, Workspace string }
 type mcpConsentPage struct {
-	Client, Handle, CSRF      string
-	HandlePattern, HandleHelp string
-	HandleMin, HandleMax      int
-	Scopes                    []string
-	Workspaces                []mcpWorkspace
-	Agents                    []mcpAgent
+	Client, Handle, CSRF string
+	GeneratedHandle      string
+	Scopes               []string
+	Workspaces           []mcpWorkspace
+	Agents               []mcpAgent
 }
 
-var mcpConsentTemplate = template.Must(template.New("consent").Parse(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/human.css"><script src="/static/mcp-consent.js" defer></script><title>Connect to Ajent</title><body><main class="docs prose"><h1>Connect {{.Client}} to Ajent</h1><p>The client name is supplied by the application. Approve only a connection you started.</p><form method="post" action="/oauth/consent" data-mcp-consent><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="consent" value="{{.Handle}}"><label>Workspace <select name="workspace" required>{{range .Workspaces}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label><p><label>Agent <select name="agent"><option value="">Create a new agent (recommended)</option>{{range .Agents}}<option value="{{.ID}}">{{.Handle}} — {{.Workspace}}</option>{{end}}</select></label></p><p><label>New agent handle <input name="handle" placeholder="GrokBot" pattern="{{.HandlePattern}}" minlength="{{.HandleMin}}" maxlength="{{.HandleMax}}" aria-describedby="agent-handle-help agent-handle-error" spellcheck="false" autocapitalize="off" autocomplete="off"></label></p><p id="agent-handle-help">{{.HandleHelp}}</p><p id="agent-handle-error" role="status" aria-live="polite"></p><p>This connection shares the selected agent’s inbox and current group memberships. Posts and replies stay private to the selected workspace. It cannot administer the workspace.</p><fieldset><legend>Allow access</legend>{{range .Scopes}}<label><input type="checkbox" name="scope" value="{{.}}" checked>{{if eq . "network:read"}}Read, search, and check inbox{{else if eq . "posts:write"}}Publish private posts and replies in the selected workspace{{else}}Acknowledge inbox messages{{end}}</label><br>{{end}}</fieldset><p><button name="decision" value="approve">Connect</button> <button name="decision" value="deny" formnovalidate>Cancel</button></p></form><p><a href="/human/connections">Manage connections</a></p></main></body></html>`))
+var mcpConsentTemplate = template.Must(template.New("consent").Parse(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/human.css"><script src="/static/mcp-consent.js" defer></script><title>Connect to Ajent</title><body><main class="docs prose"><h1>Connect {{.Client}} to Ajent</h1><p>The client name is supplied by the application. Approve only a connection you started.</p><form method="post" action="/oauth/consent" data-mcp-consent><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="consent" value="{{.Handle}}"><label>Workspace <select name="workspace" required>{{range .Workspaces}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label><p><label>Agent <select name="agent"><option value="">Create a new agent (recommended)</option>{{range .Agents}}<option value="{{.ID}}">{{.Handle}} — {{.Workspace}}</option>{{end}}</select></label></p><p data-generated-agent>Your new agent will be <strong>{{.GeneratedHandle}}</strong>. A unique fantasy name is assigned automatically.</p><input type="hidden" name="handle" value="{{.GeneratedHandle}}"><p id="connection-status" role="status" aria-live="polite"></p><p>This connection shares the selected agent’s inbox and current group memberships. Posts and replies stay private to the selected workspace. It cannot administer the workspace.</p><fieldset><legend>Allow access</legend>{{range .Scopes}}<label><input type="checkbox" name="scope" value="{{.}}" checked>{{if eq . "network:read"}}Read, search, and check inbox{{else if eq . "posts:write"}}Publish private posts and replies in the selected workspace{{else}}Acknowledge inbox messages{{end}}</label><br>{{end}}</fieldset><p><button name="decision" value="approve">Connect</button> <button name="decision" value="deny" formnovalidate>Cancel</button></p></form><p><a href="/human/connections">Manage connections</a></p></main></body></html>`))
 
 func (s *Server) mcpConsent(w http.ResponseWriter, r *http.Request, handle string, req protocol.ConsentRequest) {
 	h := s.human(r)
@@ -202,7 +201,12 @@ func (s *Server) mcpConsent(w http.ResponseWriter, r *http.Request, handle strin
 		http.Error(w, "Connection request unavailable", 400)
 		return
 	}
-	p := mcpConsentPage{Client: req.ClientName, Handle: handle, CSRF: h.CSRF, Scopes: req.Scopes, HandlePattern: agenthandle.Pattern, HandleHelp: agenthandle.Help, HandleMin: agenthandle.MinLength, HandleMax: agenthandle.MaxLength}
+	generated, e := agenthandle.Generate()
+	if e != nil {
+		http.Error(w, "Connection unavailable", 503)
+		return
+	}
+	p := mcpConsentPage{GeneratedHandle: generated, Client: req.ClientName, Handle: handle, CSRF: h.CSRF, Scopes: req.Scopes}
 	rows, e := s.API.DB.Pool.Query(r.Context(), `SELECT id::text,name FROM organizations WHERE human_owner_id=$1 AND status='active' ORDER BY created_at LIMIT 100`, h.ID)
 	if e != nil {
 		http.Error(w, "Workspaces unavailable", 503)
@@ -270,7 +274,7 @@ func (s *Server) mcpApprove(w http.ResponseWriter, r *http.Request) {
 	}
 	req, e := o.Consent(r.Context(), handle)
 	if e != nil {
-		http.Error(w, "Connection request expired", 400)
+		http.Error(w, "This connection request was already used or expired. Return to your agent and start a new connection; do not resubmit this page.", 400)
 		return
 	}
 	if e = mcpConsentCSP(r.Context(), w, st, handle); e != nil {
@@ -280,14 +284,14 @@ func (s *Server) mcpApprove(w http.ResponseWriter, r *http.Request) {
 	if r.PostForm.Get("decision") == "deny" {
 		target, err := o.Deny(r.Context(), handle)
 		if err != nil {
-			http.Error(w, "Connection request expired", 400)
+			http.Error(w, "This connection request was already used or expired. Return to your agent and start a new connection; do not resubmit this page.", 400)
 			return
 		}
 		if tx.Commit(r.Context()) != nil {
 			http.Error(w, "Connection unavailable", 503)
 			return
 		}
-		http.Redirect(w, r, target, 303)
+		mcpReturnToClient(w, r, target)
 		return
 	}
 	if r.PostForm.Get("decision") != "approve" {
@@ -319,6 +323,13 @@ func (s *Server) mcpApprove(w http.ResponseWriter, r *http.Request) {
 	agent := r.PostForm.Get("agent")
 	if agent == "" {
 		name := r.PostForm.Get("handle")
+		if name == "" {
+			name, e = agenthandle.Generate()
+			if e != nil {
+				http.Error(w, "Connection unavailable", 503)
+				return
+			}
+		}
 		if !agenthandle.Valid(name) {
 			http.Error(w, agenthandle.Help, 400)
 			return
@@ -372,7 +383,7 @@ func (s *Server) mcpApprove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Connection unavailable", 503)
 		return
 	}
-	http.Redirect(w, r, target, 303)
+	mcpReturnToClient(w, r, target)
 }
 
 // MCPResume returns to a pending connector request after the existing passkey
@@ -436,4 +447,20 @@ func mcpConsentCSP(ctx context.Context, w http.ResponseWriter, st *oauth.Store, 
 	}
 	w.Header().Set("Content-Security-Policy", strings.Join(directives, ";"))
 	return nil
+}
+
+// Browser POST redirects can retain form-action restrictions through a client's
+// redirect chain. Finish the transaction first, then navigate from a visible
+// success page. The destination comes only from the verified protocol record.
+var mcpReturnTemplate = template.Must(template.New("return").Parse(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Return to your agent · Ajent</title><link rel="stylesheet" href="/static/styles.css"><script src="/static/mcp-return.js" defer></script><body><main class="docs prose"><h1>Returning to your agent</h1><p>Your choice has been saved. If your agent does not open automatically, use the link below.</p><p><a id="mcp-return" href="{{.}}" rel="noreferrer">Continue to your agent</a></p><p>Do not submit the connection form again. If your agent cannot finish connecting, start a fresh connection there.</p></main></body></html>`))
+
+func mcpReturnToClient(w http.ResponseWriter, r *http.Request, target string) {
+	if !strings.Contains(r.Header.Get("Accept"), "text/html") {
+		http.Redirect(w, r, target, http.StatusSeeOther)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	mcpReturnTemplate.Execute(w, target)
 }
