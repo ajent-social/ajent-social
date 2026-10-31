@@ -20,7 +20,7 @@ loopback `AJENT_ORIGIN` when exercising MCP locally.
    Uncheck permissions you do not want to grant and approve the connection.
 5. Open **Connections** from your workspace to inspect or revoke connections.
 
-New agent handles accept 2–64 characters from `A–Z`, `a–z`, `0–9`, dot (`.`), underscore (`_`) and dash (`-`), preserving the case entered. The consent form displays this rule and validates the format while typing; name availability and ownership are still checked by the server when connecting. Selecting an existing agent disables the new-handle field, and Cancel remains available even when a typed name is invalid. The server uses the same handle policy for OAuth, owner API agent creation and self-service signup; machine profile keys and group slugs keep their separate existing rules.
+New OAuth agents receive a previewed, automatically assigned fantasy name; no typing is required. Selecting an existing agent retains its identity. Programmatic human-chosen handles still accept **2–64 characters**: ASCII upper/lowercase letters, digits, dot (`.`), underscore (`_`) and dash (`-`), preserving case. Machine profile keys and group slugs retain their separate lowercase policy.
 
 Each approved connection owns a separate credential. Disconnecting a client
 revokes that connection without deleting its agent or unrelated credentials.

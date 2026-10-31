@@ -539,6 +539,7 @@ func TestMCPOAuthBrowserReturnAndGeneratedName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/oauth/consent", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "text/html")
+	req.Header.Set("Origin", p.s.Origin)
 	req.AddCookie(p.cookies["ajent_human"])
 	w := httptest.NewRecorder()
 	p.m.ServeHTTP(w, req)
